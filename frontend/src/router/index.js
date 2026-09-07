@@ -2,6 +2,13 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import LoginView from '../modules/auth/views/LoginView.vue'
 import ModuloPendiente from '../components/ModuloPendiente.vue'
+import { catalogoRoutes } from '../modules/catalogo/routes'
+import { almacenRoutes } from '../modules/almacen/routes'
+import { frentesRoutes } from '../modules/frentes/routes'
+import { valesRoutes } from '../modules/vales/routes'
+import { kardexRoutes } from '../modules/kardex/routes'
+import { reservasRoutes } from '../modules/reservas/routes'
+import { usuariosRoutes } from '../modules/usuarios/routes'
 
 // Todos los módulos salvo login quedan como placeholder hasta que se
 // implementen (docs/ARQUITECTURA.md §4). `permiso` es el código que la
@@ -17,48 +24,12 @@ const routes = [
     props: { titulo: 'Dashboard' },
     meta: { permiso: 'dashboard.ver' },
   },
-  {
-    path: '/catalogo',
-    name: 'catalogo',
-    component: ModuloPendiente,
-    props: { titulo: 'Catálogo de materiales' },
-    meta: { permiso: 'catalogo.ver' },
-  },
-  {
-    path: '/frentes',
-    name: 'frentes',
-    component: ModuloPendiente,
-    props: { titulo: 'Frentes' },
-    meta: { permiso: 'frentes.ver' },
-  },
-  {
-    path: '/almacen',
-    name: 'almacen',
-    component: ModuloPendiente,
-    props: { titulo: 'Almacén (stock, ingresos, ajustes)' },
-    meta: { permiso: 'stock.ver' },
-  },
-  {
-    path: '/vales',
-    name: 'vales',
-    component: ModuloPendiente,
-    props: { titulo: 'Vales' },
-    meta: { permiso: 'vales.ver_propios' },
-  },
-  {
-    path: '/reservas',
-    name: 'reservas',
-    component: ModuloPendiente,
-    props: { titulo: 'Reservas' },
-    meta: { permiso: 'reservas.ver' },
-  },
-  {
-    path: '/kardex',
-    name: 'kardex',
-    component: ModuloPendiente,
-    props: { titulo: 'Kardex' },
-    meta: { permiso: 'kardex.ver' },
-  },
+  ...catalogoRoutes,
+  ...frentesRoutes,
+  ...almacenRoutes,
+  ...valesRoutes,
+  ...reservasRoutes,
+  ...kardexRoutes,
   {
     path: '/procura',
     name: 'procura',
@@ -73,13 +44,7 @@ const routes = [
     props: { titulo: 'Alertas' },
     meta: { permiso: 'alertas.ver' },
   },
-  {
-    path: '/usuarios',
-    name: 'usuarios',
-    component: ModuloPendiente,
-    props: { titulo: 'Usuarios y roles' },
-    meta: { permiso: 'usuarios.ver' },
-  },
+  ...usuariosRoutes,
 ]
 
 export const router = createRouter({

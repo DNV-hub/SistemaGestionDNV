@@ -1,0 +1,64 @@
+import { defineStore } from 'pinia'
+import {
+  listarFrentes,
+  crearFrente,
+  actualizarFrente,
+  eliminarFrente,
+} from '../services/frentesService'
+
+export const useFrentesStore = defineStore('frentes', {
+  state: () => ({
+    frentes: [],
+    cargando: false,
+    error: '',
+  }),
+
+  actions: {
+    async cargar() {
+      this.cargando = true
+      this.error = ''
+      try {
+        this.frentes = await listarFrentes()
+      } catch (e) {
+        this.error = 'No se pudo cargar los frentes.'
+        console.error(e)
+      } finally {
+        this.cargando = false
+      }
+    },
+
+    async crear(payload) {
+      const frente = await crearFrente(payload)
+      this.frentes.push(frente)
+      this.frentes.sort((a, b) => a.codigo.localeCompare(b.codigo))
+      return frente
+    },
+
+    async actualizar(id, payload) {
+      const frente = await actualizarFrente(id, payload)
+      const idx = this.frentes.findIndex((f) => f.id === id)
+      if (idx !== -1) this.frentes[idx] = frente
+      return frente
+    },
+
+    /**
+     * Igual que catalogo.eliminar / almacen.eliminarAlmacen: intenta borrar
+     * y, si el frente ya tiene vales/salidas/reservas/metrados asociados,
+     * la FK lo rechaza (23503) y se cierra en su lugar en vez de perder el
+     * historial.
+     */
+    async eliminar(id) {
+      try {
+        await eliminarFrente(id)
+        this.frentes = this.frentes.filter((f) => f.id !== id)
+        return { eliminado: true }
+      } catch (e) {
+        if (e.code === '23503') {
+          await this.actualizar(id, { estado: 'cerrado', fecha_cierre: new Date().toISOString().slice(0, 10) })
+          return { eliminado: false, cerrado: true }
+        }
+        throw e
+      }
+    },
+  },
+})
