@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import LoginView from '../modules/auth/views/LoginView.vue'
-import ModuloPendiente from '../components/ModuloPendiente.vue'
+import { dashboardRoutes } from '../modules/dashboard/routes'
 import { catalogoRoutes } from '../modules/catalogo/routes'
 import { almacenRoutes } from '../modules/almacen/routes'
 import { frentesRoutes } from '../modules/frentes/routes'
@@ -10,21 +10,14 @@ import { kardexRoutes } from '../modules/kardex/routes'
 import { reservasRoutes } from '../modules/reservas/routes'
 import { usuariosRoutes } from '../modules/usuarios/routes'
 import { procuraRoutes } from '../modules/procura/routes'
+import { alertasRoutes } from '../modules/alertas/routes'
 
-// Todos los módulos salvo login quedan como placeholder hasta que se
-// implementen (docs/ARQUITECTURA.md §4). `permiso` es el código que la
-// matriz de docs/MODELO_DATOS_Y_FLUJOS.md §2 exige para ver el módulo —
-// la app lo revisa aquí (experiencia de usuario) y RLS lo vuelve a
-// revisar en la base de datos (seguridad real, spec §18).
+// `permiso` es el código que la matriz de docs/MODELO_DATOS_Y_FLUJOS.md §2
+// exige para ver el módulo — la app lo revisa aquí (experiencia de usuario)
+// y RLS lo vuelve a revisar en la base de datos (seguridad real, spec §18).
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { publica: true } },
-  {
-    path: '/',
-    name: 'dashboard',
-    component: ModuloPendiente,
-    props: { titulo: 'Dashboard' },
-    meta: { permiso: 'dashboard.ver' },
-  },
+  ...dashboardRoutes,
   ...catalogoRoutes,
   ...frentesRoutes,
   ...almacenRoutes,
@@ -32,13 +25,7 @@ const routes = [
   ...reservasRoutes,
   ...kardexRoutes,
   ...procuraRoutes,
-  {
-    path: '/alertas',
-    name: 'alertas',
-    component: ModuloPendiente,
-    props: { titulo: 'Alertas' },
-    meta: { permiso: 'alertas.ver' },
-  },
+  ...alertasRoutes,
   ...usuariosRoutes,
 ]
 
