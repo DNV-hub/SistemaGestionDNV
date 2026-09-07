@@ -9,6 +9,7 @@ import { valesRoutes } from '../modules/vales/routes'
 import { kardexRoutes } from '../modules/kardex/routes'
 import { reservasRoutes } from '../modules/reservas/routes'
 import { usuariosRoutes } from '../modules/usuarios/routes'
+import { procuraRoutes } from '../modules/procura/routes'
 
 // Todos los módulos salvo login quedan como placeholder hasta que se
 // implementen (docs/ARQUITECTURA.md §4). `permiso` es el código que la
@@ -30,13 +31,7 @@ const routes = [
   ...valesRoutes,
   ...reservasRoutes,
   ...kardexRoutes,
-  {
-    path: '/procura',
-    name: 'procura',
-    component: ModuloPendiente,
-    props: { titulo: 'Metrados Procura' },
-    meta: { permiso: 'procura.ver' },
-  },
+  ...procuraRoutes,
   {
     path: '/alertas',
     name: 'alertas',

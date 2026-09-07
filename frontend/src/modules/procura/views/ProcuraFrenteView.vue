@@ -1,0 +1,499 @@
+<script setup>
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useProcuraStore } from '../store/procura'
+import { useAuthStore } from '../../../store/auth'
+import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
+
+const route = useRoute()
+const router = useRouter()
+const procura = useProcuraStore()
+const auth = useAuthStore()
+
+const puedeEditar = computed(() => auth.tienePermiso('procura.crear_version'))
+const puedeVerComparacion = computed(() => auth.tienePermiso('procura.ver_comparacion'))
+
+const frenteId = computed(() => route.params.frenteId)
+const frente = computed(() => procura.frentesActivos.find((f) => f.id === frenteId.value) ?? null)
+const filas = computed(() => procura.metradosPorFrente(frenteId.value))
+
+const aviso = ref('')
+const cuerpoPlanilla = ref(null)
+const nuevaFila = reactive({ material_id: '', cantidad_contractual: '', cantidad_procura: '' })
+const guardandoNueva = ref(false)
+
+function cargar() {
+  procura.cargarDetalleFrente(frenteId.value)
+}
+onMounted(cargar)
+watch(frenteId, cargar)
+
+function total(fila) {
+  return (Number(fila.cantidad_contractual) || 0) + (Number(fila.cantidad_procura) || 0)
+}
+
+async function guardarCelda(fila, campo, valorNuevo) {
+  const valor = valorNuevo === '' ? 0 : Number(valorNuevo)
+  if (valor === Number(fila[campo])) return
+
+  aviso.value = ''
+  try {
+    await procura.guardarFila({
+      frente_id: fila.frente_id,
+      material_id: fila.material_id,
+      unidad: fila.unidad,
+      cantidad_contractual: campo === 'cantidad_contractual' ? valor : Number(fila.cantidad_contractual),
+      cantidad_procura: campo === 'cantidad_procura' ? valor : Number(fila.cantidad_procura),
+      responsable_id: auth.session.user.id,
+      observaciones: fila.observaciones ?? null,
+    })
+    aviso.value = `"${fila.materiales?.codigo}" actualizado.`
+  } catch (e) {
+    console.error(e)
+    aviso.value = 'No se pudo guardar el cambio.'
+  }
+}
+
+const materialesDisponibles = computed(() => {
+  const usados = new Set(filas.value.map((f) => f.material_id))
+  return procura.materialesActivos.filter((m) => !usados.has(m.id))
+})
+
+async function agregarMaterial() {
+  if (!nuevaFila.material_id) return
+  const material = procura.materialPorId(nuevaFila.material_id)
+  guardandoNueva.value = true
+  aviso.value = ''
+  try {
+    await procura.guardarFila({
+      frente_id: frenteId.value,
+      material_id: nuevaFila.material_id,
+      unidad: material?.unidad ?? '',
+      cantidad_contractual: Number(nuevaFila.cantidad_contractual) || 0,
+      cantidad_procura: Number(nuevaFila.cantidad_procura) || 0,
+      responsable_id: auth.session.user.id,
+      observaciones: null,
+    })
+    nuevaFila.material_id = ''
+    nuevaFila.cantidad_contractual = ''
+    nuevaFila.cantidad_procura = ''
+    aviso.value = 'Material agregado al metrado.'
+  } catch (e) {
+    console.error(e)
+    aviso.value = 'No se pudo agregar el material.'
+  } finally {
+    guardandoNueva.value = false
+  }
+}
+
+function enfocarCelda(fila, col) {
+  const destino = cuerpoPlanilla.value?.querySelector(`input[data-fila="${fila}"][data-col="${col}"]`)
+  if (destino) destino.focus()
+}
+
+function onTeclaCelda(ev) {
+  const input = ev.target
+  if (input.tagName !== 'INPUT') return
+  const fila = Number(input.dataset.fila)
+  const col = Number(input.dataset.col)
+  const ultimaFila = filas.value.length - 1
+
+  if (ev.key === 'ArrowRight' && col < 1) {
+    ev.preventDefault()
+    enfocarCelda(fila, col + 1)
+  } else if (ev.key === 'ArrowLeft' && col > 0) {
+    ev.preventDefault()
+    enfocarCelda(fila, col - 1)
+  } else if (ev.key === 'ArrowDown' && fila < ultimaFila) {
+    ev.preventDefault()
+    enfocarCelda(fila + 1, col)
+  } else if (ev.key === 'ArrowUp' && fila > 0) {
+    ev.preventDefault()
+    enfocarCelda(fila - 1, col)
+  } else if (ev.key === 'Enter') {
+    ev.preventDefault()
+    input.blur()
+    if (ev.shiftKey) {
+      if (fila > 0) enfocarCelda(fila - 1, col)
+    } else if (fila < ultimaFila) {
+      enfocarCelda(fila + 1, col)
+    }
+  }
+}
+
+/** Historial global del frente, con la variación de Procura contra la versión anterior del mismo material. */
+const historialConDelta = computed(() => {
+  const porMaterial = new Map()
+  for (const h of procura.historial) {
+    if (!porMaterial.has(h.material_id)) porMaterial.set(h.material_id, [])
+    porMaterial.get(h.material_id).push(h)
+  }
+  const deltas = new Map()
+  for (const versiones of porMaterial.values()) {
+    const ascendente = [...versiones].sort((a, b) => a.version - b.version)
+    ascendente.forEach((v, i) => {
+      const anterior = i > 0 ? ascendente[i - 1] : null
+      deltas.set(v.id, anterior ? v.cantidad_procura - anterior.cantidad_procura : null)
+    })
+  }
+  return procura.historial.map((h) => ({ ...h, deltaProcura: deltas.get(h.id) }))
+})
+
+function claseConsumo(pct) {
+  if (pct === null || pct === undefined) return ''
+  if (pct >= 100) return 'sobre'
+  if (pct >= 90) return 'riesgo'
+  return 'normal'
+}
+</script>
+
+<template>
+  <div class="detalle">
+    <button class="volver" @click="router.push('/procura')">&larr; Volver a Procura</button>
+
+    <p v-if="procura.cargando">Cargando…</p>
+    <p v-else-if="procura.error" class="error">{{ procura.error }}</p>
+
+    <template v-else-if="frente">
+      <header class="cabecera">
+        <h1>{{ frente.codigo }} — {{ frente.nombre }}</h1>
+        <p class="subtitulo">{{ frente.area ?? 'Sin área asignada' }}</p>
+      </header>
+
+      <p v-if="aviso" class="aviso">{{ aviso }}</p>
+
+      <section>
+        <h2>Planilla de metrado</h2>
+        <p class="nota-ayuda">
+          Navega con <span class="tecla">↑</span><span class="tecla">↓</span><span class="tecla">←</span
+          ><span class="tecla">→</span> o <span class="tecla">Tab</span> · <span class="tecla">Enter</span> baja de fila
+          — el Total se calcula solo (Contractual + Procura).
+        </p>
+
+        <div class="marco-tabla">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-num">#</th>
+                <th>Código</th>
+                <th>Material</th>
+                <th>Contractual</th>
+                <th>Procura</th>
+                <th class="col-total">Total previsto</th>
+              </tr>
+            </thead>
+            <tbody ref="cuerpoPlanilla" @keydown="onTeclaCelda">
+              <tr v-for="(fila, i) in filas" :key="fila.id">
+                <td class="col-num">{{ i + 1 }}</td>
+                <td class="col-codigo">{{ fila.materiales?.codigo }}</td>
+                <td class="col-descripcion">{{ fila.materiales?.descripcion }}<span class="unidad">{{ fila.unidad }}</span></td>
+                <td class="celda-editable">
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    :data-fila="i"
+                    data-col="0"
+                    :value="fila.cantidad_contractual"
+                    :disabled="!puedeEditar"
+                    @focus="$event.target.select()"
+                    @change="guardarCelda(fila, 'cantidad_contractual', $event.target.value)"
+                  />
+                </td>
+                <td class="celda-editable">
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    :data-fila="i"
+                    data-col="1"
+                    :value="fila.cantidad_procura"
+                    :disabled="!puedeEditar"
+                    @focus="$event.target.select()"
+                    @change="guardarCelda(fila, 'cantidad_procura', $event.target.value)"
+                  />
+                </td>
+                <td class="col-total">{{ total(fila) }} {{ fila.unidad }}</td>
+              </tr>
+              <tr v-if="!filas.length">
+                <td colspan="6" class="vacio">Este frente todavía no tiene materiales previstos.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="puedeEditar" class="agregar-fila">
+          <BuscadorMaterial v-model="nuevaFila.material_id" :materiales="materialesDisponibles" class="buscador" />
+          <input v-model="nuevaFila.cantidad_contractual" type="number" step="0.001" min="0" placeholder="Contractual" />
+          <input v-model="nuevaFila.cantidad_procura" type="number" step="0.001" min="0" placeholder="Procura" />
+          <button type="button" :disabled="!nuevaFila.material_id || guardandoNueva" @click="agregarMaterial">
+            + Agregar material
+          </button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Historial de modificaciones</h2>
+        <div class="marco-tabla">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Material</th>
+                <th>Versión</th>
+                <th>Contractual</th>
+                <th>Procura</th>
+                <th>Δ Procura</th>
+                <th class="col-total">Total</th>
+                <th>Responsable</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="h in historialConDelta" :key="h.id">
+                <td>{{ new Date(h.created_at).toLocaleString() }}</td>
+                <td class="col-descripcion">{{ h.materiales?.codigo }} — {{ h.materiales?.descripcion }}</td>
+                <td>v{{ h.version }}</td>
+                <td>{{ h.cantidad_contractual }}</td>
+                <td>{{ h.cantidad_procura }}</td>
+                <td>
+                  <span v-if="h.deltaProcura === null">—</span>
+                  <span v-else :class="h.deltaProcura >= 0 ? 'delta-pos' : 'delta-neg'">
+                    {{ h.deltaProcura > 0 ? '+' : '' }}{{ h.deltaProcura }}
+                  </span>
+                </td>
+                <td class="col-total">{{ total(h) }} {{ h.unidad }}</td>
+                <td>{{ h.usuarios?.nombre ?? '—' }}</td>
+              </tr>
+              <tr v-if="!historialConDelta.length">
+                <td colspan="8" class="vacio">Todavía no hay modificaciones registradas.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section v-if="puedeVerComparacion">
+        <h2>Comparación Procura vs. consumo</h2>
+        <div class="marco-tabla">
+          <table>
+            <thead>
+              <tr>
+                <th>Material</th>
+                <th>Previsto</th>
+                <th>Reservado</th>
+                <th>Solicitado</th>
+                <th>Entregado</th>
+                <th>Saldo</th>
+                <th>% Consumo</th>
+                <th>Desviación</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in procura.comparacion" :key="c.material_id">
+                <td class="col-descripcion">
+                  {{ procura.materialPorId(c.material_id)?.codigo ?? '—' }} —
+                  {{ procura.materialPorId(c.material_id)?.descripcion ?? '—' }}
+                </td>
+                <td>{{ c.cantidad_prevista }} {{ c.unidad }}</td>
+                <td>{{ c.cantidad_reservada }}</td>
+                <td>{{ c.cantidad_solicitada }}</td>
+                <td>{{ c.cantidad_entregada }}</td>
+                <td>{{ c.saldo }}</td>
+                <td>
+                  <span class="badge-pct" :class="claseConsumo(c.porcentaje_consumo)">{{ c.porcentaje_consumo ?? '—' }}%</span>
+                </td>
+                <td>{{ c.desviacion }}</td>
+              </tr>
+              <tr v-if="!procura.comparacion.length">
+                <td colspan="8" class="vacio">No hay datos de consumo para este frente.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.detalle {
+  padding: 1.5rem 2rem;
+}
+.volver {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+.cabecera {
+  margin-bottom: 0.5rem;
+}
+h1 {
+  font-size: 1.25rem;
+  margin: 0;
+  color: #111827;
+}
+.subtitulo {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+  color: #111827;
+}
+section {
+  margin-top: 2rem;
+}
+.nota-ayuda {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0 0 0.6rem;
+}
+.tecla {
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  padding: 0.05rem 0.4rem;
+  border-radius: 4px;
+  color: #374151;
+}
+.marco-tabla {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+th,
+td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.86rem;
+  text-align: center;
+  white-space: nowrap;
+}
+thead th {
+  background: #f3f4f6;
+  color: #374151;
+  font-weight: 600;
+}
+td.col-descripcion {
+  white-space: normal;
+  min-width: 200px;
+}
+.unidad {
+  color: #6b7280;
+  font-size: 0.78rem;
+  margin-left: 0.35rem;
+}
+td.celda-editable {
+  padding: 0;
+}
+td.celda-editable input {
+  width: 100%;
+  height: 100%;
+  min-height: 2.4rem;
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: #111827;
+}
+td.celda-editable input:disabled {
+  color: #9ca3af;
+}
+td.celda-editable input:focus {
+  outline: 2px solid #1f2937;
+  outline-offset: -2px;
+  background: #f3f4f6;
+}
+td.col-total {
+  background: #eef2f2;
+  color: #0f5132;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.agregar-fila {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.agregar-fila .buscador {
+  flex: 1;
+  min-width: 220px;
+}
+.agregar-fila input {
+  width: 140px;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  text-align: center;
+}
+button {
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #1f2937;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.badge-pct {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.badge-pct.normal {
+  background: #dcfce7;
+  color: #166534;
+}
+.badge-pct.riesgo {
+  background: #fef3c7;
+  color: #92400e;
+}
+.badge-pct.sobre {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.delta-pos {
+  color: #166534;
+  font-weight: 600;
+}
+.delta-neg {
+  color: #991b1b;
+  font-weight: 600;
+}
+.vacio {
+  text-align: center;
+  color: #6b7280;
+  white-space: normal;
+}
+.aviso {
+  color: #166534;
+  font-size: 0.9rem;
+}
+.error {
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+</style>
