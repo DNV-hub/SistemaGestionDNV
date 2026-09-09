@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useRdcStore } from '../store/rdc'
 import { nuevoId } from '../services/rdcRepository'
 import { CAUSAS_STANDBY, CAUSA_TIEMPO_TOTAL, HITOS } from '../services/rdcConstantes'
-import { bitacoraCompleta, fmtHm, minutosStandby, totalStandbyMin } from '../services/rdcCalculos'
+import { causaEfectiva, fmtHm, minutosEntre, minutosStandby, nombreDe, totalStandbyMin } from '../services/rdcCalculos'
 
 const rdc = useRdcStore()
 const reporte = computed(() => rdc.actual)
@@ -25,91 +25,119 @@ function fijarHito(nombre, valor) {
   guardar()
 }
 
-// --- Bitácora ------------------------------------------------------------
-const nuevaActividad = ref({ horaInicio: '', horaFin: '', actividad: '' })
-
-function agregarActividad() {
-  if (!nuevaActividad.value.actividad.trim()) return
-  reporte.value.bitacora.push({
-    id: nuevoId(),
-    horaInicio: nuevaActividad.value.horaInicio || null,
-    horaFin: nuevaActividad.value.horaFin || null,
-    actividad: nuevaActividad.value.actividad.trim(),
-    orden: reporte.value.bitacora.length + 1,
-  })
-  nuevaActividad.value = { horaInicio: '', horaFin: '', actividad: '' }
-  guardar()
-}
-
-function quitarActividad(id) {
-  reporte.value.bitacora = reporte.value.bitacora.filter((b) => b.id !== id)
-  guardar()
-}
-
-// --- Stand by ------------------------------------------------------------
-const nuevaParada = ref({ actividad: '', desde: '', hasta: '', causa: '', causaOtro: '', responsable: '', comentario: '', totalHoras: '', totalMinutos: '' })
-const paradaEsTiempoTotal = computed(() => nuevaParada.value.causa === CAUSA_TIEMPO_TOTAL)
-
-function agregarParada() {
-  const p = nuevaParada.value
-  if (!p.causa) return
-  if (!paradaEsTiempoTotal.value && (!p.desde || !p.hasta)) return
-  if (paradaEsTiempoTotal.value && !Number(p.totalHoras) && !Number(p.totalMinutos)) return
-
-  reporte.value.standby.push({
-    id: nuevoId(),
-    actividad: p.actividad.trim() || null,
-    desde: p.desde || null,
-    hasta: p.hasta || null,
-    causa: p.causa,
-    causaOtro: p.causaOtro.trim() || null,
-    responsable: p.responsable.trim() || null,
-    comentario: p.comentario.trim() || null,
-    totalHoras: p.totalHoras === '' ? null : Number(p.totalHoras),
-    totalMinutos: p.totalMinutos === '' ? null : Number(p.totalMinutos),
-    orden: reporte.value.standby.length + 1,
-  })
-  nuevaParada.value = { actividad: '', desde: '', hasta: '', causa: '', causaOtro: '', responsable: '', comentario: '', totalHoras: '', totalMinutos: '' }
-  guardar()
-}
-
-function quitarParada(id) {
-  reporte.value.standby = reporte.value.standby.filter((s) => s.id !== id)
-  guardar()
-}
-
 // El acordeón arranca abierto: los hitos son lo primero que se llena al llegar
 // al frente, y obligar a desplegarlos cada vez sería un toque de más.
 const hitosAbierto = ref(true)
 const hitosLlenos = computed(() => HITOS.filter((h) => horaHito(h)).length)
 
+// --- Agregar registro ----------------------------------------------------
+const tipoNuevo = ref('actividad')
+const nuevaActividad = ref({ horaInicio: '', horaFin: '', actividad: '' })
+const PARADA_VACIA = { actividad: '', desde: '', hasta: '', causa: '', causaOtro: '', responsable: '', comentario: '', totalHoras: '', totalMinutos: '' }
+const nuevaParada = ref({ ...PARADA_VACIA })
+const paradaEsTiempoTotal = computed(() => nuevaParada.value.causa === CAUSA_TIEMPO_TOTAL)
+
+const puedeAgregar = computed(() =>
+  tipoNuevo.value === 'actividad'
+    ? !!nuevaActividad.value.actividad.trim()
+    : !!nuevaParada.value.causa &&
+      (paradaEsTiempoTotal.value
+        ? Number(nuevaParada.value.totalHoras) > 0 || Number(nuevaParada.value.totalMinutos) > 0
+        : !!nuevaParada.value.desde && !!nuevaParada.value.hasta),
+)
+
+function agregarRegistro() {
+  if (!puedeAgregar.value) return
+  if (tipoNuevo.value === 'actividad') {
+    const a = nuevaActividad.value
+    reporte.value.bitacora.push({
+      id: nuevoId(),
+      horaInicio: a.horaInicio || null,
+      horaFin: a.horaFin || null,
+      actividad: a.actividad.trim(),
+      orden: reporte.value.bitacora.length + 1,
+    })
+    nuevaActividad.value = { horaInicio: '', horaFin: '', actividad: '' }
+  } else {
+    const p = nuevaParada.value
+    reporte.value.standby.push({
+      id: nuevoId(),
+      actividad: p.actividad.trim() || null,
+      desde: p.desde || null,
+      hasta: p.hasta || null,
+      causa: p.causa,
+      causaOtro: p.causaOtro.trim() || null,
+      responsable: p.responsable.trim() || null,
+      comentario: p.comentario.trim() || null,
+      totalHoras: p.totalHoras === '' ? null : Number(p.totalHoras),
+      totalMinutos: p.totalMinutos === '' ? null : Number(p.totalMinutos),
+      orden: reporte.value.standby.length + 1,
+    })
+    nuevaParada.value = { ...PARADA_VACIA }
+  }
+  guardar()
+}
+
+// --- Línea de tiempo -----------------------------------------------------
+// Actividades y paradas se combinan en UNA sola lista ordenada por hora de
+// inicio (lo que no tiene hora va al final). Así se ve en qué momento exacto
+// una parada interrumpió el trabajo, en vez de que las paradas queden siempre
+// al final como si hubieran pasado al cierre del turno.
+const lineaDeTiempo = computed(() =>
+  [
+    ...reporte.value.bitacora.map((r) => ({ tipo: 'actividad', r, clave: r.horaInicio || 'zz' })),
+    ...reporte.value.standby.map((r) => ({ tipo: 'standby', r, clave: r.desde || 'zz' })),
+  ].sort((a, b) => a.clave.localeCompare(b.clave)),
+)
+
+// Un solo registro abierto para editar a la vez, como el resto de acordeones.
+const abierto = ref(null)
+const estaAbierto = (tipo, id) => abierto.value?.tipo === tipo && abierto.value?.id === id
+function alternar(tipo, id) {
+  abierto.value = estaAbierto(tipo, id) ? null : { tipo, id }
+}
+
+const minutosActividad = (r) => (r.horaInicio && r.horaFin ? minutosEntre(r.horaInicio, r.horaFin, reporte.value) : null)
+
+function borrarActividad(id) {
+  reporte.value.bitacora = reporte.value.bitacora.filter((b) => b.id !== id)
+  abierto.value = null
+  guardar()
+}
+function borrarParada(id) {
+  reporte.value.standby = reporte.value.standby.filter((s) => s.id !== id)
+  abierto.value = null
+  guardar()
+}
+
 const totalParadas = computed(() => totalStandbyMin(reporte.value))
-// La línea de tiempo mezcla lo escrito a mano con lo que se deduce de los
-// metrados, igual que en el reporte que se comparte por WhatsApp.
-const lineaDeTiempo = computed(() => bitacoraCompleta(reporte.value))
+const cuantasParadas = computed(() => reporte.value.standby.filter((s) => minutosStandby(s, reporte.value) > 0).length)
+const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.value?.frenteId) || 'selecciona un frente en «Datos»')
 </script>
 
 <template>
   <div v-if="reporte">
     <div class="card">
-      <div class="card-title">Acceso al frente</div>
       <label class="toggle-row">
         <input v-model="reporte.restriccionAcceso" type="checkbox" @change="guardar" />
         <span>¿Tuviste restricciones para llegar a tu frente de trabajo?</span>
       </label>
 
-      <div v-if="reporte.restriccionAcceso" class="grid2" style="margin-top: 0.75rem">
-        <div class="field ancho">
+      <div v-if="reporte.restriccionAcceso" style="margin-top: 12px">
+        <div class="alert alert-amber"><i class="ti ti-alert-triangle" /><span>Completa los datos de la restricción.</span></div>
+        <div class="field" style="margin-bottom: 10px">
           <label for="restr-desc">¿Cuál fue la restricción?</label>
-          <textarea id="restr-desc" v-model="reporte.restriccionDescripcion" @change="guardar" />
+          <textarea id="restr-desc" v-model="reporte.restriccionDescripcion" placeholder="Describe la restricción…" @change="guardar" />
         </div>
-        <div class="field">
-          <label for="restr-ini">Hora inicio</label>
-          <input id="restr-ini" v-model="reporte.restriccionInicio" type="time" @change="guardar" />
-        </div>
-        <div class="field">
-          <label for="restr-fin">Hora fin</label>
-          <input id="restr-fin" v-model="reporte.restriccionFin" type="time" @change="guardar" />
+        <div class="grid2">
+          <div class="field">
+            <label for="restr-ini">Hora inicio</label>
+            <input id="restr-ini" v-model="reporte.restriccionInicio" type="time" @change="guardar" />
+          </div>
+          <div class="field">
+            <label for="restr-fin">Hora fin</label>
+            <input id="restr-fin" v-model="reporte.restriccionFin" type="time" @change="guardar" />
+          </div>
         </div>
       </div>
     </div>
@@ -138,102 +166,195 @@ const lineaDeTiempo = computed(() => bitacoraCompleta(reporte.value))
       </div>
     </div>
 
+    <div class="section-title" style="margin: 4px 4px 10px"><i class="ti ti-notebook" />Bitácora de Campo</div>
+
     <div class="card">
-      <div class="card-title">Actividades</div>
-      <div class="grid2">
-        <div class="field">
-          <label for="act-ini">Desde</label>
-          <input id="act-ini" v-model="nuevaActividad.horaInicio" type="time" />
-        </div>
-        <div class="field">
-          <label for="act-fin">Hasta</label>
-          <input id="act-fin" v-model="nuevaActividad.horaFin" type="time" />
-        </div>
-        <div class="field ancho">
-          <label for="act-desc">Actividad</label>
-          <input id="act-desc" v-model="nuevaActividad.actividad" type="text" placeholder="Qué se hizo" @keydown.enter="agregarActividad" />
-        </div>
+      <div class="card-title"><i class="ti ti-bolt" />Agregar Registro</div>
+
+      <div class="tipo-toggle">
+        <button type="button" class="tipo-btn" :class="{ active: tipoNuevo === 'actividad' }" @click="tipoNuevo = 'actividad'">Actividad</button>
+        <button type="button" class="tipo-btn" :class="{ active: tipoNuevo === 'standby' }" @click="tipoNuevo = 'standby'">Stand By</button>
       </div>
-      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" :disabled="!nuevaActividad.actividad.trim()" @click="agregarActividad">
-        Agregar actividad
-      </button>
 
-      <ul v-if="reporte.bitacora.length" class="lista-filas">
-        <li v-for="b in reporte.bitacora" :key="b.id">
-          <span>{{ b.horaInicio || '—' }}{{ b.horaFin ? ` a ${b.horaFin}` : '' }} · {{ b.actividad }}</span>
-          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarActividad(b.id)">×</button>
-        </li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Stand by</div>
-      <div class="grid2">
-        <div class="field ancho">
-          <label for="sb-causa">Causa</label>
-          <select id="sb-causa" v-model="nuevaParada.causa">
-            <option value="">— Seleccionar —</option>
-            <option v-for="c in CAUSAS_STANDBY" :key="c" :value="c">{{ c }}</option>
-            <option value="OTRO">OTRO</option>
-          </select>
-        </div>
-        <div v-if="nuevaParada.causa === 'OTRO'" class="field ancho">
-          <label for="sb-otro">¿Cuál?</label>
-          <input id="sb-otro" v-model="nuevaParada.causaOtro" type="text" />
-        </div>
-
-        <template v-if="paradaEsTiempoTotal">
-          <div class="field">
-            <label for="sb-h">Horas</label>
-            <input id="sb-h" v-model="nuevaParada.totalHoras" type="number" min="0" inputmode="numeric" />
+      <div style="margin-top: 12px">
+        <template v-if="tipoNuevo === 'actividad'">
+          <div class="grid2" style="margin-bottom: 10px">
+            <div class="field"><label>Hora Inicio</label><input v-model="nuevaActividad.horaInicio" type="time" /></div>
+            <div class="field"><label>Hora Fin</label><input v-model="nuevaActividad.horaFin" type="time" /></div>
           </div>
           <div class="field">
-            <label for="sb-m">Minutos</label>
-            <input id="sb-m" v-model="nuevaParada.totalMinutos" type="number" min="0" inputmode="numeric" />
+            <label>Descripción de Actividad</label>
+            <textarea v-model="nuevaActividad.actividad" placeholder="Escribir actividad…" />
           </div>
         </template>
+
         <template v-else>
-          <div class="field">
-            <label for="sb-desde">Desde</label>
-            <input id="sb-desde" v-model="nuevaParada.desde" type="time" />
+          <div class="field" style="margin-bottom: 10px">
+            <label>Causa</label>
+            <select v-model="nuevaParada.causa">
+              <option value="">— Seleccionar causa —</option>
+              <option v-for="c in CAUSAS_STANDBY" :key="c" :value="c">{{ c }}</option>
+              <option value="OTRO">OTRO (especificar)</option>
+            </select>
+          </div>
+          <div v-if="nuevaParada.causa === 'OTRO'" class="field" style="margin-bottom: 10px">
+            <label>Especificar otra causa</label>
+            <input v-model="nuevaParada.causaOtro" type="text" placeholder="Describe la causa…" />
+          </div>
+
+          <div v-if="paradaEsTiempoTotal" style="margin-bottom: 10px">
+            <p class="note" style="margin-bottom: 8px">
+              Este tipo de Stand By se registra como <strong>tiempo total del día</strong>.
+            </p>
+            <div class="grid2">
+              <div class="field"><label>Horas</label><input v-model="nuevaParada.totalHoras" type="number" min="0" inputmode="numeric" placeholder="0" /></div>
+              <div class="field"><label>Minutos</label><input v-model="nuevaParada.totalMinutos" type="number" min="0" max="59" inputmode="numeric" placeholder="0" /></div>
+            </div>
+          </div>
+          <div v-else class="grid2" style="margin-bottom: 10px">
+            <div class="field"><label>Desde</label><input v-model="nuevaParada.desde" type="time" /></div>
+            <div class="field"><label>Hasta</label><input v-model="nuevaParada.hasta" type="time" /></div>
+          </div>
+
+          <div class="field" style="margin-bottom: 10px">
+            <label>Actividad afectada</label>
+            <input v-model="nuevaParada.actividad" type="text" placeholder="Ej: Perforación de pernos, instalación de malla…" />
+          </div>
+          <div class="field" style="margin-bottom: 10px">
+            <label>Responsable de la liberación</label>
+            <input v-model="nuevaParada.responsable" type="text" placeholder="Nombre (puede ser externo)" />
           </div>
           <div class="field">
-            <label for="sb-hasta">Hasta</label>
-            <input id="sb-hasta" v-model="nuevaParada.hasta" type="time" />
+            <label>Comentarios <span style="font-weight: 400; color: var(--text3)">(opcional)</span></label>
+            <textarea v-model="nuevaParada.comentario" placeholder="Detalles adicionales del Stand By…" style="min-height: 52px" />
           </div>
         </template>
-
-        <div class="field ancho">
-          <label for="sb-act">Actividad afectada</label>
-          <input id="sb-act" v-model="nuevaParada.actividad" type="text" />
-        </div>
-        <div class="field ancho">
-          <label for="sb-com">Comentario</label>
-          <input id="sb-com" v-model="nuevaParada.comentario" type="text" />
-        </div>
       </div>
-      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" :disabled="!nuevaParada.causa" @click="agregarParada">
-        Agregar parada
-      </button>
 
-      <ul v-if="reporte.standby.length" class="lista-filas">
-        <li v-for="s in reporte.standby" :key="s.id">
-          <span>{{ s.actividad || 'Sin actividad' }} · {{ fmtHm(minutosStandby(s, reporte)) }} · {{ s.causa }}</span>
-          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarParada(s.id)">×</button>
-        </li>
-      </ul>
-      <p v-if="totalParadas > 0" class="total-paradas">Total stand by: {{ fmtHm(totalParadas) }}</p>
+      <button type="button" class="nav-btn primary" style="margin-top: 12px" :disabled="!puedeAgregar" @click="agregarRegistro">
+        <i class="ti ti-plus" /> Agregar a Bitácora
+      </button>
     </div>
 
-    <div v-if="lineaDeTiempo.length" class="card">
-      <div class="card-title">Línea de tiempo</div>
-      <p class="note">Lo que escribiste a mano, más lo que se deduce solo de los metrados que cargues.</p>
-      <ul class="lista-filas">
-        <li v-for="(e, i) in lineaDeTiempo" :key="i">
-          <span>{{ e.hi || '—' }}{{ e.hf ? ` a ${e.hf}` : '' }} · {{ e.texto }}</span>
-        </li>
-      </ul>
+    <div class="card">
+      <div class="card-title">
+        <i class="ti ti-list-check" />Línea de Tiempo — <span class="frente-actual">{{ frenteActual }}</span>
+      </div>
+
+      <div v-if="totalParadas > 0" class="alert alert-red">
+        <i class="ti ti-clock-pause" />
+        <span>
+          <strong>TOTAL STAND BY DE LA JORNADA: {{ fmtHm(totalParadas) }}</strong>
+          ({{ cuantasParadas }} evento{{ cuantasParadas === 1 ? '' : 's' }})
+        </span>
+      </div>
+
+      <p v-if="!lineaDeTiempo.length" class="empty-msg">Sin registros. Agrega una actividad o un Stand By arriba.</p>
+
+      <template v-for="x in lineaDeTiempo" :key="x.r.id">
+        <!-- Actividad -->
+        <div v-if="x.tipo === 'actividad'" class="timeline-card">
+          <template v-if="estaAbierto('actividad', x.r.id)">
+            <div class="grid2" style="margin-bottom: 8px">
+              <div class="field"><label>Hora Inicio</label><input v-model="x.r.horaInicio" type="time" @change="guardar" /></div>
+              <div class="field"><label>Hora Fin</label><input v-model="x.r.horaFin" type="time" @change="guardar" /></div>
+            </div>
+            <div class="field">
+              <label>Descripción de Actividad</label>
+              <textarea v-model="x.r.actividad" @change="guardar" />
+            </div>
+            <div class="timeline-foot">
+              <button class="del-btn" aria-label="Eliminar" @click="borrarActividad(x.r.id)"><i class="ti ti-x" /></button>
+              <button class="timeline-edit-btn" aria-label="Listo" @click="alternar('actividad', x.r.id)"><i class="ti ti-check" /></button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="timeline-head">
+              <span class="timeline-time">
+                <i class="ti ti-clock" />{{ x.r.horaInicio || '--:--' }}
+                <span v-if="x.r.horaFin" class="fin">{{ x.r.horaFin }}</span>
+              </span>
+              <span v-if="minutosActividad(x.r) > 0" class="timeline-dur">{{ fmtHm(minutosActividad(x.r)) }}</span>
+            </div>
+            <div class="timeline-desc">{{ x.r.actividad || 'Sin descripción' }}</div>
+            <div class="timeline-foot">
+              <button class="timeline-edit-btn" aria-label="Editar" @click="alternar('actividad', x.r.id)"><i class="ti ti-pencil" /></button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Stand By -->
+        <div v-else class="timeline-card standby">
+          <template v-if="estaAbierto('standby', x.r.id)">
+            <div class="field" style="margin-bottom: 8px">
+              <label>Causa</label>
+              <select v-model="x.r.causa" @change="guardar">
+                <option value="">— Seleccionar causa —</option>
+                <option v-for="c in CAUSAS_STANDBY" :key="c" :value="c">{{ c }}</option>
+                <option value="OTRO">OTRO (especificar)</option>
+              </select>
+            </div>
+            <div v-if="x.r.causa === 'OTRO'" class="field" style="margin-bottom: 8px">
+              <label>Especificar otra causa</label>
+              <input v-model="x.r.causaOtro" type="text" placeholder="Describe la causa…" @change="guardar" />
+            </div>
+
+            <div v-if="x.r.causa === CAUSA_TIEMPO_TOTAL" class="grid2" style="margin-bottom: 8px">
+              <div class="field"><label>Horas</label><input v-model="x.r.totalHoras" type="number" min="0" inputmode="numeric" @change="guardar" /></div>
+              <div class="field"><label>Minutos</label><input v-model="x.r.totalMinutos" type="number" min="0" max="59" inputmode="numeric" @change="guardar" /></div>
+            </div>
+            <div v-else class="grid2" style="margin-bottom: 8px">
+              <div class="field"><label>Desde</label><input v-model="x.r.desde" type="time" @change="guardar" /></div>
+              <div class="field"><label>Hasta</label><input v-model="x.r.hasta" type="time" @change="guardar" /></div>
+            </div>
+
+            <div class="field" style="margin-bottom: 8px">
+              <label>Actividad afectada</label>
+              <input v-model="x.r.actividad" type="text" @change="guardar" />
+            </div>
+            <div class="field" style="margin-bottom: 8px">
+              <label>Responsable de la liberación</label>
+              <input v-model="x.r.responsable" type="text" @change="guardar" />
+            </div>
+            <div class="field">
+              <label>Comentarios <span style="font-weight: 400; color: var(--text3)">(opcional)</span></label>
+              <textarea v-model="x.r.comentario" style="min-height: 52px" @change="guardar" />
+            </div>
+            <div class="timeline-foot">
+              <button class="del-btn" aria-label="Eliminar" @click="borrarParada(x.r.id)"><i class="ti ti-x" /></button>
+              <button class="timeline-edit-btn" aria-label="Listo" @click="alternar('standby', x.r.id)"><i class="ti ti-check" /></button>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="timeline-head">
+              <span class="timeline-time">
+                <i class="ti ti-clock" />{{ x.r.desde || '--:--' }}
+                <span v-if="x.r.hasta" class="fin">{{ x.r.hasta }}</span>
+              </span>
+              <span v-if="minutosStandby(x.r, reporte) > 0" class="timeline-dur">{{ fmtHm(minutosStandby(x.r, reporte)) }}</span>
+            </div>
+            <span class="timeline-badge-standby">STAND BY</span>
+            <div class="timeline-title">{{ causaEfectiva(x.r) || 'Sin causa registrada' }}</div>
+            <div class="timeline-box">
+              <div class="timeline-box-row"><label>Actividad afectada</label><div class="val">{{ x.r.actividad || '—' }}</div></div>
+              <div class="timeline-box-row"><label>Responsable de la liberación</label><div class="val">{{ x.r.responsable || '—' }}</div></div>
+            </div>
+            <div class="timeline-foot">
+              <button class="timeline-edit-btn" aria-label="Editar" @click="alternar('standby', x.r.id)"><i class="ti ti-pencil" /></button>
+            </div>
+          </template>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
+<style scoped>
+.frente-actual {
+  text-transform: none;
+  font-weight: 400;
+  color: var(--blue-text);
+}
+</style>
