@@ -1,2 +1,6 @@
 # Local Netlify folder
 .netlify
+
+# Copia de solo lectura del proyecto RDC en producción (OneDrive).
+# Material de referencia para la fusión; no forma parte del código del Sistema.
+_referencia-rdc
