@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "smoke-test": "node smoke-test.mjs",
-    "migrar-catalogos-rdc": "node migrar-catalogos-rdc.mjs"
+    "migrar-catalogos-rdc": "node migrar-catalogos-rdc.mjs",
+    "crear-usuarios-supervisores": "node crear-usuarios-supervisores.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0"
