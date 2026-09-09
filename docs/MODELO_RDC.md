@@ -21,6 +21,9 @@ abajo, pero conviene tenerlos presentes desde el inicio:
    **Excel completo codificado en base64**. El contrato real con Power Automate /
    SharePoint no es un JSON de campos: es la **estructura del workbook** (8 hojas,
    con columnas y orden específicos). Ver §3.
+   *Matizado después de revisar el flujo: Power Automate no abre el archivo, solo
+   lo deposita en SharePoint. La estructura del workbook igual se replica exacta,
+   porque quien la consume está aguas abajo y no se sabe quién es (§8.2).*
 2. **El personal no es nominal: son conteos por categoría.** El reporte no sabe
    *quiénes* fueron, solo *cuántos* de cada tipo. Y la maquinaria no tiene
    horómetros, solo cantidad de equipos presentes. Las tablas `rdc_personal` y
@@ -484,9 +487,32 @@ tales y bloquean la fase indicada.
    posición, hay que replicar el orden exactamente; si lee por encabezado, las dos
    columnas `Otro` son ambiguas. **No puedo determinarlo leyendo el RDC: hay que
    abrir el flujo en Power Automate.**
-   **🔴 ABIERTO — bloquea la Fase C, no la A.2.** El usuario aportará una captura
-   del flujo cuando la implementación llegue a ese punto. Hasta entonces se asume el
-   caso más estricto: replicar orden y posición de columnas exactamente.
+
+   **✅ RESUELTO — el flujo no lee el Excel.** Revisado el flujo "Guardar RDC en
+   SharePoint": el disparador declara exactamente los cuatro campos
+   (`nombreArchivo`, `contenidoArchivo`, `frente`, `fecha`, todos `string`) y
+   después solo hay variables, una condición de ruteo, "Obtener los metadatos de
+   la carpeta", "Crear nueva carpeta" si no existe, y "Crear archivo". **Ninguna
+   acción abre el contenido del archivo** — nada de Excel Online, "List rows
+   present in a table" ni conexiones a Power BI. Para el flujo, el `.xlsx` es un
+   binario opaco que deposita con el nombre que le mandan.
+
+   Consecuencias:
+   - El orden y la posición de las columnas **no le importan al flujo**. Las dos
+     columnas homónimas `Otro` y el corrimiento de 38 a 43 en Sala Eléctrica
+     dejan de ser un riesgo de integración.
+   - El riesgo se traslada **aguas abajo**: a quien abra ese archivo después (un
+     consolidado, un tablero, una persona). Eso ya no se puede averiguar leyendo
+     el flujo. Aun así el módulo nuevo replica la estructura exacta, que es la
+     posición segura mientras no se sepa quién más la consume.
+
+   **Hallazgo nuevo, y este sí es un acoplamiento a cuidar:** el flujo decide la
+   carpeta de destino comparando el campo `frente` con dos textos exactos —
+   `PLATAFORMA SALA ELECTRICA` y `PLATAFORMA DE OPERACIONES` — y todo lo demás va
+   por la otra rama. Los nombres de `rdc_frentes` se migraron literales, así que
+   hoy funciona; pero **renombrar cualquiera de esos dos frentes en el catálogo
+   mandaría sus archivos a la carpeta equivocada, en silencio**. Es el mismo tipo
+   de trampa que la comparación por texto del sector Sala Eléctrica (§8.8).
 3. **`frentes` en ambos sistemas.** Pude leer el lado RDC (consulta de solo lectura
    con la misma llave pública que usa la app):
    - RDC: 21 frentes, tabla con `id` **serial**, `nombre`, `sector_id` → `sectores`
