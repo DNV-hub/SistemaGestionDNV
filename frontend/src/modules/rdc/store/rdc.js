@@ -135,6 +135,18 @@ export const useRdcStore = defineStore('rdc', {
     },
 
     async abrir(id) {
+      // Espera a que termine de escribirse cualquier guardado que haya
+      // quedado en camino de una visita anterior a este mismo borrador,
+      // ANTES de leerlo del disco. Sin esto, volver a entrar rápido podía
+      // ganarle la carrera a un guardado pendiente: `abrir` reemplaza
+      // `this.actual` con lo que hubiera en el disco en ESE instante (que
+      // podía ser una versión vieja, a medio escribir), y como los
+      // guardados encolados leen `this.actual` recién cuando les toca su
+      // turno, el o los que todavía estuvieran pendientes terminaban
+      // regrabando esa misma versión vieja encima de lo que sí se había
+      // alcanzado a guardar — perdiendo lo último que se escribió antes de
+      // salir, en vez de conservarlo.
+      await colaGuardado
       this.actual = (await repo.obtener(id)) ?? null
       return this.actual
     },
