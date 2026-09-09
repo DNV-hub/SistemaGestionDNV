@@ -71,6 +71,13 @@ defineProps({
       <circle cx="12" cy="16.8" r="0.15" fill="currentColor" stroke-width="1.4" />
     </template>
 
+    <template v-else-if="nombre === 'rdc'">
+      <path d="M6.5 3.5h11a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" />
+      <path d="M9 3.5V6M15 3.5V6" />
+      <line x1="8.5" y1="10.5" x2="15.5" y2="10.5" />
+      <line x1="8.5" y1="14" x2="13" y2="14" />
+    </template>
+
     <template v-else-if="nombre === 'usuarios'">
       <circle cx="12" cy="8.3" r="3.3" />
       <path d="M5 20c0-3.6 3.1-6.3 7-6.3s7 2.7 7 6.3" />

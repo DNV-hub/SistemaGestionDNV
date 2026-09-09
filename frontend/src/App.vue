@@ -65,8 +65,12 @@ if (auth.estaAutenticado) cargarContadores()
 // pantallas que las incrustan (Vales, Kardex, Almacén) — Almacén los
 // necesita para eso pero no gestiona esos módulos, así que se le oculta el
 // link acá (rolesExcluidos) en vez de quitarle el permiso de verdad.
+// El Reporte Diario de Campo va en el grupo principal y no en Planeamiento ni
+// en Almacén: no es back-office, es el trabajo diario del supervisor en el
+// frente, y para él es la primera pantalla de la aplicación.
 const navPrincipal = [
   { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver' },
+  { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios' },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar' },
 ]
 

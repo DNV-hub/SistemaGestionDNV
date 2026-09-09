@@ -182,6 +182,65 @@ export async function marcarEnvioSharepoint(reporteId, { estado, nombreArchivo, 
 // Consulta del histórico
 // ---------------------------------------------------------------------------
 
+/** Trae un reporte del servidor con todo su detalle, en la misma forma que usa
+ * el repositorio local. Lo necesitan Planeamiento y Consulta, que ven reportes
+ * que nunca pasaron por su dispositivo. */
+export async function obtenerReporteCompleto(id) {
+  const { data, error } = await supabase
+    .from('rdc_reportes')
+    .select(
+      `*,
+       rdc_reporte_personal(*), rdc_reporte_maquinaria(*), rdc_reporte_hitos(*),
+       rdc_reporte_metrados(*), rdc_reporte_elementos(*), rdc_reporte_bitacora(*),
+       rdc_reporte_standby(*), rdc_reporte_programacion(*)`,
+    )
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+
+  const lista = (filas, mapear) => (filas ?? []).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)).map(mapear)
+
+  return {
+    id: data.id,
+    fecha: data.fecha,
+    sectorId: data.sector_id,
+    frenteId: data.frente_id,
+    supervisorId: data.supervisor_id,
+    capatazId: data.capataz_id,
+    creadoPor: data.creado_por,
+    estado: data.estado,
+    restriccionAcceso: data.restriccion_acceso,
+    restriccionDescripcion: data.restriccion_descripcion,
+    restriccionInicio: data.restriccion_inicio,
+    restriccionFin: data.restriccion_fin,
+    refrigerioSalida: data.refrigerio_salida,
+    refrigerioRetorno: data.refrigerio_retorno,
+    observaciones: data.observaciones,
+    requerimientos: data.requerimientos,
+    restricciones: data.restricciones,
+    redline: data.redline,
+    redlineSupervisorId: data.redline_supervisor_id,
+    redlineDescripcion: data.redline_descripcion,
+    esCorreccion: data.es_correccion,
+    estadoSupabase: 'enviado', // si está en el servidor, por definición llegó
+    estadoSharepoint: data.estado_sharepoint,
+    sharepointNombreArchivo: data.sharepoint_nombre_archivo,
+    sharepointError: data.sharepoint_error,
+    sharepointIntentos: data.sharepoint_intentos,
+    creadoEnDispositivo: data.creado_en_dispositivo,
+    actualizadoEn: data.updated_at ?? data.created_at,
+    personal: lista(data.rdc_reporte_personal, (d) => ({ id: d.id, categoria: d.categoria, tipo: d.tipo, cantidad: d.cantidad, orden: d.orden })),
+    maquinaria: lista(data.rdc_reporte_maquinaria, (d) => ({ id: d.id, maquinariaId: d.maquinaria_id, tipo: d.tipo, categoria: d.categoria, cantidad: d.cantidad, orden: d.orden })),
+    hitos: lista(data.rdc_reporte_hitos, (d) => ({ id: d.id, orden: d.orden, nombre: d.nombre, hora: d.hora })),
+    metrados: lista(data.rdc_reporte_metrados, (d) => ({ id: d.id, bloque: d.bloque, partidaCodigo: d.partida_codigo, partidaNombre: d.partida_nombre, unidad: d.unidad, cantidad: d.cantidad, horaInicio: d.hora_inicio, horaFin: d.hora_fin, orden: d.orden })),
+    elementos: lista(data.rdc_reporte_elementos, (d) => ({ id: d.id, elemento: d.elemento, actividad: d.actividad, tipo: d.tipo, sistema: d.sistema, zona: d.zona, codigo: d.codigo, ubicacion: d.ubicacion, cantidad: d.cantidad, unidad: d.unidad, ancho: d.ancho, largo: d.largo, diametro: d.diametro, plano: d.plano, tipoPerforadora: d.tipo_perforadora, horaInicio: d.hora_inicio, horaFin: d.hora_fin, orden: d.orden })),
+    bitacora: lista(data.rdc_reporte_bitacora, (d) => ({ id: d.id, horaInicio: d.hora_inicio, horaFin: d.hora_fin, actividad: d.actividad, orden: d.orden })),
+    standby: lista(data.rdc_reporte_standby, (d) => ({ id: d.id, actividad: d.actividad, desde: d.desde, hasta: d.hasta, causa: d.causa, causaOtro: d.causa_otro, responsable: d.responsable, comentario: d.comentario, totalHoras: d.total_horas, totalMinutos: d.total_minutos, orden: d.orden })),
+    programacion: lista(data.rdc_reporte_programacion, (d) => ({ id: d.id, tipo: d.tipo, etiqueta: d.etiqueta, descripcion: d.descripcion, orden: d.orden })),
+  }
+}
+
 /** Reportes ya sincronizados, para la vista de histórico. RLS decide qué ve
  * cada quien: un supervisor solo los suyos, Planeamiento y Consulta todos. */
 export async function listarReportes({ desde, hasta, frenteId, supervisorId } = {}) {

@@ -12,6 +12,7 @@ import { usuariosRoutes } from '../modules/usuarios/routes'
 import { procuraRoutes } from '../modules/procura/routes'
 import { alertasRoutes } from '../modules/alertas/routes'
 import { reportesRoutes } from '../modules/reportes/routes'
+import { rdcRoutes } from '../modules/rdc/routes'
 
 // `permiso` es el código que la matriz de docs/MODELO_DATOS_Y_FLUJOS.md §2
 // exige para ver el módulo — la app lo revisa aquí (experiencia de usuario)
@@ -19,6 +20,7 @@ import { reportesRoutes } from '../modules/reportes/routes'
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { publica: true } },
   ...dashboardRoutes,
+  ...rdcRoutes,
   ...catalogoRoutes,
   ...frentesRoutes,
   ...almacenRoutes,
