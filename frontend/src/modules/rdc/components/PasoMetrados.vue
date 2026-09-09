@@ -119,8 +119,22 @@ const esManual = computed(() => !filaPrefijo.value || filaPrefijo.value.sostenim
 // hay varias, se elige de un select aparte, ver plantilla).
 const prefijoMostrado = computed(() => (esManual.value ? 'Manual' : opcionesPrefijo.value.length === 1 ? opcionesPrefijo.value[0] : ''))
 
-watch(opcionesPrefijo, (opciones) => {
-  if (opciones.length === 1) nuevo.value.prefijo = opciones[0]
+/** El prefijo que realmente se usa al agregar un elemento.
+ *
+ * No se puede confiar en que `nuevo.prefijo` ya esté cargado: cuando hay
+ * una sola opción no hay ningún <select> ni <input> en pantalla que la
+ * escriba ahí (ver plantilla) — solo se muestra en negrita, sin tocar el
+ * campo. Antes eso se resolvía con un `watch` que copiaba la opción a
+ * `nuevo.prefijo` en cuanto `opcionesPrefijo` "cambiaba", pero un `watch`
+ * nunca corre en su primer render: si la pestaña abre ya con una sola
+ * opción resuelta (el caso más común), el valor jamás llegaba a copiarse y
+ * el elemento se guardaba sin prefijo ni número. Este computed no depende
+ * de que algo cambie — siempre calcula el valor correcto, incluida la
+ * apertura inicial. */
+const prefijoActivo = computed(() => {
+  if (esManual.value) return nuevo.value.prefijo || ''
+  if (opcionesPrefijo.value.length > 1) return nuevo.value.prefijo || opcionesPrefijo.value[0]
+  return opcionesPrefijo.value[0] || ''
 })
 
 const areaMallaPreview = computed(() => {
@@ -142,7 +156,7 @@ function codigoSecuencial(clave, prefijo, letra, numero) {
 function agregarElementos() {
   const d = definicion.value
   const n = nuevo.value
-  const prefijo = n.prefijo || ''
+  const prefijo = prefijoActivo.value
   const base = {
     elemento: d.elemento,
     actividad: d.actividad,
