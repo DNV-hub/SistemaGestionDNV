@@ -3,22 +3,28 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { ESTADO } from '../services/rdcDb'
+import { nombreDe } from '../services/rdcCalculos'
 import PasoDatos from '../components/PasoDatos.vue'
 import PasoJornada from '../components/PasoJornada.vue'
 import PasoMetrados from '../components/PasoMetrados.vue'
 import PasoObservaciones from '../components/PasoObservaciones.vue'
 import PasoResumen from '../components/PasoResumen.vue'
+import '../estilos/rdc-tema.css'
+import '../estilos/tabler-rdc.css'
+import '../estilos/complementos.css'
 
 const rdc = useRdcStore()
 const route = useRoute()
 const router = useRouter()
 
+// Las mismas cinco pestañas, en el mismo orden y con los mismos iconos que el
+// RDC que los supervisores ya usan.
 const PASOS = [
-  { clave: 'datos', titulo: 'Datos', componente: PasoDatos },
-  { clave: 'jornada', titulo: 'Jornada', componente: PasoJornada },
-  { clave: 'metrados', titulo: 'Metrados', componente: PasoMetrados },
-  { clave: 'obs', titulo: 'Observaciones', componente: PasoObservaciones },
-  { clave: 'resumen', titulo: 'Resumen', componente: PasoResumen },
+  { clave: 'datos', titulo: 'Datos', icono: 'ti-id-badge', componente: PasoDatos },
+  { clave: 'jornada', titulo: 'Jornada', icono: 'ti-checklist', componente: PasoJornada },
+  { clave: 'metrados', titulo: 'Metrados', icono: 'ti-ruler-measure', componente: PasoMetrados },
+  { clave: 'obs', titulo: 'Obs/Prog', icono: 'ti-note', componente: PasoObservaciones },
+  { clave: 'resumen', titulo: 'Resumen', icono: 'ti-send', componente: PasoResumen },
 ]
 
 const paso = ref(0)
@@ -35,167 +41,143 @@ onMounted(async () => {
   listo.value = true
 })
 
-const esUltimo = computed(() => paso.value === PASOS.length - 1)
 const componenteActual = computed(() => PASOS[paso.value].componente)
+const supervisor = computed(() => nombreDe(rdc.catalogos, 'supervisores', rdc.actual?.supervisorId) || '—')
 
 function ir(indice) {
   paso.value = indice
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-/** Sale del formulario. No hace falta confirmar ni guardar: cada cambio ya se
- * escribió en el dispositivo cuando ocurrió. */
-function salir() {
-  router.push({ name: 'rdc' })
+// El deslizamiento lateral entre pestañas es parte de cómo se usa hoy en el
+// frente: se pasa de paso con el pulgar, sin apuntar a un botón chico.
+let inicioX = 0
+let inicioY = 0
+const alTocar = (e) => {
+  inicioX = e.touches[0].clientX
+  inicioY = e.touches[0].clientY
+}
+function alSoltar(e) {
+  const dx = e.changedTouches[0].clientX - inicioX
+  const dy = e.changedTouches[0].clientY - inicioY
+  if (Math.abs(dx) < 55 || Math.abs(dy) > Math.abs(dx) * 0.75) return
+  if (dx < 0 && paso.value < PASOS.length - 1) ir(paso.value + 1)
+  else if (dx > 0 && paso.value > 0) ir(paso.value - 1)
 }
 </script>
 
 <template>
-  <div class="formulario">
-    <header class="cabecera">
-      <button class="secundario chico" @click="salir">← Volver</button>
-      <h1>{{ rdc.actual?.estado === ESTADO.BORRADOR ? 'Reporte del día' : 'Corrección' }}</h1>
-    </header>
-
-    <nav class="pasos">
-      <button
-        v-for="(p, i) in PASOS"
-        :key="p.clave"
-        class="paso"
-        :class="{ activo: i === paso, hecho: i < paso }"
-        @click="ir(i)"
-      >
-        <span class="numero">{{ i + 1 }}</span>
-        <span class="titulo">{{ p.titulo }}</span>
-      </button>
-    </nav>
-
-    <p v-if="!listo" class="cargando">Cargando…</p>
-
-    <template v-else-if="rdc.actual">
-      <component :is="componenteActual" />
-
-      <div class="navegacion">
-        <button v-if="paso > 0" class="secundario" @click="ir(paso - 1)">Anterior</button>
-        <span class="espacio" />
-        <button v-if="!esUltimo" @click="ir(paso + 1)">Siguiente</button>
+  <div class="rdc-app" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
+    <div class="app">
+      <div class="barra-superior">
+        <button class="volver" @click="router.push({ name: 'rdc' })"><i class="ti ti-arrow-left" /> Mis reportes</button>
+        <span v-if="rdc.actual?.esCorreccion" class="marca-correccion">Corrección</span>
       </div>
-    </template>
 
-    <p class="guardado">Todo lo que escribes se guarda en este dispositivo, con o sin señal.</p>
+      <div class="supervisor-banner">
+        <div class="sup-avatar"><i class="ti ti-user-shield sup-icon" /></div>
+        <div class="sup-datos">
+          <div class="sup-tipo-lbl">Reporte de Supervisor</div>
+          <div class="sup-nombre">{{ supervisor }}</div>
+        </div>
+      </div>
+
+      <p v-if="!listo" class="empty-msg">Cargando…</p>
+
+      <template v-else-if="rdc.actual">
+        <component :is="componenteActual" />
+      </template>
+
+      <nav class="bottom-nav">
+        <button
+          v-for="(p, i) in PASOS"
+          :key="p.clave"
+          class="bnav-item"
+          :class="{ active: i === paso }"
+          :id="p.clave === 'resumen' ? 'bnav-resumen' : null"
+          @click="ir(i)"
+        >
+          <i class="ti" :class="p.icono" /><span>{{ p.titulo }}</span>
+        </button>
+      </nav>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.formulario {
-  padding: 1.5rem 2rem 3rem;
-  max-width: 900px;
+/* La maqueta del RDC deja la barra inferior fija; hay que dejarle sitio para
+   que el último bloque del formulario no quede debajo de ella. */
+.app {
+  padding: 0 12px calc(80px + env(safe-area-inset-bottom, 0px));
 }
-.cabecera {
+.barra-superior {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  justify-content: space-between;
+  padding: 12px 0 4px;
 }
-h1 {
-  font-size: 1.25rem;
-  margin: 0;
-  color: var(--color-text);
-}
-.pasos {
-  display: flex;
-  gap: 0.35rem;
-  margin-bottom: 1.25rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-}
-.paso {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.paso.activo {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-primary-ink);
-}
-.paso.hecho {
-  color: var(--color-text);
-}
-.numero {
+.volver {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--color-surface-2);
-  font-size: 0.7rem;
-}
-.paso.activo .numero {
-  background: rgb(255 255 255 / 0.25);
-}
-.navegacion {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-}
-.espacio {
-  flex: 1;
-}
-button {
-  padding: 0.55rem 1rem;
+  gap: 6px;
+  background: none;
   border: none;
-  border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  padding: 4px 0;
 }
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
+.marca-correccion {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--amber);
+  padding: 3px 9px;
+  border-radius: 5px;
 }
-.chico {
-  padding: 0.35rem 0.7rem;
-  font-size: 0.8rem;
+.supervisor-banner {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.cargando,
-.guardado {
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
+.sup-avatar {
+  width: 40px;
+  height: 40px;
+  background: rgb(255 255 255 / 0.18);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.guardado {
-  margin-top: 2rem;
-  text-align: center;
+.sup-icon {
+  color: #fff;
+  font-size: 21px;
 }
-
-@media (max-width: 640px) {
-  .formulario {
-    padding: 1rem 1rem 3rem;
-  }
-  /* En el celular el título del paso ocupa demasiado: queda el número, que
-     alcanza para saber dónde estás, y el paso activo sí muestra su nombre. */
-  .paso .titulo {
-    display: none;
-  }
-  .paso.activo .titulo {
-    display: inline;
-  }
-  .navegacion button {
-    flex: 1;
-    padding: 0.8rem;
-  }
+.sup-datos {
+  flex: 1;
+  min-width: 0;
+}
+.sup-tipo-lbl {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.65);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.sup-nombre {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

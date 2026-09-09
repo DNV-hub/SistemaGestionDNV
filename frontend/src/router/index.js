@@ -38,15 +38,21 @@ export const router = createRouter({
   routes,
 })
 
+// Dónde cae cada quien al entrar, y a dónde se lo devuelve si intenta ir a un
+// módulo que no le toca. Un supervisor no tiene el Dashboard en su menú —su
+// trabajo es el reporte de campo— así que mandarlo ahí sería dejarlo en una
+// pantalla que no le sirve y que ni siquiera puede volver a encontrar.
+const rutaInicial = (auth) => (auth.nombreRol === 'Supervisor' ? { name: 'rdc' } : { name: 'dashboard' })
+
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
   // Sin esto, refrescar la página estando logueado y con la URL en /login
   // (típico si el refresh pasa justo antes del router.push('/') del login)
   // deja el panel montado sobre la ruta de login en vez de redirigir.
-  if (to.meta.publica) return auth.estaAutenticado ? { name: 'dashboard' } : true
+  if (to.meta.publica) return auth.estaAutenticado ? rutaInicial(auth) : true
   if (!auth.estaAutenticado) return { name: 'login' }
-  if (to.meta.permiso && !auth.tienePermiso(to.meta.permiso)) return { name: 'dashboard' }
-  if (to.meta.rolesExcluidos?.includes(auth.nombreRol)) return { name: 'dashboard' }
+  if (to.meta.permiso && !auth.tienePermiso(to.meta.permiso)) return rutaInicial(auth)
+  if (to.meta.rolesExcluidos?.includes(auth.nombreRol)) return rutaInicial(auth)
   return true
 })

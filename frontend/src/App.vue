@@ -65,27 +65,33 @@ if (auth.estaAutenticado) cargarContadores()
 // pantallas que las incrustan (Vales, Kardex, Almacén) — Almacén los
 // necesita para eso pero no gestiona esos módulos, así que se le oculta el
 // link acá (rolesExcluidos) en vez de quitarle el permiso de verdad.
-// El Reporte Diario de Campo va en el grupo principal y no en Planeamiento ni
-// en Almacén: no es back-office, es el trabajo diario del supervisor en el
-// frente, y para él es la primera pantalla de la aplicación.
+// Un supervisor ve solo lo suyo: el Reporte Diario de Campo y Vales (más
+// Fotografías y Sketch's cuando existan). No es una cuestión de permisos —
+// necesita catalogo.ver, frentes.ver y stock.ver para que Vales y el propio
+// RDC funcionen por dentro— sino de a qué módulos entra: su trabajo pasa en el
+// frente, y un menú con Almacén, Procura o Kardex es ruido que además invita a
+// tocar donde no corresponde. Se resuelve con rolesExcluidos, igual que ya se
+// hacía con Almacén en Catálogo y Frentes.
+const SOLO_CAMPO = ['Supervisor']
+
 const navPrincipal = [
-  { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver' },
+  { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios' },
-  { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar' },
+  { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
 ]
 
 const navPlaneamiento = computed(() => [
-  { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen'] },
-  { to: '/frentes', label: 'Frentes', icono: 'frentes', permiso: 'frentes.ver', rolesExcluidos: ['Almacen'] },
-  { to: '/procura', label: 'Procura', icono: 'procura', permiso: 'procura.ver' },
+  { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { to: '/frentes', label: 'Frentes', icono: 'frentes', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { to: '/procura', label: 'Procura', icono: 'procura', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
 ])
 
 const navAlmacen = computed(() => [
-  { to: '/almacen', label: 'Almacén', icono: 'almacen', permiso: 'stock.ver' },
+  { to: '/almacen', label: 'Almacén', icono: 'almacen', permiso: 'stock.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/vales', label: 'Vales', icono: 'vales', permiso: 'vales.ver_propios', badge: badgeVales.value },
-  { to: '/reservas', label: 'Reservas', icono: 'reservas', permiso: 'reservas.ver' },
-  { to: '/kardex', label: 'Kardex', icono: 'kardex', permiso: 'kardex.ver' },
-  { to: '/alertas', label: 'Alertas', icono: 'alertas', permiso: 'alertas.ver', badge: badgeAlertas.value },
+  { to: '/reservas', label: 'Reservas', icono: 'reservas', permiso: 'reservas.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/kardex', label: 'Kardex', icono: 'kardex', permiso: 'kardex.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/alertas', label: 'Alertas', icono: 'alertas', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
 ])
 
 const navSistema = [{ to: '/usuarios', label: 'Usuarios', icono: 'usuarios', permiso: 'usuarios.ver' }]
@@ -197,7 +203,7 @@ const inicialesUsuario = computed(() => {
       <router-view />
     </main>
 
-    <nav class="tabbar">
+    <nav v-if="!$route.meta.ocultarTabbar" class="tabbar">
       <router-link v-for="item in tabsMoviles" :key="item.to" :to="item.to" class="tab">
         <IconoNav :nombre="item.icono" />
         <span>{{ item.label }}</span>

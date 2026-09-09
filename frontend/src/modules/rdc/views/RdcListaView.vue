@@ -5,6 +5,9 @@ import { useRdcStore } from '../store/rdc'
 import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import { nombreDe } from '../services/rdcCalculos'
+import '../estilos/rdc-tema.css'
+import '../estilos/tabler-rdc.css'
+import '../estilos/complementos.css'
 
 const rdc = useRdcStore()
 const auth = useAuthStore()
@@ -17,14 +20,14 @@ onMounted(async () => {
 
 const enLinea = computed(() => navigator.onLine)
 
-/** Un reporte tiene un solo estado visible, que resume las dos colas: lo que
- * el supervisor necesita saber es si su trabajo está a salvo, no el detalle de
- * qué destino respondió qué. El detalle está en el tooltip. */
+/** Un reporte muestra un solo estado: lo que el supervisor necesita saber es
+ * si su trabajo está a salvo, no qué destino respondió qué. El desglose de los
+ * dos envíos queda en el título emergente. */
 function estadoDe(r) {
   if (r.estado === ESTADO.BORRADOR) return { clave: 'borrador', texto: 'Borrador' }
   if (r.estadoSupabase === ENVIO.ENVIADO && r.estadoSharepoint === ENVIO.ENVIADO) return { clave: 'enviado', texto: 'Enviado' }
   if (r.estadoSupabase === ENVIO.ERROR || r.estadoSharepoint === ENVIO.ERROR) return { clave: 'error', texto: 'Con problemas' }
-  return { clave: 'pendiente', texto: 'Pendiente de envío' }
+  return { clave: 'pendiente', texto: 'Pendiente' }
 }
 
 function detalleEnvio(r) {
@@ -35,7 +38,6 @@ function detalleEnvio(r) {
 }
 
 const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
-
 const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
 
 async function nuevo() {
@@ -55,202 +57,135 @@ async function borrar(r) {
 </script>
 
 <template>
-  <div class="rdc">
-    <header class="cabecera">
-      <h1>Reporte Diario de Campo</h1>
-      <button v-if="auth.tienePermiso('rdc.crear')" @click="nuevo">Nuevo reporte</button>
-    </header>
+  <div class="rdc-app">
+    <div class="app">
+      <header class="app-header">
+        <div class="app-logo"><i class="ti ti-clipboard-list" /><h1>Reporte Diario de Campo</h1></div>
+        <p>Sostenimiento y mantenimiento de talud</p>
+      </header>
 
-    <p v-if="rdc.sinCatalogos" class="aviso aviso-error">
-      Todavía no se descargaron los catálogos. Conéctate una vez a internet para poder llenar reportes sin señal después.
-    </p>
+      <div v-if="rdc.sinCatalogos" class="alert alert-red">
+        <i class="ti ti-alert-triangle" />
+        <span>Todavía no se descargaron los catálogos. Conéctate una vez a internet para poder llenar reportes sin señal después.</span>
+      </div>
 
-    <div v-if="rdc.hayPendientes" class="aviso aviso-pendiente">
-      <span>
-        Hay reportes esperando salir.
-        {{ enLinea ? 'Se están enviando.' : 'Se enviarán solos en cuanto haya señal — puedes cerrar la aplicación.' }}
-      </span>
-      <button v-if="enLinea" class="secundario" :disabled="rdc.sincronizando" @click="rdc.sincronizarAhora()">
-        {{ rdc.sincronizando ? 'Enviando…' : 'Enviar ahora' }}
+      <div v-if="rdc.hayPendientes" class="alert alert-amber">
+        <i class="ti ti-cloud-off" />
+        <span style="flex: 1">
+          Hay reportes esperando salir.
+          {{ enLinea ? 'Se están enviando.' : 'Se enviarán solos en cuanto haya señal — puedes cerrar la aplicación.' }}
+          <br v-if="enLinea" />
+          <button v-if="enLinea" class="secondary-btn" style="margin-top: 6px; padding: 6px 10px; font-size: 12px" :disabled="rdc.sincronizando" @click="rdc.sincronizarAhora()">
+            <i class="ti ti-refresh" /> {{ rdc.sincronizando ? 'Enviando…' : 'Reintentar ahora' }}
+          </button>
+        </span>
+      </div>
+
+      <button v-if="auth.tienePermiso('rdc.crear')" class="nav-btn primary" style="margin-bottom: 12px" @click="nuevo">
+        <i class="ti ti-circle-plus" /> Nuevo reporte
       </button>
-    </div>
 
-    <p v-if="rdc.cargando">Cargando…</p>
+      <p v-if="rdc.cargando" class="empty-msg">Cargando…</p>
 
-    <template v-else>
-      <ul class="lista">
-        <li v-for="r in rdc.reportes" :key="r.id" class="tarjeta" @click="abrir(r)">
-          <div class="fila-principal">
-            <div>
-              <p class="frente">{{ nombre('frentes', r.frenteId) }}</p>
-              <p class="meta">{{ fmtFecha(r.fecha) }} · {{ nombre('supervisores', r.supervisorId) }}</p>
+      <template v-else>
+        <div v-for="r in rdc.reportes" :key="r.id" class="card reporte" @click="abrir(r)">
+          <div class="reporte-fila">
+            <div class="reporte-datos">
+              <div class="reporte-frente">{{ nombre('frentes', r.frenteId) }}</div>
+              <div class="reporte-meta">{{ fmtFecha(r.fecha) }} · {{ nombre('supervisores', r.supervisorId) }}</div>
             </div>
-            <span class="badge" :class="estadoDe(r).clave" :title="detalleEnvio(r)">{{ estadoDe(r).texto }}</span>
+            <span class="estado-pill" :class="estadoDe(r).clave" :title="detalleEnvio(r)">{{ estadoDe(r).texto }}</span>
           </div>
-          <div class="acciones" @click.stop>
-            <button v-if="r.estado === ESTADO.BORRADOR" class="secundario chico" @click="abrir(r)">Continuar</button>
-            <button v-else class="secundario chico" @click="abrir(r)">Ver</button>
-            <button v-if="r.estado === ESTADO.BORRADOR" class="secundario chico peligro" @click="borrar(r)">Borrar</button>
+          <div class="reporte-acciones" @click.stop>
+            <button class="secondary-btn" @click="abrir(r)">
+              <i class="ti" :class="r.estado === ESTADO.BORRADOR ? 'ti-pencil' : 'ti-file-description'" />
+              {{ r.estado === ESTADO.BORRADOR ? 'Continuar' : 'Ver' }}
+            </button>
+            <button v-if="r.estado === ESTADO.BORRADOR" class="del-btn" aria-label="Borrar borrador" @click="borrar(r)">
+              <i class="ti ti-x" />
+            </button>
           </div>
-        </li>
+        </div>
 
-        <li v-for="r in rdc.historicoRemoto" :key="r.id" class="tarjeta" @click="abrir(r)">
-          <div class="fila-principal">
-            <div>
-              <p class="frente">{{ r.rdc_frentes?.nombre ?? '—' }}</p>
-              <p class="meta">{{ fmtFecha(r.fecha) }} · {{ r.rdc_supervisores?.nombre ?? '—' }}</p>
+        <div v-for="r in rdc.historicoRemoto" :key="r.id" class="card reporte" @click="abrir(r)">
+          <div class="reporte-fila">
+            <div class="reporte-datos">
+              <div class="reporte-frente">{{ r.rdc_frentes?.nombre ?? '—' }}</div>
+              <div class="reporte-meta">{{ fmtFecha(r.fecha) }} · {{ r.rdc_supervisores?.nombre ?? '—' }}</div>
             </div>
-            <span class="badge" :class="r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente'">
-              {{ r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente de envío' }}
+            <span class="estado-pill" :class="r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente'">
+              {{ r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente' }}
             </span>
           </div>
-        </li>
-      </ul>
+        </div>
 
-      <p v-if="!rdc.reportes.length && !rdc.historicoRemoto.length" class="vacio">
-        Todavía no hay reportes. Toca «Nuevo reporte» para empezar.
-      </p>
-    </template>
+        <p v-if="!rdc.reportes.length && !rdc.historicoRemoto.length" class="empty-msg">
+          Todavía no hay reportes. Toca «Nuevo reporte» para empezar.
+        </p>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.rdc {
-  padding: 1.5rem 2rem;
+.app {
+  padding: 0 12px 24px;
 }
-.cabecera {
-  margin-bottom: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-h1 {
-  font-size: 1.25rem;
-  margin: 0;
-  color: var(--color-text);
-}
-button {
-  padding: 0.55rem 1rem;
-  border: none;
-  border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
-  font-weight: 600;
+.reporte {
   cursor: pointer;
 }
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-.chico {
-  padding: 0.35rem 0.7rem;
-  font-size: 0.8rem;
-}
-.peligro {
-  color: var(--color-danger);
-}
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.aviso {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-card);
-  font-size: 0.85rem;
-  margin-bottom: 1rem;
-}
-.aviso-pendiente {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-.aviso-error {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-.lista {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.6rem;
-}
-.tarjeta {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  padding: 0.8rem 0.9rem;
-  cursor: pointer;
-}
-.fila-principal {
+.reporte-fila {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 10px;
 }
-.frente {
-  margin: 0;
-  font-weight: 600;
-  color: var(--color-text);
+.reporte-datos {
+  min-width: 0;
 }
-.meta {
-  margin: 0.15rem 0 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
+.reporte-frente {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
 }
-.acciones {
-  display: flex;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
+.reporte-meta {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 2px;
 }
-.badge {
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-pill);
-  font-size: 0.75rem;
-  font-weight: 600;
+.estado-pill {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 4px 9px;
+  border-radius: 20px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
-.badge.borrador {
-  background: var(--color-neutral-soft);
-  color: var(--color-text-muted);
+.estado-pill.borrador {
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
 }
-.badge.pendiente {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
+.estado-pill.pendiente {
+  background: var(--amber-bg);
+  color: var(--amber-text);
 }
-.badge.enviado {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+.estado-pill.enviado {
+  background: var(--green-bg);
+  color: var(--green-text);
 }
-.badge.error {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
+.estado-pill.error {
+  background: var(--red-bg);
+  color: var(--red-text);
 }
-.vacio {
-  text-align: center;
-  color: var(--color-text-muted);
-  padding: 2rem 0;
+.reporte-acciones {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
 }
-
-/* El RDC es el módulo que más se usa en celular: en pantalla chica la
-   cabecera se apila y el botón principal ocupa todo el ancho, que es más
-   fácil de tocar con guantes. */
-@media (max-width: 640px) {
-  .rdc {
-    padding: 1rem;
-  }
-  .cabecera {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .cabecera button {
-    width: 100%;
-    padding: 0.8rem;
-  }
+.reporte-acciones .secondary-btn {
+  padding: 7px 13px;
+  font-size: 13px;
 }
 </style>

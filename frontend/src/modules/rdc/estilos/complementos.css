@@ -1,0 +1,271 @@
+/* Piezas que el módulo necesita y que el CSS original del RDC no traía como
+   clase reutilizable (allá vivían como estilos en línea dentro del HTML).
+   Escritas con las variables del tema portado, para que no se noten distintas
+   del resto de la pantalla. */
+
+/* Un campo que ocupa las dos columnas de .grid2 */
+.rdc-app .field.ancho {
+  grid-column: 1 / -1;
+}
+
+/* Fila de "etiqueta a la izquierda, control a la derecha": hitos, refrigerio */
+.rdc-app .contador {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rdc-app .contador:last-child {
+  border-bottom: none;
+}
+.rdc-app .contador .nombre {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.rdc-app .hora {
+  border-radius: var(--r-md);
+  border: 1.5px solid var(--border-md);
+  padding: 8px 10px;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  min-width: 112px;
+}
+.rdc-app .hora:focus {
+  border-color: var(--blue);
+  outline: none;
+}
+
+/* Listas de cosas agregadas (actividades, paradas, elementos, partidas libres) */
+.rdc-app .lista-filas {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.rdc-app .lista-filas li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--surface2);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Partidas de los bloques 1 y 3 */
+.rdc-app .partida {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.rdc-app .partida:last-child {
+  border-bottom: none;
+}
+.rdc-app .partida-nombre {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.rdc-app .unidad {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text2);
+  background: var(--surface2);
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rdc-app .partida-campos {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.rdc-app .partida-campos input,
+.rdc-app .partida-campos select {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+.rdc-app .partida-campos input:focus,
+.rdc-app .partida-campos select:focus {
+  border-color: var(--blue);
+  outline: none;
+}
+
+/* Pestañas del bloque 2 (perforación, inyección, malla, cable, pull test) */
+.rdc-app .pestanas {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.rdc-app .pestana {
+  padding: 7px 13px;
+  border: 1.5px solid var(--border-md);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rdc-app .pestana.activa {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Fila de programación del día siguiente */
+.rdc-app .fila-prog {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.rdc-app .fila-prog input,
+.rdc-app .fila-prog select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1.5px solid var(--border-md);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* Resumen del día */
+.rdc-app .metricas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.rdc-app .metrica {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 10px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.rdc-app .metrica .valor {
+  display: block;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.rdc-app .metrica .etiqueta {
+  display: block;
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+  font-weight: 500;
+}
+.rdc-app .wsp {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0 0 10px;
+  font-family: inherit;
+  color: var(--text);
+}
+
+/* Avisos con el mismo lenguaje que los .alert del RDC */
+.rdc-app .aviso,
+.rdc-app .estado {
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0 0 12px;
+}
+.rdc-app .aviso,
+.rdc-app .estado.pendiente {
+  background: var(--amber-bg);
+  color: var(--amber-text);
+  border: 1px solid #fcd34d;
+}
+.rdc-app .aviso-error,
+.rdc-app .estado.error {
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--red-bg);
+  color: var(--red-text);
+  border: 1px solid #fca5a5;
+  margin: 0;
+}
+.rdc-app .estado.enviado {
+  background: var(--green-bg);
+  color: var(--green-text);
+  border: 1px solid #86efac;
+}
+.rdc-app .total-paradas {
+  margin: 12px 0 0;
+  font-weight: 700;
+  color: var(--red-text);
+  font-size: 13px;
+}
+.rdc-app .resumen-criticas {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.rdc-app .resumen-criticas p {
+  margin: 3px 0;
+  color: var(--text2);
+}
+
+/* Botonera de cierre del reporte */
+.rdc-app .botones {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.rdc-app .botones button {
+  flex: 1;
+  justify-content: center;
+}
+
+@media (max-width: 500px) {
+  .rdc-app .fila-prog {
+    grid-template-columns: 1fr auto;
+  }
+  .rdc-app .botones {
+    flex-direction: column;
+  }
+}

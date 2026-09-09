@@ -82,49 +82,49 @@ function volverALista() {
 
 <template>
   <div v-if="reporte">
-    <section class="tarjeta">
-      <h2>Resumen del día</h2>
+    <div class="card">
+      <div class="card-title">Resumen del día</div>
       <div class="metricas">
         <div v-for="m in metricas" :key="m.etiqueta" class="metrica">
           <span class="valor">{{ m.valor }}</span>
           <span class="etiqueta">{{ m.etiqueta }}</span>
         </div>
       </div>
-      <p class="ayuda">
+      <p class="note">
         {{ nombreDe(rdc.catalogos, 'frentes', reporte.frenteId) || 'Sin frente' }} ·
         {{ nombreDe(rdc.catalogos, 'supervisores', reporte.supervisorId) || 'Sin supervisor' }}
       </p>
-    </section>
+    </div>
 
-    <section class="tarjeta">
-      <h2>Metrados ejecutados</h2>
+    <div class="card">
+      <div class="card-title">Metrados ejecutados</div>
       <ul v-if="ejecutadas.length" class="lista-filas">
         <li v-for="(p, i) in ejecutadas" :key="i">
           <span>{{ p.nombre }}<em v-if="p.manual"> (nueva)</em></span>
           <strong>{{ p.met }} {{ p.um }}</strong>
         </li>
       </ul>
-      <p v-else class="vacio">Todavía no registraste metrados.</p>
-    </section>
+      <p v-else class="empty-msg">Todavía no registraste metrados.</p>
+    </div>
 
-    <section class="tarjeta">
-      <h2>Reporte para WhatsApp</h2>
+    <div class="card">
+      <div class="card-title">Reporte para WhatsApp</div>
       <pre class="wsp">{{ texto }}</pre>
-      <button type="button" class="boton-secundario" @click="copiar">{{ copiado ? 'Copiado ✓' : 'Copiar texto' }}</button>
-    </section>
+      <button type="button" class="secondary-btn" @click="copiar">{{ copiado ? 'Copiado ✓' : 'Copiar texto' }}</button>
+    </div>
 
-    <section class="tarjeta cierre">
-      <h2>Cerrar el reporte</h2>
+    <div class="card cierre">
+      <div class="card-title">Cerrar el reporte</div>
 
       <p v-if="faltantes.length" class="aviso-error">Antes de cerrar falta completar: {{ faltantes.join(', ') }}.</p>
 
       <template v-else-if="!cerrado">
-        <p class="ayuda">
+        <p class="note">
           Al cerrarlo se guarda y se manda solo en cuanto haya señal. No necesitas esperar con la aplicación abierta.
         </p>
         <div class="botones">
-          <button type="button" class="boton-secundario" @click="descargar">Descargar mi copia</button>
-          <button type="button" class="boton-principal" :disabled="enviando" @click="terminar">
+          <button type="button" class="secondary-btn" @click="descargar">Descargar mi copia</button>
+          <button type="button" class="btn-primary" :disabled="enviando" @click="terminar">
             {{ enviando ? 'Cerrando…' : 'Terminar y enviar' }}
           </button>
         </div>
@@ -139,94 +139,11 @@ function volverALista() {
           <template v-else>Guardado y en cola. Se enviará en cuanto haya señal.</template>
         </p>
         <div class="botones">
-          <button type="button" class="boton-secundario" @click="descargar">Descargar mi copia</button>
-          <button type="button" class="boton-principal" @click="volverALista">Volver a la lista</button>
+          <button type="button" class="secondary-btn" @click="descargar">Descargar mi copia</button>
+          <button type="button" class="btn-primary" @click="volverALista">Volver a la lista</button>
         </div>
       </template>
-    </section>
+    </div>
   </div>
 </template>
 
-<style scoped>
-@import './formulario.css';
-
-.metricas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 0.6rem;
-}
-.metrica {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.7rem;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-control);
-}
-.metrica .valor {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.metrica .etiqueta {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-}
-.wsp {
-  background: var(--color-surface-2);
-  border-radius: var(--radius-control);
-  padding: 0.75rem;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow-y: auto;
-  margin: 0 0 0.6rem;
-  font-family: inherit;
-  color: var(--color-text);
-}
-.cierre .botones {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-.aviso-error {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-control);
-  font-size: 0.85rem;
-  margin: 0;
-}
-.estado {
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-control);
-  font-size: 0.85rem;
-  margin: 0;
-}
-.estado.enviado {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-.estado.pendiente {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-.estado.error {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-@media (max-width: 640px) {
-  .cierre .botones {
-    flex-direction: column;
-  }
-  .cierre .botones button {
-    width: 100%;
-    padding: 0.85rem;
-  }
-}
-</style>

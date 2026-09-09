@@ -1,0 +1,62 @@
+/* Iconos Tabler usados por el modulo RDC. Recortado del paquete original:
+ * se conservan solo las 56 reglas que el modulo usa, en vez de las
+ * 5175 que trae el paquete completo (206 KB). La fuente es la misma, asi que
+ * los iconos son identicos a los del RDC que los supervisores ya conocen. */
+@font-face{font-family:"tabler-icons";font-style:normal;font-weight:400;font-display:swap;src:url(./fuentes/tabler-icons.woff2) format("woff2")}
+.ti{font-family:"tabler-icons"!important;speak:none;font-style:normal;font-weight:400;font-variant:normal;text-transform:none;line-height:1;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;display:inline-block}
+.ti-alert-octagon:before{content:"\ecc6"}
+.ti-alert-triangle:before{content:"\ea06"}
+.ti-arrow-left:before{content:"\ea19"}
+.ti-bolt:before{content:"\ea38"}
+.ti-brand-whatsapp:before{content:"\ec74"}
+.ti-building:before{content:"\ea4f"}
+.ti-calendar-plus:before{content:"\ebba"}
+.ti-camera:before{content:"\ea54"}
+.ti-check:before{content:"\ea5e"}
+.ti-checklist:before{content:"\f074"}
+.ti-chevron-down:before{content:"\ea5f"}
+.ti-chevron-right:before{content:"\ea61"}
+.ti-chevron-up:before{content:"\ea62"}
+.ti-circle-check:before{content:"\ea67"}
+.ti-circle-plus:before{content:"\ea69"}
+.ti-clipboard-list:before{content:"\ea6d"}
+.ti-clock:before{content:"\ea70"}
+.ti-clock-down:before{content:"\f7c3"}
+.ti-clock-pause:before{content:"\f548"}
+.ti-clock-x:before{content:"\f7cb"}
+.ti-cloud-off:before{content:"\ed3e"}
+.ti-copy:before{content:"\ea7a"}
+.ti-download:before{content:"\ea96"}
+.ti-file-certificate:before{content:"\ed4d"}
+.ti-file-description:before{content:"\f028"}
+.ti-file-spreadsheet:before{content:"\f03e"}
+.ti-flag-3:before{content:"\ee8d"}
+.ti-history:before{content:"\ebea"}
+.ti-id-badge:before{content:"\eff7"}
+.ti-info-circle:before{content:"\eac5"}
+.ti-layers-intersect:before{content:"\eac9"}
+.ti-list-check:before{content:"\eb6a"}
+.ti-loader-2:before{content:"\f226"}
+.ti-message-circle:before{content:"\eaed"}
+.ti-note:before{content:"\eb6d"}
+.ti-notebook:before{content:"\eb96"}
+.ti-notes:before{content:"\eb6e"}
+.ti-pencil:before{content:"\eb04"}
+.ti-pencil-exclamation:before{content:"\fc05"}
+.ti-photo:before{content:"\eb0a"}
+.ti-plus:before{content:"\eb0b"}
+.ti-refresh:before{content:"\eb13"}
+.ti-ruler:before{content:"\eb1a"}
+.ti-ruler-measure:before{content:"\f291"}
+.ti-send:before{content:"\eb1e"}
+.ti-settings:before{content:"\eb20"}
+.ti-share:before{content:"\eb21"}
+.ti-shield-exclamation:before{content:"\f9c6"}
+.ti-tool:before{content:"\eb40"}
+.ti-tools:before{content:"\ebca"}
+.ti-truck:before{content:"\ebc4"}
+.ti-truck-delivery:before{content:"\ec4b"}
+.ti-user-shield:before{content:"\f7d0"}
+.ti-users:before{content:"\ebf2"}
+.ti-wifi-off:before{content:"\ecfa"}
+.ti-x:before{content:"\eb55"}

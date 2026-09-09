@@ -183,8 +183,8 @@ function quitarLibre(id) {
   <div v-if="reporte">
     <p v-if="!reporte.frenteId" class="aviso">Elige primero un frente en el paso «Datos»: de él dependen los códigos de los elementos.</p>
 
-    <section class="tarjeta">
-      <h2>1. Actividades preliminares</h2>
+    <div class="card">
+      <div class="card-title">1. Actividades preliminares</div>
       <div v-for="p in partidasDe('1')" :key="p.codigo" class="partida">
         <div class="partida-nombre">
           <span>{{ p.nombre }}</span>
@@ -210,10 +210,10 @@ function quitarLibre(id) {
           </select>
         </div>
       </div>
-    </section>
+    </div>
 
-    <section class="tarjeta">
-      <h2>2. Actividades críticas</h2>
+    <div class="card">
+      <div class="card-title">2. Actividades críticas</div>
 
       <div class="pestanas">
         <button
@@ -228,15 +228,15 @@ function quitarLibre(id) {
         </button>
       </div>
 
-      <div class="rejilla">
-        <div class="campo">
+      <div class="grid2">
+        <div class="field">
           <label>Zona</label>
           <select v-model="nuevo.zona">
             <option value="">— Seleccionar —</option>
             <option v-for="z in zonas" :key="z" :value="z">{{ z }}</option>
           </select>
         </div>
-        <div class="campo">
+        <div class="field">
           <label>Sostenimiento</label>
           <select v-model="nuevo.sostenimiento">
             <option value="">— Seleccionar —</option>
@@ -244,58 +244,58 @@ function quitarLibre(id) {
           </select>
         </div>
 
-        <div v-if="opcionesPrefijo.length > 1" class="campo">
+        <div v-if="opcionesPrefijo.length > 1" class="field">
           <label>Prefijo</label>
           <select v-model="nuevo.prefijo">
             <option v-for="p in opcionesPrefijo" :key="p" :value="p">{{ p }}</option>
           </select>
         </div>
-        <div v-else-if="esManual" class="campo">
+        <div v-else-if="esManual" class="field">
           <label>Código a mano</label>
           <input v-model="nuevo.prefijo" type="text" placeholder="Sin prefijo configurado" />
         </div>
 
         <template v-if="definicion.clave === 'malla'">
-          <div class="campo">
+          <div class="field">
             <label>Tipo de malla</label>
             <select v-model="nuevo.tipo">
               <option value="">— Seleccionar —</option>
               <option v-for="t in TIPOS_MALLA" :key="t" :value="t">{{ t }}</option>
             </select>
           </div>
-          <div class="campo"><label>Ancho (m)</label><input v-model="nuevo.ancho" type="number" step="0.01" inputmode="decimal" /></div>
-          <div class="campo"><label>Largo (m)</label><input v-model="nuevo.largo" type="number" step="0.01" inputmode="decimal" /></div>
+          <div class="field"><label>Ancho (m)</label><input v-model="nuevo.ancho" type="number" step="0.01" inputmode="decimal" /></div>
+          <div class="field"><label>Largo (m)</label><input v-model="nuevo.largo" type="number" step="0.01" inputmode="decimal" /></div>
         </template>
 
         <template v-else>
-          <div class="campo"><label>N° inicio</label><input v-model="nuevo.n1" type="number" min="1" inputmode="numeric" /></div>
-          <div class="campo"><label>N° fin (opcional)</label><input v-model="nuevo.n2" type="number" min="1" inputmode="numeric" /></div>
-          <div v-if="definicion.clave !== 'pull'" class="campo">
+          <div class="field"><label>N° inicio</label><input v-model="nuevo.n1" type="number" min="1" inputmode="numeric" /></div>
+          <div class="field"><label>N° fin (opcional)</label><input v-model="nuevo.n2" type="number" min="1" inputmode="numeric" /></div>
+          <div v-if="definicion.clave !== 'pull'" class="field">
             <label>Longitud ({{ definicion.unidad }})</label>
             <input v-model="nuevo.cantidad" type="number" step="0.01" inputmode="decimal" />
           </div>
-          <div v-if="definicion.clave === 'perf'" class="campo">
+          <div v-if="definicion.clave === 'perf'" class="field">
             <label>Tipo de perno</label>
             <select v-model="nuevo.tipo">
               <option value="">— Seleccionar —</option>
               <option v-for="t in TIPOS_PERNO" :key="t" :value="t">{{ t }}</option>
             </select>
           </div>
-          <div v-if="definicion.clave === 'perf'" class="campo">
+          <div v-if="definicion.clave === 'perf'" class="field">
             <label>Diámetro</label>
             <select v-model="nuevo.diametro">
               <option value="">— Seleccionar —</option>
               <option v-for="d in DIAMETROS_PERNO" :key="d" :value="d">{{ d }}</option>
             </select>
           </div>
-          <div v-if="definicion.clave === 'cable'" class="campo">
+          <div v-if="definicion.clave === 'cable'" class="field">
             <label>Tipo de cable</label>
             <select v-model="nuevo.tipo">
               <option value="">— Seleccionar —</option>
               <option v-for="t in TIPOS_CABLE" :key="t" :value="t">{{ t }}</option>
             </select>
           </div>
-          <div v-if="definicion.clave === 'perf' || definicion.clave === 'iny'" class="campo">
+          <div v-if="definicion.clave === 'perf' || definicion.clave === 'iny'" class="field">
             <label>Ubicación</label>
             <select v-model="nuevo.ubicacion">
               <option value="">— Seleccionar —</option>
@@ -304,14 +304,14 @@ function quitarLibre(id) {
           </div>
         </template>
 
-        <div class="campo">
+        <div class="field">
           <label>Hora inicio</label>
           <select v-model="nuevo.horaInicio">
             <option value="">—</option>
             <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
           </select>
         </div>
-        <div class="campo">
+        <div class="field">
           <label>Hora fin</label>
           <select v-model="nuevo.horaFin">
             <option value="">—</option>
@@ -320,15 +320,15 @@ function quitarLibre(id) {
         </div>
       </div>
 
-      <button type="button" class="boton-secundario" style="margin-top: 0.6rem" @click="agregarElementos">
+      <button type="button" class="secondary-btn" style="margin-top: 0.6rem" @click="agregarElementos">
         Agregar {{ definicion.etiqueta.toLowerCase() }}
       </button>
-      <p class="ayuda">Si pones N° inicio y N° fin se crea uno por cada número del rango (máximo {{ MAXIMO_RANGO }}).</p>
+      <p class="note">Si pones N° inicio y N° fin se crea uno por cada número del rango (máximo {{ MAXIMO_RANGO }}).</p>
 
       <ul v-if="elementosDelTipo.length" class="lista-filas">
         <li v-for="e in elementosDelTipo" :key="e.id">
           <span><code>{{ e.codigo || '—' }}</code> — {{ e.cantidad }} {{ e.unidad }}{{ e.ubicacion ? ` · ${e.ubicacion}` : '' }}</span>
-          <button type="button" class="quitar" aria-label="Quitar" @click="quitarElemento(e.id)">×</button>
+          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarElemento(e.id)">×</button>
         </li>
       </ul>
 
@@ -337,10 +337,10 @@ function quitarLibre(id) {
           <strong>{{ g.partida }}:</strong> {{ g.cantidad }} {{ g.unidad }} ({{ g.unidades }} un.)
         </p>
       </div>
-    </section>
+    </div>
 
-    <section class="tarjeta">
-      <h2>3. Actividades complementarias</h2>
+    <div class="card">
+      <div class="card-title">3. Actividades complementarias</div>
       <div v-for="p in partidasDe('3')" :key="p.codigo" class="partida">
         <div class="partida-nombre">
           <span>{{ p.nombre }}</span>
@@ -366,118 +366,31 @@ function quitarLibre(id) {
           </select>
         </div>
       </div>
-    </section>
+    </div>
 
-    <section class="tarjeta">
-      <h2>Partidas libres</h2>
-      <p class="ayuda">Para lo que se ejecutó y no está en los bloques.</p>
-      <div class="rejilla">
-        <div class="campo ancho"><label>Nombre</label><input v-model="nuevaLibre.nombre" type="text" /></div>
-        <div class="campo">
+    <div class="card">
+      <div class="card-title">Partidas libres</div>
+      <p class="note">Para lo que se ejecutó y no está en los bloques.</p>
+      <div class="grid2">
+        <div class="field ancho"><label>Nombre</label><input v-model="nuevaLibre.nombre" type="text" /></div>
+        <div class="field">
           <label>Unidad</label>
           <select v-model="nuevaLibre.unidad">
             <option value="">—</option>
             <option v-for="u in UNIDADES" :key="u" :value="u">{{ u }}</option>
           </select>
         </div>
-        <div class="campo"><label>Metrado</label><input v-model="nuevaLibre.cantidad" type="number" step="0.01" inputmode="decimal" /></div>
+        <div class="field"><label>Metrado</label><input v-model="nuevaLibre.cantidad" type="number" step="0.01" inputmode="decimal" /></div>
       </div>
-      <button type="button" class="boton-secundario" style="margin-top: 0.5rem" @click="agregarLibre">Agregar partida</button>
+      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregarLibre">Agregar partida</button>
 
       <ul v-if="libres.length" class="lista-filas">
         <li v-for="m in libres" :key="m.id">
           <span>{{ m.partidaNombre }} — {{ m.cantidad }} {{ m.unidad }}</span>
-          <button type="button" class="quitar" aria-label="Quitar" @click="quitarLibre(m.id)">×</button>
+          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarLibre(m.id)">×</button>
         </li>
       </ul>
-    </section>
+    </div>
   </div>
 </template>
 
-<style scoped>
-@import './formulario.css';
-
-.aviso {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-  padding: 0.7rem 0.9rem;
-  border-radius: var(--radius-card);
-  font-size: 0.85rem;
-  margin: 0 0 0.85rem;
-}
-.partida {
-  padding: 0.6rem 0;
-  border-bottom: 1px solid var(--color-border);
-}
-.partida:last-child {
-  border-bottom: none;
-}
-.partida-nombre {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-  font-size: 0.9rem;
-  color: var(--color-text);
-}
-.unidad {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  background: var(--color-surface-2);
-  padding: 0.1rem 0.4rem;
-  border-radius: var(--radius-pill);
-}
-.partida-campos {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 0.4rem;
-}
-.partida-campos input,
-.partida-campos select {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-family: inherit;
-  font-size: 0.85rem;
-  width: 100%;
-}
-.pestanas {
-  display: flex;
-  gap: 0.3rem;
-  margin-bottom: 0.85rem;
-  overflow-x: auto;
-}
-.pestana {
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.pestana.activa {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-primary-ink);
-}
-code {
-  font-family: ui-monospace, monospace;
-}
-.resumen-criticas {
-  margin-top: 0.85rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-  font-size: 0.85rem;
-}
-.resumen-criticas p {
-  margin: 0.2rem 0;
-  color: var(--color-text-muted);
-}
-</style>

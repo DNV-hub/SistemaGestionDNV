@@ -1,0 +1,290 @@
+/* Tema visual del Reporte Diario de Campo.
+ *
+ * Es el CSS del RDC original (variables, layout y componentes) acotado bajo
+ * la clase .rdc-app. Se porta a proposito, por decision del usuario: los
+ * supervisores llevan meses con esta pantalla y reaprenderla en el frente
+ * cuesta mas que la coherencia visual con el resto del Sistema. Fuera del
+ * modulo RDC nada de esto aplica.
+ *
+ * Consecuencia conocida: el modulo no sigue el tema oscuro del Sistema, igual
+ * que el RDC de hoy, que es solo claro.
+ */
+.rdc-app{
+  /* Tema "Steel & Slate": acento azul pizarra profundo sobre fondos gris muy claro.
+     --blue conserva su nombre historico (se usa en cientos de reglas como color de marca/acento
+     principal) pero ahora vale el slate #1E293B en vez del azul brillante anterior. */
+  --bg:#FBF8FA; --surface:#FFFFFF; --surface2:#F4F1F2;
+  --border:#E8E3E6; --border-md:#D7D1D4;
+  --text:#1E293B; --text2:#64748B; --text3:#94A3B8;
+  --blue:#1E293B; --blue-bg:#E9ECF1; --blue-text:#334155;
+  --green:#10B981; --green-bg:#ECFDF5; --green-text:#047857;
+  --neutral:#787778; --neutral-bg:#EEECEC; --neutral-text:#57534E;
+  --amber:#D97706; --amber-bg:#FFFBEB; --amber-text:#92400E;
+  --red:#DC2626; --red-bg:#FEF2F2; --red-text:#991B1B;
+  --r-sm:6px; --r-md:8px; --r-lg:8px;
+  --shadow:0 1px 2px rgba(30,41,59,.04),0 1px 3px rgba(30,41,59,.06);
+  --shadow-md:0 4px 14px rgba(30,41,59,.08),0 2px 4px rgba(30,41,59,.04);
+  /* legacy aliases */
+  --color-bg:var(--bg); --color-bg-card:var(--surface); --color-bg-secondary:var(--surface2);
+  --color-border:var(--border); --color-border-strong:var(--border-md);
+  --color-text:var(--text); --color-text-secondary:var(--text2); --color-text-tertiary:var(--text3);
+  --color-info-bg:var(--blue-bg); --color-info-text:var(--blue-text);
+  --color-success-bg:var(--green-bg); --color-success-text:var(--green-text);
+  --color-warning-bg:var(--amber-bg); --color-warning-text:var(--amber-text);
+  --color-danger:var(--red); --accent:var(--blue);
+  --radius-md:var(--r-md); --radius-lg:var(--r-lg); --font-sans:'Plus Jakarta Sans',sans-serif;
+}
+
+.rdc-app .app{max-width:720px;margin:0 auto}
+/* HEADER */
+.rdc-app .app-header{text-align:center;padding:18px 0 20px}
+.rdc-app .app-logo{display:inline-flex;align-items:center;gap:10px;background:var(--blue);color:#fff;border-radius:20px;padding:10px 20px 10px 14px;margin-bottom:6px}
+.rdc-app .app-logo i{font-size:22px}
+.rdc-app .app-logo h1{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.rdc-app .app-header p{font-size:12px;color:var(--text3)}
+/* TABS */
+.rdc-app .tab-bar{display:none}
+/* BOTTOM NAV */
+.rdc-app .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:999;display:flex;background:var(--surface);border-top:1px solid var(--border-md);height:calc(62px + env(safe-area-inset-bottom, 0px));padding-bottom:env(safe-area-inset-bottom, 0px);box-sizing:border-box;max-width:720px;margin:0 auto;box-shadow:0 -4px 20px rgba(0,0,0,.1)}
+.rdc-app .bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;color:var(--text3);font-size:10px;font-weight:500;cursor:pointer;padding:6px 4px 8px;font-family:inherit;transition:color .15s;-webkit-tap-highlight-color:transparent}
+.rdc-app .bnav-item i{font-size:23px;line-height:1;padding:3px 14px;border-radius:16px;transition:background .15s,color .15s}
+.rdc-app .bnav-item.active{color:var(--blue);font-weight:700}
+.rdc-app .bnav-item.active i{background:var(--blue-bg);color:var(--blue)}
+.rdc-app .bnav-item.mas-open{color:var(--text1)}
+/* "Resumen" es el paso final (desde ahi se envia el reporte) — se resalta siempre,
+   este o no activa esa pestaña, para que se note cual es el boton de cierre. */
+.rdc-app #bnav-resumen i{background:var(--green-bg);color:var(--green-text)}
+.rdc-app #bnav-resumen.active{color:var(--green-text)}
+.rdc-app #bnav-resumen.active i{background:var(--green);color:#fff}
+.rdc-app .mas-panel{position:fixed;bottom:calc(62px + env(safe-area-inset-bottom, 0px));left:0;right:0;z-index:998;padding:0 10px 6px;max-width:720px;margin:0 auto}
+.rdc-app .mas-panel-inner{background:var(--surface);border:1px solid var(--border-md);border-radius:16px;overflow:hidden;box-shadow:0 -4px 24px rgba(0,0,0,.14);display:grid;grid-template-columns:repeat(5,1fr)}
+.rdc-app .mas-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:14px 6px;border:none;background:none;cursor:pointer;font-family:inherit;font-size:10px;font-weight:500;color:var(--text2);transition:background .1s;-webkit-tap-highlight-color:transparent}
+.rdc-app .mas-item:active{background:var(--surface2)}
+.rdc-app .mas-item i{font-size:22px;color:var(--text2)}
+.rdc-app .mas-item.active{color:var(--blue)}
+.rdc-app .mas-item.active i{color:var(--blue)}
+/* SCREENS */
+.rdc-app .screen{display:none}
+.rdc-app .screen.visible{display:block}
+/* GRID */
+.rdc-app .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rdc-app .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+@media(max-width:500px){
+.rdc-app .grid3{grid-template-columns:1fr 1fr}
+}
+
+/* CARD */
+.rdc-app .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.rdc-app .section{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px;box-shadow:var(--shadow)}
+.rdc-app .card-title,.rdc-app .section-title{font-size:11.5px;font-weight:800;color:var(--blue-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:7px;position:relative;padding-left:9px}
+.rdc-app .card-title::before,.rdc-app .section-title::before{content:'';position:absolute;left:0;top:1px;bottom:1px;width:3px;border-radius:2px;background:currentColor;opacity:.85}
+.rdc-app .card-title::after,.rdc-app .section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+/* FIELDS */
+.rdc-app .field{display:flex;flex-direction:column;gap:4px}
+.rdc-app .field label{font-size:12px;font-weight:600;color:var(--text2)}
+.rdc-app .field input,.rdc-app .field select,.rdc-app .field textarea{width:100%;font-family:'Plus Jakarta Sans',inherit;font-size:14px;font-weight:400;color:var(--text);background:var(--surface);border:1.5px solid var(--border-md);border-radius:var(--r-md);padding:9px 11px;transition:border-color .12s,box-shadow .12s;-webkit-appearance:none}
+.rdc-app .field select{cursor:pointer}
+.rdc-app .field textarea{resize:vertical;min-height:72px}
+.rdc-app .field input:focus,.rdc-app .field select:focus,.rdc-app .field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,41,59,.12)}
+.rdc-app .field input::placeholder,.rdc-app .field textarea::placeholder{color:var(--text3)}
+/* BUTTONS */
+.rdc-app .btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-family:'Plus Jakarta Sans',inherit;font-size:14px;font-weight:600;border-radius:var(--r-md);border:none;cursor:pointer;padding:10px 18px;background:var(--blue);color:#fff;box-shadow:0 2px 6px rgba(30,41,59,.25)}
+.rdc-app .btn-secondary{display:inline-flex;align-items:center;gap:6px;font-family:'Plus Jakarta Sans',inherit;font-size:14px;font-weight:500;border-radius:var(--r-md);border:1.5px solid var(--border-md);cursor:pointer;padding:10px 18px;background:var(--surface);color:var(--text2)}
+.rdc-app .nav-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;font-family:'Plus Jakarta Sans',inherit;font-size:15px;font-weight:600;border-radius:var(--r-lg);border:none;cursor:pointer;padding:14px;margin-top:4px}
+.rdc-app .nav-btn.primary{background:var(--blue);color:#fff;box-shadow:var(--shadow-md)}
+.rdc-app .nav-btn:not(.primary){background:var(--surface);color:var(--text2);border:1.5px solid var(--border-md)}
+.rdc-app .add-btn{width:100%;background:transparent;border:1.5px dashed var(--border-md);border-radius:var(--r-md);padding:10px;font-family:'Plus Jakarta Sans',inherit;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px}
+.rdc-app .add-btn:hover{background:var(--surface2);border-color:var(--blue);color:var(--blue)}
+.rdc-app .del-btn{background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:4px 6px;border-radius:var(--r-sm);display:flex;align-items:center;transition:all .12s}
+.rdc-app .del-btn:hover{color:var(--red);background:var(--red-bg)}
+.rdc-app .export-btn{background:#1D6F42;color:#fff;border:none;border-radius:var(--r-md);padding:11px 18px;font-family:'Plus Jakarta Sans',inherit;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(29,111,66,.30)}
+.rdc-app .secondary-btn{border:1.5px solid var(--border-md);border-radius:var(--r-md);padding:11px 18px;font-family:'Plus Jakarta Sans',inherit;font-size:14px;cursor:pointer;background:var(--surface);color:var(--text2);display:flex;align-items:center;gap:6px}
+.rdc-app .ctrl-add-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--r-md);padding:9px 14px;font-family:'Plus Jakarta Sans',inherit;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+/* ALERTS / NOTES */
+.rdc-app .alert{display:flex;gap:10px;padding:11px 13px;border-radius:var(--r-md);font-size:13px;font-weight:500;margin-bottom:12px}
+.rdc-app .alert-amber{background:var(--amber-bg);color:var(--amber-text);border:1px solid #FCD34D}
+.rdc-app .alert-blue{background:var(--blue-bg);color:var(--blue-text);border:1px solid #BFDBFE}
+.rdc-app .alert-green{background:var(--green-bg);color:var(--green-text);border:1px solid #86EFAC}
+.rdc-app .alert-red{background:var(--red-bg);color:var(--red-text);border:1px solid #FCA5A5}
+.rdc-app .note{font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5}
+.rdc-app .empty-msg{font-size:13px;color:var(--text3);padding:12px 0;text-align:center}
+/* HITO */
+.rdc-app .hito-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,112px);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);overflow:hidden}
+.rdc-app .hito-row:last-of-type{border-bottom:none}
+.rdc-app .hito-label{font-size:13px;font-weight:500}
+.rdc-app .hito-row input[type="number"]{border-radius:var(--r-md);border:1px solid var(--border-md);padding:8px 10px;background:var(--surface);font-family:inherit;font-size:14px;width:100%;box-sizing:border-box}
+.rdc-app .hito-row input[type="number"]:focus{border-color:var(--blue);outline:none}
+/* TOGGLE */
+.rdc-app .toggle-row{display:flex;align-items:flex-start;gap:10px;font-size:14px;font-weight:500;padding:12px;background:var(--surface2);border-radius:var(--r-md);border:1.5px solid var(--border);cursor:pointer;user-select:none}
+.rdc-app .toggle-row input[type=checkbox]{width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:var(--blue);cursor:pointer}
+/* CHIPS */
+.rdc-app .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.rdc-app .chip{font-size:13px;font-weight:500;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border-md);cursor:pointer;color:var(--text2);background:var(--surface);transition:all .12s}
+.rdc-app .chip.on{background:var(--green-bg);color:var(--green-text);border-color:var(--green);font-weight:600}
+/* METRICS */
+.rdc-app .metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.rdc-app .metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;text-align:center;box-shadow:var(--shadow)}
+.rdc-app .metric .val{font-size:28px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.rdc-app .metric .lbl{font-size:11px;color:var(--text3);margin-top:2px;font-weight:500}
+/* SUMMARY TABLE */
+.rdc-app .summary-table{width:100%;border-collapse:collapse;font-size:13px}
+.rdc-app .summary-table th{text-align:left;padding:8px 10px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid var(--border)}
+.rdc-app .summary-table td{padding:10px;border-bottom:1px solid var(--border)}
+.rdc-app .summary-table tr:last-child td{border-bottom:none}
+.rdc-app .summary-table tbody tr:hover td{background:var(--surface2)}
+/* LÍNEA DE TIEMPO — bitácora + stand by fusionados */
+.rdc-app .tipo-toggle{display:flex;background:var(--surface2);border-radius:999px;padding:3px;gap:2px}
+.rdc-app .tipo-btn{flex:1;border:none;background:none;padding:8px 10px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:background .15s,color .15s}
+.rdc-app .tipo-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}
+.rdc-app .timeline-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:12px;margin-bottom:10px;box-shadow:var(--shadow)}
+.rdc-app .timeline-card.standby{background:var(--amber-bg);border-color:#F3D9A8}
+.rdc-app .timeline-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.rdc-app .timeline-time{display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:700;color:var(--text)}
+.rdc-app .timeline-time i{font-size:14px;color:var(--text3)}
+.rdc-app .timeline-time .fin{font-weight:500;color:var(--text2)}
+.rdc-app .timeline-dur{margin-left:auto;flex-shrink:0;font-size:11px;font-weight:700;color:var(--text2);background:var(--surface2);padding:3px 9px;border-radius:20px;white-space:nowrap}
+.rdc-app .timeline-card.standby .timeline-dur{background:rgba(255,255,255,.6);color:var(--amber-text)}
+.rdc-app .timeline-badge-standby{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--amber);padding:3px 9px;border-radius:5px;margin-bottom:6px}
+.rdc-app .timeline-title{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:2px}
+.rdc-app .timeline-card.standby .timeline-title{color:var(--amber-text)}
+.rdc-app .timeline-desc{font-size:13px;color:var(--text2);line-height:1.45}
+.rdc-app .timeline-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:9px 11px;margin-top:8px}
+.rdc-app .timeline-box-row{margin-bottom:7px}
+.rdc-app .timeline-box-row:last-child{margin-bottom:0}
+.rdc-app .timeline-box-row label{display:block;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.03em;margin-bottom:1px}
+.rdc-app .timeline-box-row .val{font-size:13px;color:var(--text)}
+.rdc-app .timeline-foot{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
+.rdc-app .timeline-edit-btn{background:none;border:none;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r-sm);display:flex;align-items:center;transition:all .12s}
+.rdc-app .timeline-edit-btn:hover{color:var(--blue);background:var(--surface2)}
+.rdc-app .timeline-card.standby .timeline-edit-btn:hover{background:rgba(255,255,255,.6)}
+/* METRADOS */
+.rdc-app .subtitulo-header{margin:16px 0 4px;padding:7px 12px;background:linear-gradient(90deg,var(--blue-bg),transparent);border-left:3px solid var(--blue);border-radius:0 var(--r-md) var(--r-md) 0;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--blue-text)}
+.rdc-app .partida-card{margin:4px 0;border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden;transition:border-color .15s}
+.rdc-app .partida-card.tiene-valor{border-color:var(--green-text)}
+.rdc-app .partida-header{display:flex;align-items:center;gap:8px;padding:11px 13px;cursor:pointer;background:#fff;user-select:none;transition:background .12s}
+.rdc-app .partida-card.tiene-valor .partida-header{background:var(--green-bg)}
+.rdc-app .partida-nombre{flex:1;font-size:13px;font-weight:500;line-height:1.4;color:var(--text)}
+.rdc-app .partida-um{font-size:10px;font-weight:800;border-radius:20px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
+.rdc-app .partida-valor{font-size:11px;color:var(--text3);flex-shrink:0;transition:all .12s}
+.rdc-app .partida-card.tiene-valor .partida-valor{font-size:13px;font-weight:800;color:var(--green-text)}
+.rdc-app .partida-body{display:none;padding:12px 13px 14px;border-top:1px solid var(--border);background:#fff}
+.rdc-app .partida-card.open .partida-body{display:block}
+/* CONTROL ITEMS TABLE */
+.rdc-app .ctrl-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.rdc-app .ctrl-table thead tr{background:var(--surface2)}
+.rdc-app .ctrl-table th{padding:7px 8px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
+.rdc-app .ctrl-table td{padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.rdc-app .ctrl-table tr:last-child td{border-bottom:none}
+.rdc-app .ctrl-table .total-row{background:var(--green-bg)}
+.rdc-app .ctrl-table .total-row td{font-weight:700;color:var(--green-text);border-top:2px solid var(--border-md);border-bottom:none}
+/* CTRL FORM */
+.rdc-app .ctrl-form{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin-bottom:8px}
+.rdc-app .ctrl-form-grid{display:grid;gap:8px}
+.rdc-app .ctrl-form-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.rdc-app .ctrl-form-row .field{flex:1;min-width:80px}
+/* BLOQUE 1/3 — tarjetas de partida con stepper */
+.rdc-app .blq-row{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--border-md);border-radius:var(--r-md);padding:11px 12px;margin-bottom:8px;box-shadow:var(--shadow)}
+.rdc-app .blq-row.has-val{border-left-color:var(--row-accent,var(--blue))}
+.rdc-app .blq-row-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.rdc-app .blq-row-title{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0}
+.rdc-app .unit-pill{flex-shrink:0;font-size:10px;font-weight:700;color:var(--neutral-text);background:var(--neutral-bg);padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.02em}
+.rdc-app .blq-row-bottom{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.rdc-app .blq-row-label{font-size:11.5px;color:var(--text2)}
+.rdc-app .stepper{display:flex;align-items:center;gap:2px;background:var(--surface2);border-radius:999px;padding:3px}
+.rdc-app .stepper-btn{width:26px;height:26px;border:none;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;line-height:1;color:var(--text2);cursor:pointer;box-shadow:var(--shadow);flex-shrink:0;font-family:inherit}
+.rdc-app .stepper-btn:active{transform:scale(.92)}
+.rdc-app .stepper-input{width:52px;text-align:center;border:none;background:transparent;font-size:14.5px;font-weight:700;color:var(--text);font-family:inherit;-moz-appearance:textfield}
+.rdc-app .stepper-input::-webkit-outer-spin-button,.rdc-app .stepper-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rdc-app .stepper-input:focus{outline:none}
+.rdc-app .blq-row-horarios{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+/* PERSONAL — una fila por rol, mismo stepper que Metrados */
+.rdc-app .person-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;border-bottom:1px solid var(--border)}
+.rdc-app .person-row:last-child{border-bottom:none}
+.rdc-app .person-row-label{font-size:13.5px;font-weight:600;color:var(--text)}
+/* RECUADRO DE HORA — mismo estilo en todo input/select de hora de la app */
+.rdc-app input[type="time"],.rdc-app select.time-field{
+  background:var(--surface2);border:1.5px solid transparent;border-radius:var(--r-md);
+  font-family:inherit;font-weight:700;font-size:14.5px;color:var(--text);
+  padding:8px 10px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;cursor:pointer;
+}
+.rdc-app input[type="time"]:focus,.rdc-app select.time-field:focus{
+  outline:none;background:var(--surface);border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,41,59,.12);
+}
+/* PROG */
+.rdc-app .prog-row{padding:10px 0;border-bottom:1px solid var(--border)}
+.rdc-app .prog-row:last-child{border-bottom:none}
+/* BOTTOM ACTIONS */
+.rdc-app .bottom-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+/* TARJETAS DE SELECCIÓN ÚNICA CON ÍCONO (ej. Estado del material en Vales-Retorno) */
+.rdc-app .estado-card{display:flex;align-items:center;gap:10px;padding:12px;border:1.5px solid var(--border);border-radius:var(--r-md);background:var(--surface);cursor:pointer;font-size:13.5px;font-weight:600;color:var(--text2);margin-bottom:8px;transition:all .12s}
+.rdc-app .estado-card:last-child{margin-bottom:0}
+.rdc-app .estado-card i{font-size:20px;color:var(--text3);flex-shrink:0}
+.rdc-app .estado-card.on{border-color:var(--row-color,var(--blue));background:var(--row-bg,var(--blue-bg));color:var(--text)}
+.rdc-app .estado-card.on i{color:var(--row-color,var(--blue))}
+/* BUSCADOR DE MATERIALES (módulo Vales) — desplegable propio en vez de <datalist>,
+   por soporte inconsistente de datalist en navegadores móviles. */
+.rdc-app .mat-buscador{position:relative}
+.rdc-app .mat-drop{display:none;position:absolute;left:0;right:0;top:100%;z-index:50;background:var(--surface);border:1.5px solid var(--border-md);border-radius:var(--r-md);box-shadow:var(--shadow-md);max-height:220px;overflow-y:auto;margin-top:2px}
+.rdc-app .mat-drop-item{display:flex;flex-direction:column;gap:1px;padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--border)}
+.rdc-app .mat-drop-item:last-child{border-bottom:none}
+.rdc-app .mat-drop-item:hover{background:var(--surface2)}
+/* TOAST */
+.rdc-app .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:#111827;color:#fff;padding:11px 20px;border-radius:999px;font-size:13px;font-weight:500;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:999;white-space:nowrap;box-shadow:var(--shadow-md)}
+.rdc-app .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ADMIN TOGGLE ("Recordar en este dispositivo") */
+.rdc-app .admin-toggle-track{position:relative;width:42px;height:24px;flex-shrink:0;background:var(--border-md);border-radius:999px;transition:background .15s}
+.rdc-app .admin-toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;background:#fff;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.rdc-app #admin-recordar:checked + .admin-toggle-track{background:var(--amber)}
+.rdc-app #admin-recordar:checked + .admin-toggle-track::after{left:21px}
+/* MODO GRAN MAESTRO — easter egg, banner de supervisor con tema de fuego.
+   Clase compartida por los banners de RDC, Fotos y Vales (no un id único) para que el
+   efecto se vea en los tres módulos, no solo en el que originalmente lo tenía. */
+.rdc-app .supervisor-banner.gran-maestro{
+  background:linear-gradient(135deg,#1a0505 0%,#000 45%,#7c1d0e 100%) !important;
+  animation:gm-glow 1.6s ease-in-out infinite;
+}
+.rdc-app .supervisor-banner.gran-maestro::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(115deg,rgba(251,146,60,0) 0 18px,rgba(251,146,60,.16) 18px 22px);
+  animation:gm-scan 2.4s linear infinite;
+}
+.rdc-app .supervisor-banner.gran-maestro::after{
+  content:'🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥';
+  position:absolute;left:0;right:0;bottom:-6px;font-size:15px;line-height:1;
+  letter-spacing:1px;white-space:nowrap;opacity:.95;animation:gm-flicker 1s steps(2) infinite;
+}
+.rdc-app .supervisor-banner.gran-maestro .sup-tipo-lbl{color:#FDBA74 !important;font-weight:800;letter-spacing:.09em}
+.rdc-app .supervisor-banner.gran-maestro .sup-icon{color:#FB923C !important}
+@keyframes gm-glow{
+  0%,100%{box-shadow:0 0 12px rgba(220,38,38,.55),0 0 2px rgba(251,146,60,.5)}
+  50%{box-shadow:0 0 28px rgba(249,115,22,.9),0 0 10px rgba(250,204,21,.75)}
+}
+@keyframes gm-scan{0%{background-position:0 0}100%{background-position:120px 0}}
+@keyframes gm-flicker{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-2px) scale(1.04)}100%{transform:translateY(0) scale(1)}}
+.rdc-app #admin-recordar:focus-visible + .admin-toggle-track{outline:2px solid var(--blue);outline-offset:2px}
+
+/* El reset original vive en el <body> del RDC; acá se aplica al contenedor del
+   modulo, que es lo que cumple ese papel dentro del Sistema. La tipografia
+   Plus Jakarta Sans se carga en index.html junto con la del Sistema. */
+.rdc-app {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+.rdc-app *,
+.rdc-app *::before,
+.rdc-app *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+.rdc-app button,
+.rdc-app input,
+.rdc-app select,
+.rdc-app textarea {
+  font-family: inherit;
+}
