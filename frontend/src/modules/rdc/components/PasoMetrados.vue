@@ -163,6 +163,17 @@ const totalDelTipo = computed(() => Math.round(elementosDelTipo.value.reduce((s,
 const resumenCriticas = computed(() => gruposCriticos(reporte.value))
 const conUbicacion = computed(() => definicion.value.clave === 'perf' || definicion.value.clave === 'iny')
 
+/** Cuántos elementos y cuánto suman, por cada una de las cinco pestañas — para
+ * que se vea de un vistazo qué se ha registrado sin tener que abrir cada una. */
+const estadisticasPorTipo = computed(() => {
+  const mapa = {}
+  TIPOS_ELEMENTO.forEach((t) => {
+    const items = reporte.value.elementos.filter((e) => e.elemento === t.elemento && e.actividad === t.actividad)
+    mapa[t.clave] = { count: items.length, total: Math.round(items.reduce((s, e) => s + (Number(e.cantidad) || 0), 0) * 100) / 100 }
+  })
+  return mapa
+})
+
 // --- Partidas libres -----------------------------------------------------
 const nuevaLibre = ref({ nombre: '', unidad: '', cantidad: '' })
 const libres = computed(() => reporte.value.metrados.filter((m) => m.bloque === 'libre'))
@@ -277,7 +288,10 @@ function quitarLibre(id) {
             :class="{ activa: tipoActivo === t.clave }"
             @click="tipoActivo = t.clave"
           >
-            {{ t.etiqueta }}
+            <span class="pestana-label">{{ t.etiqueta }}</span>
+            <span v-if="estadisticasPorTipo[t.clave].count" class="pestana-conteo">
+              {{ estadisticasPorTipo[t.clave].count }} reg · {{ estadisticasPorTipo[t.clave].total }} {{ t.unidad }}
+            </span>
           </button>
         </div>
 
