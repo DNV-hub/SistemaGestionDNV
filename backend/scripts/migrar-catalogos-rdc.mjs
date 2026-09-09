@@ -105,12 +105,25 @@ async function verificarDestino() {
   const { error } = await destino.from('rdc_sectores').select('id').limit(1)
   if (!error) return true
   if (/invalid api key/i.test(error.message)) {
+    const k = SUPABASE_SERVICE_ROLE_KEY
     console.error('La clave del proyecto destino no es válida.\n')
-    console.error('Este proyecto usa el formato NUEVO de claves de Supabase, donde la clave')
-    console.error('`service_role` de siempre está deshabilitada. La que se necesita es una')
-    console.error('SECRET KEY, que empieza con "sb_secret_":')
-    console.error('  Supabase → Project Settings → API Keys → Secret keys → Reveal (o crear una).\n')
-    console.error('Revisa también que al pegarla no se haya colado un espacio o unas comillas.')
+    // Se muestra solo el prefijo y el largo: alcanza para saber qué clave es
+    // sin exponerla en la terminal ni en un log.
+    console.error(`Recibí una clave que empieza con "${k.slice(0, 11)}…" y mide ${k.length} caracteres.`)
+    if (k.startsWith('sb_publishable_')) {
+      console.error('Esa es la clave PÚBLICA (la que usa el navegador), no sirve para escribir catálogos.')
+    } else if (k.startsWith('eyJ')) {
+      console.error('Esa es una clave legacy en formato JWT. Este proyecto usa el formato nuevo,')
+      console.error('donde las claves legacy están deshabilitadas.')
+    } else if (!k.startsWith('sb_secret_')) {
+      console.error('No parece una clave de Supabase: revisa que no se haya colado un espacio,')
+      console.error('unas comillas o un pedazo cortado al pegarla.')
+    } else {
+      console.error('El formato es el correcto, así que la clave puede haber sido revocada o')
+      console.error('pertenecer a otro proyecto. Genera una nueva y vuelve a intentar.')
+    }
+    console.error('\nLa que se necesita empieza con "sb_secret_":')
+    console.error('  Supabase → Project Settings → API Keys → Secret keys → Reveal (o crear una).')
   } else if (/does not exist|schema cache/i.test(error.message)) {
     console.error(`No se encontró la tabla rdc_sectores en el destino: ${error.message}\n`)
     console.error('Primero hay que aplicar las migraciones: cd backend/supabase && supabase db push')
