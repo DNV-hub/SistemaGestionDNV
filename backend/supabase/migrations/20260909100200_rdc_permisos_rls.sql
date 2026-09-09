@@ -86,9 +86,21 @@ as $$
   );
 $$;
 
--- Un reporte propio se puede corregir mientras sigue abierto: en borrador
--- siempre, y ya finalizado solo el mismo día. Esa segunda parte es el flujo
--- "cometí un error — corregir y reenviar" que el RDC ya tiene hoy.
+-- Ventana de corrección: cuántos días después de la fecha del reporte se
+-- puede seguir corrigiendo uno ya finalizado. Va en `configuracion` y no
+-- fijo en el código porque depende de la operación, no del software — misma
+-- mecánica que los umbrales de alertas.
+--
+-- POR QUÉ NO ALCANZA CON "EL MISMO DÍA": un supervisor llena el reporte en la
+-- mina sin señal el lunes, baja el miércoles, sincroniza, y recién ahí ve el
+-- error. Con una ventana de un día no podría corregirlo nunca. El plazo se
+-- cuenta desde la FECHA DEL REPORTE (no desde la sincronización) porque es lo
+-- que el supervisor tiene en la cabeza: "puedo corregir el reporte del lunes
+-- hasta el lunes siguiente".
+insert into configuracion (clave, valor, descripcion) values
+  ('rdc_dias_correccion', '7',
+   'Días después de la fecha del reporte durante los cuales su autor todavía puede corregirlo y reenviarlo. Un reporte en Borrador se puede editar siempre.');
+
 create or replace function public.rdc_puede_editar_reporte(p_reporte_id uuid)
 returns boolean
 language sql
@@ -101,7 +113,13 @@ as $$
     where r.id = p_reporte_id
       and public.has_permission('rdc.editar_propio')
       and (r.creado_por = auth.uid() or r.supervisor_id = public.rdc_supervisor_id())
-      and (r.estado = 'Borrador' or r.fecha = current_date)
+      and (
+        r.estado = 'Borrador'
+        or r.fecha >= current_date - coalesce(
+             (select (valor #>> '{}')::int from configuracion where clave = 'rdc_dias_correccion'),
+             7
+           )
+      )
   );
 $$;
 
@@ -225,7 +243,13 @@ create policy rdc_reportes_update on rdc_reportes for update
   using (
     public.has_permission('rdc.editar_propio')
     and (creado_por = auth.uid() or supervisor_id = public.rdc_supervisor_id())
-    and (estado = 'Borrador' or fecha = current_date)
+    and (
+      estado = 'Borrador'
+      or fecha >= current_date - coalesce(
+           (select (valor #>> '{}')::int from configuracion where clave = 'rdc_dias_correccion'),
+           7
+         )
+    )
   )
   with check (
     public.has_permission('rdc.editar_propio')

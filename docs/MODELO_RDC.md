@@ -653,8 +653,12 @@ Reglas que quedan garantizadas en la base de datos, no solo en la interfaz:
 - **Un supervisor solo ve y edita lo suyo**: los reportes que llenó o de los
   que es responsable.
 - **Editar es posible mientras el reporte sigue abierto**: en borrador
-  siempre, y ya finalizado solo el mismo día — que es el flujo "corregir y
-  reenviar" que el RDC ya tiene.
+  siempre, y ya finalizado dentro de una ventana de corrección — el flujo
+  "corregir y reenviar" que el RDC ya tiene. La ventana son 7 días contados
+  desde la fecha del reporte, ajustables sin migración en la tabla
+  `configuracion` (clave `rdc_dias_correccion`). No podía ser "el mismo día":
+  quien llena un reporte sin señal el lunes y sincroniza el miércoles recién
+  ahí ve el error.
 - **Los reportes no se borran** (no hay política de DELETE sobre la
   cabecera), igual que kardex, vales y auditoría en el resto del Sistema.
 
