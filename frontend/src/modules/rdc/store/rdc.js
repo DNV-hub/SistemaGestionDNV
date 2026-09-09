@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { acceptHMRUpdate, defineStore } from 'pinia'
 import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import * as repo from '../services/rdcRepository'
@@ -198,3 +198,13 @@ export const useRdcStore = defineStore('rdc', {
     },
   },
 })
+
+// Sin esto, cada vez que Vite recarga este archivo en caliente durante el
+// desarrollo (algo que pasa seguido mientras se ajusta el módulo), Pinia
+// puede perder el borrador que el store tenía en memoria — el reporte sigue
+// intacto en IndexedDB, pero la pantalla que ya estaba abierta se queda con
+// el estado nuevo (vacío) hasta que se vuelve a navegar. Esto no afecta nada
+// en producción, donde el módulo no se recarga en caliente.
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useRdcStore, import.meta.hot))
+}
