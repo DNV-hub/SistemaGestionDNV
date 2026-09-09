@@ -14,6 +14,20 @@ import { SECTOR_SALA_ELECTRICA } from '../services/rdcConstantes'
 // solo en dos momentos, y ninguno bloquea al supervisor: refrescar catálogos y
 // sincronizar lo que ya se cerró.
 
+// Encadena los guardados para que nunca se crucen. `guardar()` se llama en
+// cada cambio de campo — varias veces por segundo si el supervisor toca
+// rápido un stepper — y antes cada llamada era una escritura independiente
+// que además REEMPLAZABA el borrador en memoria por lo que ella misma
+// acababa de guardar. Si dos guardados se superponían y el más viejo
+// resolvía después del más nuevo (perfectamente posible: son promesas
+// independientes, nada garantiza el orden de llegada), el viejo pisaba al
+// nuevo — en memoria y en el disco, silenciosamente. Encadenarlos en una
+// sola fila, y releer `this.actual` recién cuando le toca el turno a cada
+// uno (no en el momento en que se llamó), garantiza que la ÚLTIMA escritura
+// sea siempre la más reciente, sin importar cuántos guardados se hayan
+// pedido de encima.
+let colaGuardado = Promise.resolve()
+
 // Vive fuera del store porque es un suscriptor de eventos del navegador, no
 // estado de la aplicación: guardarlo en `state` haría que Pinia intente
 // volverlo reactivo sin ninguna razón.
@@ -130,7 +144,14 @@ export const useRdcStore = defineStore('rdc', {
      * pierde porque el navegador se cerró es el peor resultado posible. */
     async guardar() {
       if (!this.actual) return
-      this.actual = await repo.guardar(this.actual)
+      // El objeto reactivo (`this.actual`) sigue siendo la única fuente de
+      // verdad en memoria en todo momento — nunca se reemplaza por lo que
+      // devuelve `repo.guardar()`. Cada turno de la cola lee el estado
+      // ACTUAL (no el que había cuando se pidió el guardado) y lo escribe;
+      // si varios guardados quedaron en fila, los primeros terminan siendo
+      // redundantes y el último siempre grava lo más reciente.
+      colaGuardado = colaGuardado.then(() => (this.actual ? repo.guardar(this.actual) : null))
+      await colaGuardado
     },
 
     /** Ajusta las categorías de personal indirecto según el sector elegido.
