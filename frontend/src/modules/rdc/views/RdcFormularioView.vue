@@ -69,8 +69,15 @@ function alSoltar(e) {
 <template>
   <div class="rdc-app" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
     <div class="app">
+      <header class="app-header">
+        <div class="app-logo"><i class="ti ti-clipboard-list" /><h1>Reporte Diario de Campo</h1></div>
+        <p>Sostenimiento y mantenimiento de talud</p>
+      </header>
+
       <div class="barra-superior">
-        <button class="volver" @click="router.push({ name: 'rdc' })"><i class="ti ti-arrow-left" /> Mis reportes</button>
+        <button class="volver" aria-label="Volver a mis reportes" @click="router.push({ name: 'rdc' })">
+          <i class="ti ti-arrow-left" />
+        </button>
         <span v-if="rdc.actual?.esCorreccion" class="marca-correccion">Corrección</span>
       </div>
 
@@ -82,11 +89,10 @@ function alSoltar(e) {
         </div>
       </div>
 
-      <p v-if="!listo" class="empty-msg">Cargando…</p>
-
-      <template v-else-if="rdc.actual">
-        <component :is="componenteActual" />
-      </template>
+      <div class="contenido">
+        <p v-if="!listo" class="empty-msg">Cargando…</p>
+        <component :is="componenteActual" v-else-if="rdc.actual" />
+      </div>
 
       <nav class="bottom-nav">
         <button
@@ -108,26 +114,35 @@ function alSoltar(e) {
 /* La maqueta del RDC deja la barra inferior fija; hay que dejarle sitio para
    que el último bloque del formulario no quede debajo de ella. */
 .app {
-  padding: 0 12px calc(80px + env(safe-area-inset-bottom, 0px));
+  padding: 0 12px env(safe-area-inset-bottom, 0px);
+  display: flex;
+  flex-direction: column;
+  /* Para que la barra de pasos pueda quedarse pegada al fondo aunque el
+     formulario sea corto. */
+  min-height: 100vh;
 }
 .barra-superior {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0 4px;
+  margin-bottom: 10px;
 }
 .volver {
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: none;
+  justify-content: center;
+  background: var(--blue);
+  color: #fff;
   border: none;
-  color: var(--text2);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 50%;
+  font-size: 18px;
   cursor: pointer;
-  padding: 4px 0;
+  box-shadow: var(--shadow);
+}
+.contenido {
+  flex: 1;
 }
 .marca-correccion {
   font-size: 10px;

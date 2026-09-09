@@ -78,6 +78,11 @@ function quitarParada(id) {
   guardar()
 }
 
+// El acordeón arranca abierto: los hitos son lo primero que se llena al llegar
+// al frente, y obligar a desplegarlos cada vez sería un toque de más.
+const hitosAbierto = ref(true)
+const hitosLlenos = computed(() => HITOS.filter((h) => horaHito(h)).length)
+
 const totalParadas = computed(() => totalStandbyMin(reporte.value))
 // La línea de tiempo mezcla lo escrito a mano con lo que se deduce de los
 // metrados, igual que en el reporte que se comparte por WhatsApp.
@@ -109,19 +114,27 @@ const lineaDeTiempo = computed(() => bitacoraCompleta(reporte.value))
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Hitos de la jornada</div>
-      <div v-for="h in HITOS" :key="h" class="contador">
-        <span class="nombre">{{ h }}</span>
-        <input :value="horaHito(h)" type="time" class="hora" @change="fijarHito(h, $event.target.value)" />
+    <div class="card plegable">
+      <div class="acordeon-head" @click="hitosAbierto = !hitosAbierto">
+        <span class="acordeon-titulo"><i class="ti ti-flag-3" />Hitos de inicio de jornada</span>
+        <span class="badge-hitos">{{ hitosLlenos ? `${hitosLlenos}/${HITOS.length}` : '' }}</span>
+        <i class="ti" :class="hitosAbierto ? 'ti-chevron-up' : 'ti-chevron-down'" />
       </div>
-      <div class="contador">
-        <span class="nombre">Salida a refrigerio</span>
-        <input v-model="reporte.refrigerioSalida" type="time" class="hora" @change="guardar" />
-      </div>
-      <div class="contador">
-        <span class="nombre">Retorno de refrigerio</span>
-        <input v-model="reporte.refrigerioRetorno" type="time" class="hora" @change="guardar" />
+
+      <div v-if="hitosAbierto" style="margin-top: 12px">
+        <div v-for="h in HITOS" :key="h" class="hito-row">
+          <span class="hito-label">{{ h }}</span>
+          <input :value="horaHito(h)" type="time" @change="fijarHito(h, $event.target.value)" />
+        </div>
+        <div class="hito-row">
+          <span class="hito-label">Salida a refrigerio/almuerzo</span>
+          <input v-model="reporte.refrigerioSalida" type="time" @change="guardar" />
+        </div>
+        <div class="hito-row">
+          <span class="hito-label">Retorno de refrigerio/almuerzo</span>
+          <input v-model="reporte.refrigerioRetorno" type="time" @change="guardar" />
+        </div>
+        <p class="note">Registra estos hitos una vez al inicio del turno.</p>
       </div>
     </div>
 

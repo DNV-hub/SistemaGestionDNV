@@ -8,36 +8,84 @@
   grid-column: 1 / -1;
 }
 
-/* Fila de "etiqueta a la izquierda, control a la derecha": hitos, refrigerio */
-.rdc-app .contador {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* Fila de "etiqueta a la izquierda, hora a la derecha": hitos y refrigerio.
+   Es rejilla y no flex a propósito: con flex, la segunda columna se estira
+   según lo que mida la etiqueta, y como algunas ocupan dos líneas los campos
+   terminan con anchos distintos y la columna se ve torcida. Con una segunda
+   columna de ancho fijo, todas las horas quedan alineadas. */
+.rdc-app .hito-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
   gap: 10px;
-  padding: 10px 0;
+  align-items: center;
+  padding: 11px 0;
   border-bottom: 1px solid var(--border);
 }
-.rdc-app .contador:last-child {
+.rdc-app .hito-row:last-child {
   border-bottom: none;
 }
-.rdc-app .contador .nombre {
-  font-size: 13px;
+.rdc-app .hito-label {
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--text);
 }
-.rdc-app .hora {
+.rdc-app .hito-row input[type='time'] {
+  width: 100%;
   border-radius: var(--r-md);
   border: 1.5px solid var(--border-md);
-  padding: 8px 10px;
-  background: var(--surface);
+  padding: 9px 11px;
+  background: var(--surface2);
   font-family: inherit;
   font-size: 14px;
   color: var(--text);
-  min-width: 112px;
 }
-.rdc-app .hora:focus {
+.rdc-app .hito-row input[type='time']:focus {
   border-color: var(--blue);
+  background: var(--surface);
   outline: none;
+}
+
+/* Cabecera de tarjeta plegable: título con icono a un lado y chevron al otro */
+.rdc-app .card.plegable {
+  border-left: 4px solid var(--blue);
+}
+.rdc-app .acordeon-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.rdc-app .acordeon-titulo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--blue-text);
+}
+.rdc-app .acordeon-head > .ti-chevron-down,
+.rdc-app .acordeon-head > .ti-chevron-up {
+  color: var(--text2);
+  font-size: 18px;
+}
+.rdc-app .badge-hitos {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 500;
+}
+
+/* La barra de pasos va pegada al fondo pero DENTRO de la columna de contenido.
+   Fijarla al viewport (como en el RDC suelto) la descuadra acá: el Sistema
+   tiene un sidebar a la izquierda, así que una barra centrada en la ventana
+   queda corrida respecto de las tarjetas. Con sticky se alinea sola. */
+.rdc-app .bottom-nav {
+  position: sticky;
+  inset: auto 0 0 0;
+  max-width: none;
+  margin: 12px -12px 0;
+  border-radius: 0;
 }
 
 /* Listas de cosas agregadas (actividades, paradas, elementos, partidas libres) */
