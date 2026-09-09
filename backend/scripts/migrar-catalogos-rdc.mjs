@@ -17,7 +17,10 @@
 //   node migrar-catalogos-rdc.mjs --apply      # aplica los cambios
 //
 // Requiere en el entorno:
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   -> proyecto DESTINO (el Sistema)
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   -> proyecto DESTINO (el Sistema).
+//     La clave tiene que saltarse RLS para poder escribir catálogos: en el
+//     formato nuevo de Supabase es una secret key ("sb_secret_…"), no la
+//     `service_role` de siempre, que en esos proyectos está deshabilitada.
 // Opcionales (traen por defecto los valores públicos que el propio RDC usa):
 //   RDC_SUPABASE_URL, RDC_SUPABASE_ANON_KEY   -> proyecto ORIGEN (el RDC)
 //   RDC_CONFIG_JS                             -> ruta a js/config.js del RDC
@@ -90,6 +93,32 @@ async function mapaPorNombre(tabla) {
   const { data, error } = await destino.from(tabla).select('id, nombre')
   if (error) throw new Error(`Leyendo ${tabla} del destino: ${error.message}`)
   return new Map(data.map((f) => [f.nombre, f.id]))
+}
+
+// Comprueba la clave del destino ANTES de empezar. Sin esto, una clave mala se
+// descubre recién al escribir la primera tabla, con un "Invalid API key" pelado
+// que no dice cuál de las dos claves está mal ni por qué.
+// Devuelve true si el destino está listo. No corta con process.exit() porque
+// hacerlo con una conexión HTTP todavía abierta hace que Node aborte con un
+// error interno de libuv que tapa el mensaje útil.
+async function verificarDestino() {
+  const { error } = await destino.from('rdc_sectores').select('id').limit(1)
+  if (!error) return true
+  if (/invalid api key/i.test(error.message)) {
+    console.error('La clave del proyecto destino no es válida.\n')
+    console.error('Este proyecto usa el formato NUEVO de claves de Supabase, donde la clave')
+    console.error('`service_role` de siempre está deshabilitada. La que se necesita es una')
+    console.error('SECRET KEY, que empieza con "sb_secret_":')
+    console.error('  Supabase → Project Settings → API Keys → Secret keys → Reveal (o crear una).\n')
+    console.error('Revisa también que al pegarla no se haya colado un espacio o unas comillas.')
+  } else if (/does not exist|schema cache/i.test(error.message)) {
+    console.error(`No se encontró la tabla rdc_sectores en el destino: ${error.message}\n`)
+    console.error('Primero hay que aplicar las migraciones: cd backend/supabase && supabase db push')
+  } else {
+    console.error(`No se pudo leer el destino: ${error.message}`)
+  }
+  process.exitCode = 1
+  return false
 }
 
 function leerConfigJs() {
@@ -278,6 +307,7 @@ async function main() {
   console.log(`  destino         : ${SUPABASE_URL}\n`)
 
   const config = leerConfigJs()
+  if (APLICAR && !(await verificarDestino())) return
 
   const nombrePorSectorId = await migrarSectores()
   await migrarFrentes(nombrePorSectorId)
