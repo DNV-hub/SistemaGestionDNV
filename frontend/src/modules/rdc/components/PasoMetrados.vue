@@ -9,14 +9,23 @@ const rdc = useRdcStore()
 const reporte = computed(() => rdc.actual)
 const guardar = () => rdc.guardar()
 
+// Un solo bloque abierto a la vez. Son listas largas: con dos desplegados hay
+// que desplazarse mucho para llegar al siguiente y en el celular se pierde de
+// vista en cuál estabas. Las partidas libres van aparte porque son cortas y a
+// veces se consultan mientras se llena otro bloque.
+const bloqueAbierto = ref(null)
+const libresAbierto = ref(false)
+const alternarBloque = (n) => (bloqueAbierto.value = bloqueAbierto.value === n ? null : n)
+
 // --- Bloques 1 y 3: partidas fijas del catálogo ---------------------------
 // El reporte guarda solo las que tienen cantidad; la lista completa sale del
 // catálogo y la fila se crea al escribir. Se referencian por CÓDIGO y nunca
 // por posición: en el RDC original se guardaban por índice de array y bastaba
 // insertar una partida en medio para desalinear los borradores existentes.
 const partidasDe = (bloque) => (rdc.catalogos?.partidasEstandar ?? []).filter((p) => String(p.bloque) === bloque)
-
 const metradoDe = (codigo) => reporte.value.metrados.find((m) => m.partidaCodigo === codigo)
+const cantidadDe = (codigo) => metradoDe(codigo)?.cantidad ?? ''
+const tieneValor = (codigo) => Number(metradoDe(codigo)?.cantidad) > 0
 
 function fijarMetrado(partida, bloque, campo, valor) {
   let fila = metradoDe(partida.codigo)
@@ -42,6 +51,11 @@ function fijarMetrado(partida, bloque, campo, valor) {
     reporte.value.metrados = reporte.value.metrados.filter((m) => m.id !== fila.id)
   }
   guardar()
+}
+
+const escalonar = (partida, bloque, delta) => {
+  const actual = Number(metradoDe(partida.codigo)?.cantidad) || 0
+  fijarMetrado(partida, bloque, 'cantidad', Math.max(0, Math.round((actual + delta) * 100) / 100))
 }
 
 // --- Bloque 2: elementos de sostenimiento --------------------------------
@@ -120,7 +134,7 @@ function agregarElementos() {
       reporte.value.elementos.push({
         ...base,
         id: nuevoId(),
-        tipo: d.clave === 'perf' ? n.tipo || null : d.clave === 'cable' ? n.tipo || null : d.clave === 'pull' ? 'Ensayo' : null,
+        tipo: d.clave === 'perf' || d.clave === 'cable' ? n.tipo || null : d.clave === 'pull' ? 'Ensayo' : null,
         codigo,
         ubicacion: n.ubicacion || null,
         cantidad,
@@ -133,11 +147,7 @@ function agregarElementos() {
     }
   }
 
-  nuevo.value.n1 = ''
-  nuevo.value.n2 = ''
-  nuevo.value.cantidad = ''
-  nuevo.value.ancho = ''
-  nuevo.value.largo = ''
+  Object.assign(nuevo.value, { n1: '', n2: '', cantidad: '', ancho: '', largo: '' })
   guardar()
 }
 
@@ -149,7 +159,9 @@ function quitarElemento(id) {
 const elementosDelTipo = computed(() =>
   reporte.value.elementos.filter((e) => e.elemento === definicion.value.elemento && e.actividad === definicion.value.actividad),
 )
+const totalDelTipo = computed(() => Math.round(elementosDelTipo.value.reduce((s, e) => s + (Number(e.cantidad) || 0), 0) * 100) / 100)
 const resumenCriticas = computed(() => gruposCriticos(reporte.value))
+const conUbicacion = computed(() => definicion.value.clave === 'perf' || definicion.value.clave === 'iny')
 
 // --- Partidas libres -----------------------------------------------------
 const nuevaLibre = ref({ nombre: '', unidad: '', cantidad: '' })
@@ -181,216 +193,339 @@ function quitarLibre(id) {
 
 <template>
   <div v-if="reporte">
-    <p v-if="!reporte.frenteId" class="aviso">Elige primero un frente en el paso «Datos»: de él dependen los códigos de los elementos.</p>
-
-    <div class="card">
-      <div class="card-title">1. Actividades preliminares</div>
-      <div v-for="p in partidasDe('1')" :key="p.codigo" class="partida">
-        <div class="partida-nombre">
-          <span>{{ p.nombre }}</span>
-          <span class="unidad">{{ p.unidad }}</span>
-        </div>
-        <div class="partida-campos">
-          <input
-            :value="metradoDe(p.codigo)?.cantidad ?? ''"
-            type="number"
-            min="0"
-            step="0.01"
-            inputmode="decimal"
-            placeholder="0"
-            @change="fijarMetrado(p, '1', 'cantidad', $event.target.value)"
-          />
-          <select :value="metradoDe(p.codigo)?.horaInicio ?? ''" @change="fijarMetrado(p, '1', 'horaInicio', $event.target.value)">
-            <option value="">Inicio</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
-          <select :value="metradoDe(p.codigo)?.horaFin ?? ''" @change="fijarMetrado(p, '1', 'horaFin', $event.target.value)">
-            <option value="">Fin</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
-        </div>
+    <div class="card" style="padding: 10px 14px">
+      <div class="alert alert-blue" style="margin: 0">
+        <i class="ti ti-file-certificate" />
+        <span>Los <strong>códigos que registres</strong> deben coincidir exactamente con los del <strong>plano de sostenimiento</strong>.</span>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title">2. Actividades críticas</div>
+    <div v-if="!reporte.frenteId" class="alert alert-amber">
+      <i class="ti ti-alert-triangle" />
+      <span>Elige primero un frente en el paso «Datos»: de él dependen los códigos de los elementos.</span>
+    </div>
 
-      <div class="pestanas">
-        <button
-          v-for="t in TIPOS_ELEMENTO"
-          :key="t.clave"
-          type="button"
-          class="pestana"
-          :class="{ activa: tipoActivo === t.clave }"
-          @click="tipoActivo = t.clave"
+    <!-- ── BLOQUE 1 ── -->
+    <div class="card blq-card" style="border-left-color: var(--blue-text)">
+      <div class="blq-head" @click="alternarBloque(1)">
+        <span class="blq-titulo" style="color: var(--blue-text)"><i class="ti ti-list-check" />1. Actividades preliminares</span>
+        <i class="ti" :class="bloqueAbierto === 1 ? 'ti-chevron-up' : 'ti-chevron-down'" style="color: var(--blue-text)" />
+      </div>
+
+      <div v-if="bloqueAbierto === 1" style="margin-top: 10px">
+        <div
+          v-for="p in partidasDe('1')"
+          :key="p.codigo"
+          class="blq-row"
+          :class="{ 'has-val': tieneValor(p.codigo) }"
+          style="--row-accent: var(--blue-text)"
         >
-          {{ t.etiqueta }}
-        </button>
+          <div class="blq-row-top">
+            <span class="blq-row-title">{{ p.nombre }}</span>
+            <span class="unit-pill">{{ p.unidad }}</span>
+          </div>
+          <div class="blq-row-bottom">
+            <span class="blq-row-label">Cantidad ejecutada</span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" aria-label="Restar" @click="escalonar(p, '1', -1)">−</button>
+              <input
+                :value="cantidadDe(p.codigo)"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                class="stepper-input"
+                @change="fijarMetrado(p, '1', 'cantidad', $event.target.value)"
+              />
+              <button type="button" class="stepper-btn" aria-label="Sumar" @click="escalonar(p, '1', 1)">+</button>
+            </div>
+          </div>
+          <div v-if="tieneValor(p.codigo)" class="blq-row-horarios">
+            <div class="field">
+              <label>Inicio</label>
+              <select class="time-field" :value="metradoDe(p.codigo)?.horaInicio ?? ''" @change="fijarMetrado(p, '1', 'horaInicio', $event.target.value)">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Fin</label>
+              <select class="time-field" :value="metradoDe(p.codigo)?.horaFin ?? ''" @change="fijarMetrado(p, '1', 'horaFin', $event.target.value)">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BLOQUE 2 ── -->
+    <div class="card blq-card" style="border-left-color: var(--amber)">
+      <div class="blq-head" @click="alternarBloque(2)">
+        <span class="blq-titulo" style="color: var(--amber)"><i class="ti ti-bolt" />2. Actividades críticas</span>
+        <i class="ti" :class="bloqueAbierto === 2 ? 'ti-chevron-up' : 'ti-chevron-down'" style="color: var(--amber)" />
       </div>
 
-      <div class="grid2">
-        <div class="field">
-          <label>Zona</label>
-          <select v-model="nuevo.zona">
-            <option value="">— Seleccionar —</option>
-            <option v-for="z in zonas" :key="z" :value="z">{{ z }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Sostenimiento</label>
-          <select v-model="nuevo.sostenimiento">
-            <option value="">— Seleccionar —</option>
-            <option v-for="s in sostenimientos" :key="s" :value="s">{{ s }}</option>
-          </select>
+      <div v-if="bloqueAbierto === 2" style="margin-top: 10px">
+        <div class="pestanas">
+          <button
+            v-for="t in TIPOS_ELEMENTO"
+            :key="t.clave"
+            type="button"
+            class="pestana"
+            :class="{ activa: tipoActivo === t.clave }"
+            @click="tipoActivo = t.clave"
+          >
+            {{ t.etiqueta }}
+          </button>
         </div>
 
-        <div v-if="opcionesPrefijo.length > 1" class="field">
-          <label>Prefijo</label>
-          <select v-model="nuevo.prefijo">
-            <option v-for="p in opcionesPrefijo" :key="p" :value="p">{{ p }}</option>
-          </select>
-        </div>
-        <div v-else-if="esManual" class="field">
-          <label>Código a mano</label>
-          <input v-model="nuevo.prefijo" type="text" placeholder="Sin prefijo configurado" />
+        <div class="ctrl-form">
+          <div class="grid2">
+            <div class="field">
+              <label>Zona</label>
+              <select v-model="nuevo.zona">
+                <option value="">— Seleccionar —</option>
+                <option v-for="z in zonas" :key="z" :value="z">{{ z }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Sostenimiento</label>
+              <select v-model="nuevo.sostenimiento">
+                <option value="">— Seleccionar —</option>
+                <option v-for="s in sostenimientos" :key="s" :value="s">{{ s }}</option>
+              </select>
+            </div>
+
+            <div v-if="opcionesPrefijo.length > 1" class="field">
+              <label>Prefijo</label>
+              <select v-model="nuevo.prefijo">
+                <option v-for="p in opcionesPrefijo" :key="p" :value="p">{{ p }}</option>
+              </select>
+            </div>
+            <div v-else-if="esManual" class="field">
+              <label>Código a mano</label>
+              <input v-model="nuevo.prefijo" type="text" placeholder="Sin prefijo configurado" />
+            </div>
+
+            <template v-if="definicion.clave === 'malla'">
+              <div class="field">
+                <label>Tipo de malla</label>
+                <select v-model="nuevo.tipo">
+                  <option value="">— Seleccionar —</option>
+                  <option v-for="t in TIPOS_MALLA" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+              <div class="field"><label>Ancho (m)</label><input v-model="nuevo.ancho" type="number" step="0.01" inputmode="decimal" /></div>
+              <div class="field"><label>Largo (m)</label><input v-model="nuevo.largo" type="number" step="0.01" inputmode="decimal" /></div>
+            </template>
+
+            <template v-else>
+              <div class="field"><label>N° inicio</label><input v-model="nuevo.n1" type="number" min="1" inputmode="numeric" /></div>
+              <div class="field"><label>N° fin (opcional)</label><input v-model="nuevo.n2" type="number" min="1" inputmode="numeric" /></div>
+              <div v-if="definicion.clave !== 'pull'" class="field">
+                <label>Longitud ({{ definicion.unidad }})</label>
+                <input v-model="nuevo.cantidad" type="number" step="0.01" inputmode="decimal" />
+              </div>
+              <div v-if="definicion.clave === 'perf'" class="field">
+                <label>Tipo de perno</label>
+                <select v-model="nuevo.tipo">
+                  <option value="">— Seleccionar —</option>
+                  <option v-for="t in TIPOS_PERNO" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+              <div v-if="definicion.clave === 'perf'" class="field">
+                <label>Diámetro</label>
+                <select v-model="nuevo.diametro">
+                  <option value="">— Seleccionar —</option>
+                  <option v-for="d in DIAMETROS_PERNO" :key="d" :value="d">{{ d }}</option>
+                </select>
+              </div>
+              <div v-if="definicion.clave === 'cable'" class="field">
+                <label>Tipo de cable</label>
+                <select v-model="nuevo.tipo">
+                  <option value="">— Seleccionar —</option>
+                  <option v-for="t in TIPOS_CABLE" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+              <div v-if="conUbicacion" class="field">
+                <label>Ubicación</label>
+                <select v-model="nuevo.ubicacion">
+                  <option value="">— Seleccionar —</option>
+                  <option v-for="u in UBICACIONES_ELEMENTO" :key="u" :value="u">{{ u }}</option>
+                </select>
+              </div>
+            </template>
+
+            <div class="field">
+              <label>Hora inicio</label>
+              <select v-model="nuevo.horaInicio" class="time-field">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Hora fin</label>
+              <select v-model="nuevo.horaFin" class="time-field">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="button" class="ctrl-add-btn" style="width: 100%; margin-top: 10px" @click="agregarElementos">
+            <i class="ti ti-plus" /> Agregar {{ definicion.etiqueta.toLowerCase() }}
+          </button>
+          <p class="note">Con N° inicio y N° fin se crea uno por cada número del rango (máximo {{ MAXIMO_RANGO }}).</p>
         </div>
 
-        <template v-if="definicion.clave === 'malla'">
+        <table v-if="elementosDelTipo.length" class="ctrl-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th style="text-align: right">Cantidad</th>
+              <th v-if="conUbicacion">Ubic.</th>
+              <th style="width: 28px" />
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="e in elementosDelTipo" :key="e.id">
+              <td style="font-family: ui-monospace, monospace">{{ e.codigo || '—' }}</td>
+              <td style="text-align: right">{{ e.cantidad }} {{ e.unidad }}</td>
+              <td v-if="conUbicacion">{{ e.ubicacion || '—' }}</td>
+              <td style="text-align: center">
+                <button type="button" class="del-btn" aria-label="Quitar" @click="quitarElemento(e.id)"><i class="ti ti-x" /></button>
+              </td>
+            </tr>
+            <tr class="total-row">
+              <td>{{ elementosDelTipo.length }} un.</td>
+              <td style="text-align: right">{{ totalDelTipo }} {{ definicion.unidad }}</td>
+              <td v-if="conUbicacion" />
+              <td />
+            </tr>
+          </tbody>
+        </table>
+
+        <div v-if="resumenCriticas.length" class="resumen-criticas">
+          <p v-for="g in resumenCriticas" :key="g.partida">
+            <strong>{{ g.partida }}:</strong> {{ g.cantidad }} {{ g.unidad }} ({{ g.unidades }} un.)
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── BLOQUE 3 ── -->
+    <div class="card blq-card" style="border-left-color: var(--green)">
+      <div class="blq-head" @click="alternarBloque(3)">
+        <span class="blq-titulo" style="color: var(--green)"><i class="ti ti-tools" />3. Actividades complementarias</span>
+        <i class="ti" :class="bloqueAbierto === 3 ? 'ti-chevron-up' : 'ti-chevron-down'" style="color: var(--green)" />
+      </div>
+
+      <div v-if="bloqueAbierto === 3" style="margin-top: 10px">
+        <div
+          v-for="p in partidasDe('3')"
+          :key="p.codigo"
+          class="blq-row"
+          :class="{ 'has-val': tieneValor(p.codigo) }"
+          style="--row-accent: var(--green)"
+        >
+          <div class="blq-row-top">
+            <span class="blq-row-title">{{ p.nombre }}</span>
+            <span class="unit-pill">{{ p.unidad }}</span>
+          </div>
+          <div class="blq-row-bottom">
+            <span class="blq-row-label">Cantidad ejecutada</span>
+            <div class="stepper">
+              <button type="button" class="stepper-btn" aria-label="Restar" @click="escalonar(p, '3', -1)">−</button>
+              <input
+                :value="cantidadDe(p.codigo)"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                class="stepper-input"
+                @change="fijarMetrado(p, '3', 'cantidad', $event.target.value)"
+              />
+              <button type="button" class="stepper-btn" aria-label="Sumar" @click="escalonar(p, '3', 1)">+</button>
+            </div>
+          </div>
+          <div v-if="tieneValor(p.codigo)" class="blq-row-horarios">
+            <div class="field">
+              <label>Inicio</label>
+              <select class="time-field" :value="metradoDe(p.codigo)?.horaInicio ?? ''" @change="fijarMetrado(p, '3', 'horaInicio', $event.target.value)">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Fin</label>
+              <select class="time-field" :value="metradoDe(p.codigo)?.horaFin ?? ''" @change="fijarMetrado(p, '3', 'horaFin', $event.target.value)">
+                <option value="">--</option>
+                <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PARTIDAS LIBRES ── -->
+    <div class="card blq-card">
+      <div class="blq-head" @click="libresAbierto = !libresAbierto">
+        <span class="blq-titulo"><i class="ti ti-circle-plus" />Partidas libres</span>
+        <i class="ti" :class="libresAbierto ? 'ti-chevron-up' : 'ti-chevron-down'" style="color: var(--text3)" />
+      </div>
+
+      <div v-if="libresAbierto" style="margin-top: 10px">
+        <p class="note" style="margin-bottom: 10px">Para actividades que no están en los bloques.</p>
+        <div class="grid2">
+          <div class="field ancho"><label>Nombre</label><input v-model="nuevaLibre.nombre" type="text" placeholder="Nombre de la partida" /></div>
           <div class="field">
-            <label>Tipo de malla</label>
-            <select v-model="nuevo.tipo">
-              <option value="">— Seleccionar —</option>
-              <option v-for="t in TIPOS_MALLA" :key="t" :value="t">{{ t }}</option>
+            <label>U.M.</label>
+            <select v-model="nuevaLibre.unidad">
+              <option value="">—</option>
+              <option v-for="u in UNIDADES" :key="u" :value="u">{{ u }}</option>
             </select>
           </div>
-          <div class="field"><label>Ancho (m)</label><input v-model="nuevo.ancho" type="number" step="0.01" inputmode="decimal" /></div>
-          <div class="field"><label>Largo (m)</label><input v-model="nuevo.largo" type="number" step="0.01" inputmode="decimal" /></div>
-        </template>
-
-        <template v-else>
-          <div class="field"><label>N° inicio</label><input v-model="nuevo.n1" type="number" min="1" inputmode="numeric" /></div>
-          <div class="field"><label>N° fin (opcional)</label><input v-model="nuevo.n2" type="number" min="1" inputmode="numeric" /></div>
-          <div v-if="definicion.clave !== 'pull'" class="field">
-            <label>Longitud ({{ definicion.unidad }})</label>
-            <input v-model="nuevo.cantidad" type="number" step="0.01" inputmode="decimal" />
-          </div>
-          <div v-if="definicion.clave === 'perf'" class="field">
-            <label>Tipo de perno</label>
-            <select v-model="nuevo.tipo">
-              <option value="">— Seleccionar —</option>
-              <option v-for="t in TIPOS_PERNO" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
-          <div v-if="definicion.clave === 'perf'" class="field">
-            <label>Diámetro</label>
-            <select v-model="nuevo.diametro">
-              <option value="">— Seleccionar —</option>
-              <option v-for="d in DIAMETROS_PERNO" :key="d" :value="d">{{ d }}</option>
-            </select>
-          </div>
-          <div v-if="definicion.clave === 'cable'" class="field">
-            <label>Tipo de cable</label>
-            <select v-model="nuevo.tipo">
-              <option value="">— Seleccionar —</option>
-              <option v-for="t in TIPOS_CABLE" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
-          <div v-if="definicion.clave === 'perf' || definicion.clave === 'iny'" class="field">
-            <label>Ubicación</label>
-            <select v-model="nuevo.ubicacion">
-              <option value="">— Seleccionar —</option>
-              <option v-for="u in UBICACIONES_ELEMENTO" :key="u" :value="u">{{ u }}</option>
-            </select>
-          </div>
-        </template>
-
-        <div class="field">
-          <label>Hora inicio</label>
-          <select v-model="nuevo.horaInicio">
-            <option value="">—</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
+          <div class="field"><label>Metrado</label><input v-model="nuevaLibre.cantidad" type="number" step="0.01" inputmode="decimal" placeholder="0.00" /></div>
         </div>
-        <div class="field">
-          <label>Hora fin</label>
-          <select v-model="nuevo.horaFin">
-            <option value="">—</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
-        </div>
+        <button type="button" class="add-btn" @click="agregarLibre"><i class="ti ti-plus" /> Agregar partida</button>
+
+        <ul v-if="libres.length" class="lista-filas">
+          <li v-for="m in libres" :key="m.id">
+            <span>{{ m.partidaNombre }} — {{ m.cantidad }} {{ m.unidad }}</span>
+            <button type="button" class="del-btn" aria-label="Quitar" @click="quitarLibre(m.id)"><i class="ti ti-x" /></button>
+          </li>
+        </ul>
       </div>
-
-      <button type="button" class="secondary-btn" style="margin-top: 0.6rem" @click="agregarElementos">
-        Agregar {{ definicion.etiqueta.toLowerCase() }}
-      </button>
-      <p class="note">Si pones N° inicio y N° fin se crea uno por cada número del rango (máximo {{ MAXIMO_RANGO }}).</p>
-
-      <ul v-if="elementosDelTipo.length" class="lista-filas">
-        <li v-for="e in elementosDelTipo" :key="e.id">
-          <span><code>{{ e.codigo || '—' }}</code> — {{ e.cantidad }} {{ e.unidad }}{{ e.ubicacion ? ` · ${e.ubicacion}` : '' }}</span>
-          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarElemento(e.id)">×</button>
-        </li>
-      </ul>
-
-      <div v-if="resumenCriticas.length" class="resumen-criticas">
-        <p v-for="g in resumenCriticas" :key="g.partida">
-          <strong>{{ g.partida }}:</strong> {{ g.cantidad }} {{ g.unidad }} ({{ g.unidades }} un.)
-        </p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">3. Actividades complementarias</div>
-      <div v-for="p in partidasDe('3')" :key="p.codigo" class="partida">
-        <div class="partida-nombre">
-          <span>{{ p.nombre }}</span>
-          <span class="unidad">{{ p.unidad }}</span>
-        </div>
-        <div class="partida-campos">
-          <input
-            :value="metradoDe(p.codigo)?.cantidad ?? ''"
-            type="number"
-            min="0"
-            step="0.01"
-            inputmode="decimal"
-            placeholder="0"
-            @change="fijarMetrado(p, '3', 'cantidad', $event.target.value)"
-          />
-          <select :value="metradoDe(p.codigo)?.horaInicio ?? ''" @change="fijarMetrado(p, '3', 'horaInicio', $event.target.value)">
-            <option value="">Inicio</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
-          <select :value="metradoDe(p.codigo)?.horaFin ?? ''" @change="fijarMetrado(p, '3', 'horaFin', $event.target.value)">
-            <option value="">Fin</option>
-            <option v-for="h in MEDIAS_HORAS" :key="h" :value="h">{{ h }}</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Partidas libres</div>
-      <p class="note">Para lo que se ejecutó y no está en los bloques.</p>
-      <div class="grid2">
-        <div class="field ancho"><label>Nombre</label><input v-model="nuevaLibre.nombre" type="text" /></div>
-        <div class="field">
-          <label>Unidad</label>
-          <select v-model="nuevaLibre.unidad">
-            <option value="">—</option>
-            <option v-for="u in UNIDADES" :key="u" :value="u">{{ u }}</option>
-          </select>
-        </div>
-        <div class="field"><label>Metrado</label><input v-model="nuevaLibre.cantidad" type="number" step="0.01" inputmode="decimal" /></div>
-      </div>
-      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregarLibre">Agregar partida</button>
-
-      <ul v-if="libres.length" class="lista-filas">
-        <li v-for="m in libres" :key="m.id">
-          <span>{{ m.partidaNombre }} — {{ m.cantidad }} {{ m.unidad }}</span>
-          <button type="button" class="del-btn" aria-label="Quitar" @click="quitarLibre(m.id)">×</button>
-        </li>
-      </ul>
     </div>
   </div>
 </template>
 
+<style scoped>
+.blq-card {
+  border-left: 4px solid var(--border-md);
+}
+.blq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.blq-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+.blq-titulo i {
+  font-size: 15px;
+}
+</style>
