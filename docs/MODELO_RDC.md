@@ -25,11 +25,20 @@ abajo, pero conviene tenerlos presentes desde el inicio:
    *quiénes* fueron, solo *cuántos* de cada tipo. Y la maquinaria no tiene
    horómetros, solo cantidad de equipos presentes. Las tablas `rdc_personal` y
    `rdc_maquinaria` esbozadas en el plan (§A.2) no corresponden al dato real. Ver §5.
+   *Resuelto: se conserva el conteo; la maquinaria gana un catálogo con modelo y
+   placa, pero sigue sin horómetro (§8.5 y §8.6).*
 3. **La clave de negocio hoy es `frente + fecha`, y no existe el concepto de turno.**
    El nombre del archivo que se sube a SharePoint es literalmente
    `{frente}_{fecha}.xlsx`. La constraint propuesta en el plan
    (supervisor + frente + fecha + turno) es más fina que la realidad y cambiaría el
    comportamiento actual. Ver §7.1.
+   *Resuelto: sin turno (solo hay turno diurno); unicidad por supervisor + frente +
+   fecha (§8.7).*
+
+Y una decisión estructural que ordena toda la Fase A.2: **el RDC conserva sus
+propias tablas de catálogo** (`rdc_frentes`, `rdc_sectores`, …) en vez de fusionarse
+con las del Sistema. La uniformización de frentes se hará después, como trabajo
+explícito (§8.3).
 
 ---
 
@@ -453,7 +462,11 @@ detalle pequeño pero que define la experiencia diaria y conviene preservar.
 
 ---
 
-## 8. Hallazgos que requieren decisión del usuario
+## 8. Hallazgos y decisiones
+
+Los diez hallazgos se plantearon al usuario al cerrar A.1. Cada uno lleva su
+**resolución** cuando ya fue decidida; las que siguen abiertas están marcadas como
+tales y bloquean la fase indicada.
 
 1. **El contrato con SharePoint es un Excel, no un JSON.** Replicarlo obliga a
    reimplementar `_construirWorkbookRDC()` con SheetJS dentro del módulo Vue. La app
@@ -461,12 +474,19 @@ detalle pequeño pero que define la experiencia diaria y conviene preservar.
    `cdn.sheetjs.com` en su `package.json`. **Riesgo:** dos versiones distintas pueden
    producir archivos distintos. Recomendación: generar el mismo reporte con ambas y
    comparar hoja por hoja antes de dar por buena la Fase C.
+   **Resolución:** aceptado como riesgo manejable. La mitigación es una prueba de
+   equivalencia en la Fase C (mismo reporte generado por el RDC actual y por el
+   módulo nuevo, comparados hoja por hoja y celda por celda antes de enviar nada
+   real). Ver §8.1.
 2. **¿El flujo de Power Automate lee por nombre de encabezado o por posición de
    columna?** De esto depende cuánto margen hay. La hoja RDC cambia de 38 a 43
    columnas según el sector, y tiene dos columnas llamadas `Otro`. Si lee por
    posición, hay que replicar el orden exactamente; si lee por encabezado, las dos
    columnas `Otro` son ambiguas. **No puedo determinarlo leyendo el RDC: hay que
    abrir el flujo en Power Automate.**
+   **🔴 ABIERTO — bloquea la Fase C, no la A.2.** El usuario aportará una captura
+   del flujo cuando la implementación llegue a ese punto. Hasta entonces se asume el
+   caso más estricto: replicar orden y posición de columnas exactamente.
 3. **`frentes` en ambos sistemas.** Pude leer el lado RDC (consulta de solo lectura
    con la misma llave pública que usa la app):
    - RDC: 21 frentes, tabla con `id` **serial**, `nombre`, `sector_id` → `sectores`
@@ -482,22 +502,44 @@ detalle pequeño pero que define la experiencia diaria y conviene preservar.
      talud (`VM-08`, `ZCM09`, `PLATAFORMA SALA ELECTRICA`), y los sectores son zonas
      de mina (`A: 2000 - OPB MINA`, `A: 4000 - SALA ELECTRICA`). Se parecen mucho al
      `frentes` del Sistema, pero ahí `sector` es texto y aquí es una tabla propia.
+   - **Resolución: el RDC conserva sus propias tablas de catálogo.** Se migran como
+     `rdc_frentes`, `rdc_sectores`, `rdc_supervisores`, `rdc_capataces`,
+     `rdc_redline_supervisores` y `rdc_prefijos`, **sin tocar** las tablas del
+     Sistema. La uniformización y sinceración de frentes se hará después, como
+     trabajo propio y explícito. Esto desbloquea A.2 y evita mezclar dos maestros
+     que hoy no están alineados.
 4. **`PARTIDAS` no cubre todos los frentes.** Tiene 18 claves; la tabla `frentes`
    tiene 21. Sin partidas EDT quedan `Frente A`, `TAJO F4N - LADO ESTE` y
-   `TAJO FASE 2`. ¿Es un pendiente de carga o esos frentes no llevan EDT?
+   `TAJO FASE 2`.
+   **Resolución: es adrede.** Esos frentes todavía no tienen numeración EDT
+   asignada. El modelo debe tolerar frentes sin partidas EDT como estado válido, no
+   tratarlo como dato faltante ni bloquear el reporte por eso.
 5. **El personal es agregado, no nominal** (§5). La tabla `rdc_personal` del plan
    (`capataz_id, categoría, cantidad`) debe redefinirse: o cinco columnas en la
-   cabecera, o una tabla de conteos por categoría sin FK a personas. ¿Quieres
-   aprovechar la migración para pasar a personal nominal, o se conserva el conteo?
-   (Conservarlo es lo que no rompe el Excel.)
+   cabecera, o una tabla de conteos por categoría sin FK a personas.
+   **Resolución: se conserva el conteo por categoría.** El personal nominal se
+   implementará mucho después, como trabajo aparte. El esquema modela conteos, sin
+   FK a personas.
 6. **La maquinaria no tiene horómetros** (§2.1). La tabla `rdc_maquinaria` del plan
-   pide horómetro inicial/final: ese dato **hoy no se captura**. ¿Se agrega como
-   funcionalidad nueva, o el modelo refleja lo que existe (equipo + cantidad)?
+   pide horómetro inicial/final: ese dato **hoy no se captura**.
+   **Resolución: sin horómetro** — el reporte sigue registrando equipo + cantidad.
+   Pero **sí se agrega un catálogo propio de maquinaria** con modelo y placa, que
+   hoy no existe en ninguna parte (los 10 equipos actuales son solo nombres en una
+   constante de `config.js`). Alcance para A.2: tabla `rdc_maquinarias`
+   (nombre/descripción, modelo, placa, categoría perforación|soporte, estado), y el
+   detalle del reporte pasa a referenciarla por FK en vez de guardar el nombre como
+   texto. Los equipos "no listados" que hoy se escriben a mano siguen siendo
+   posibles como texto libre, para no perder esa vía de escape en campo.
 7. **No existe el concepto de turno** (§7.1). La constraint de unicidad propuesta
    (supervisor + frente + fecha + turno) no se puede construir con el dato actual.
-   Opciones: (a) unicidad por frente + fecha, igual que SharePoint hoy; (b) agregar
-   turno como campo nuevo. Recomiendo (a) para no cambiar la operación en la misma
-   entrega en que se cambia la app.
+   **Resolución: sin turno.** La operación es solo turno diurno. La constraint de
+   unicidad queda en **supervisor + frente + fecha**.
+   ⚠️ Consecuencia a tener presente: esa clave admite dos reportes del mismo frente
+   y fecha si los firman supervisores distintos, pero ambos generarían **el mismo
+   nombre de archivo** `{frente}_{fecha}.xlsx` y el segundo pisaría al primero en
+   SharePoint. Mientras el nombre de archivo no incluya al supervisor, la base es
+   más permisiva que el entregable. Se resuelve en la Fase C al definir el nombre
+   de archivo; no bloquea A.2.
 8. **Sector "Sala Eléctrica" está acoplado por string exacto** (`"A: 4000 - SALA
    ELECTRICA"`). Renombrar ese sector en el catálogo rompe silenciosamente el bloque
    de personal indirecto. En el modelo nuevo debería ser una bandera del sector
@@ -507,6 +549,27 @@ detalle pequeño pero que define la experiencia diaria y conviene preservar.
 10. **La telemetría existe y viaja en el archivo.** ¿Se conserva en el módulo nuevo?
     Hoy mide el tiempo por pestaña; en Vue sería más fácil y más completo, pero es
     dato de comportamiento de personas y conviene decidirlo explícitamente.
+    **🟡 PENDIENTE, no bloqueante.** Se decide antes de cerrar la Fase C. Por
+    defecto se replica igual que hoy (hoja oculta), para no alterar el archivo.
+
+### 8.1 Prueba de equivalencia del Excel (obligatoria antes de cerrar la Fase C)
+
+Como el contrato con SharePoint es el archivo y no un JSON, la única forma seria de
+verificar la migración es comparar salidas:
+
+1. Llenar un reporte de prueba **completo** en el RDC actual (con Sala Eléctrica,
+   con stand by, con restricción de acceso, con elementos de los cinco
+   sub-formularios críticos y con equipos "no listados") y descargar su Excel.
+2. Llenar exactamente el mismo reporte en el módulo nuevo y descargar el suyo.
+3. Comparar **hoja por hoja**: nombres y orden de hojas, encabezados, número de
+   columnas, orden de filas, tipos de celda (texto vs. número) y formato de fechas
+   y horas.
+4. Recién entonces enviar uno de prueba al flujo real y confirmar que el entregable
+   en SharePoint sale idéntico.
+
+Casos límite que la prueba debe incluir, porque son los que cambian la forma del
+archivo: sector Sala Eléctrica (+5 columnas), reporte sin ningún stand by, reporte
+sin elementos críticos, y un reporte corregido (sufijo `(C)`).
 
 ---
 
@@ -517,4 +580,6 @@ detalle pequeño pero que define la experiencia diaria y conviene preservar.
 - El módulo `vales.js` del RDC: el plan (§2) lo descarta explícitamente.
 - Detalle interno de `fotos.js` y del visor de sketches: Fase D. Solo se documentó
   la forma de sus payloads (§3.4) para no perderla.
-- Contenido de la tabla `frentes` del Sistema: bloqueado por RLS (§8.3).
+- Contenido de la tabla `frentes` del Sistema: quedó bloqueado por RLS, pero dejó de
+  ser necesario para avanzar — el RDC mantiene su propio catálogo y la comparación
+  se retoma cuando se haga la uniformización (§8.3).
