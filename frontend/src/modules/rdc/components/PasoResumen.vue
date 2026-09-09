@@ -430,10 +430,7 @@ function volverALista() {
   color: var(--text3);
   margin-top: 2px;
 }
-.wsp-textarea {
-  min-height: 240px;
-  font-family: ui-monospace, Menlo, monospace;
-  font-size: 12px;
-  background: var(--surface2);
-}
+/* El tamaño real vive en complementos.css: una regla global del tema
+   (".field textarea{min-height:72px}") tiene más especificidad que una clase
+   sola definida acá, y se lo comía en silencio. */
 </style>

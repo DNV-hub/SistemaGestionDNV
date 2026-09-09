@@ -310,6 +310,17 @@
   font-weight: 400;
 }
 
+/* Textarea del reporte de WhatsApp. Necesita ganarle en especificidad a la
+   regla genérica ".field textarea" del tema (min-height:72px, font de la app,
+   fondo blanco) — por eso el selector repite ".field textarea" en vez de
+   apoyarse solo en la clase. */
+.rdc-app .field textarea.wsp-textarea {
+  min-height: 240px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  background: var(--surface2);
+}
+
 /* Fila de programación del día siguiente */
 .rdc-app .fila-prog {
   display: grid;

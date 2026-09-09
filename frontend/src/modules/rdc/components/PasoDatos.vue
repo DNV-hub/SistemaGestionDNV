@@ -92,14 +92,6 @@ function agregarOtro() {
           </select>
         </div>
       </div>
-      <div class="field">
-        <label for="f-supervisor">Supervisor responsable</label>
-        <select id="f-supervisor" v-model="reporte.supervisorId" @change="guardar">
-          <option :value="null">— Seleccionar —</option>
-          <option v-for="s in rdc.catalogos?.supervisores ?? []" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-        </select>
-        <p class="note">Quién responde por el frente ese día. Quién llenó el reporte sale de tu sesión y no se puede cambiar.</p>
-      </div>
     </div>
 
     <div class="card">
