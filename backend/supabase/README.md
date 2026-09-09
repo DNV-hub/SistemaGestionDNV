@@ -74,3 +74,37 @@ reales hasta que se ejecute contra un proyecto.
 - `backend/supabase/seed/` — datos de prueba (materiales, frentes, usuarios
   de ejemplo) para desarrollo. No se generan todavía.
 - Importación/exportación de Excel — diferido según spec §17.
+
+## Módulo RDC (fusión del Reporte Diario de Campo)
+
+Migraciones que incorporan el RDC como módulo del Sistema. El modelo del que
+salen está documentado en [`docs/MODELO_RDC.md`](../../docs/MODELO_RDC.md).
+
+| Archivo | Contenido |
+|---|---|
+| `20260909100000_rdc_catalogos.sql` | `rdc_sectores`, `rdc_frentes`, `rdc_supervisores`, `rdc_capataces`, `rdc_redline_supervisores`, `rdc_prefijos`, `rdc_maquinarias`, `rdc_partidas_estandar` (+ seed de las 15 partidas fijas), `rdc_partidas_edt`, `rdc_pernos_biblioteca` |
+| `20260909100100_rdc_reportes.sql` | `rdc_reportes` + 8 tablas de detalle (personal, maquinaria, hitos, metrados, elementos, bitácora, stand by, programación) |
+| `20260909100200_rdc_permisos_rls.sql` | 6 permisos `rdc.*`, su asignación por rol, helpers de alcance, RLS de las 19 tablas y auditoría de la cabecera |
+
+Los catálogos del RDC viven en tablas propias con prefijo `rdc_` y **no** se
+fusionan todavía con `frentes` del Sistema: es una decisión explícita, la
+uniformización de ambos maestros se hará después.
+
+### Carga inicial de los catálogos
+
+Los datos vienen de dos lados: el Supabase del RDC en producción (solo se lee)
+y su `js/config.js` (partidas EDT y biblioteca de pernos). El script es
+idempotente, así que puede correrse de nuevo para re-sincronizar mientras el
+RDC viejo siga en uso:
+
+```bash
+cd backend/scripts
+npm install
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node migrar-catalogos-rdc.mjs           # simulacro
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node migrar-catalogos-rdc.mjs --apply   # aplica
+```
+
+Necesita una copia del proyecto RDC en `_referencia-rdc/` (o `--config=<ruta>`
+apuntando a su `config.js`). Trae 809 filas: 10 sectores, 21 frentes, 18
+supervisores, 32 capataces, 6 supervisores de redline, 30 prefijos, 10 tipos de
+maquinaria, 343 partidas EDT y 339 pernos de biblioteca.

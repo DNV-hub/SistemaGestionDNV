@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "smoke-test": "node smoke-test.mjs"
+    "smoke-test": "node smoke-test.mjs",
+    "migrar-catalogos-rdc": "node migrar-catalogos-rdc.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0"

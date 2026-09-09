@@ -1,9 +1,9 @@
-# Modelo de datos del RDC — ingeniería inversa (Fase A.1)
+# Modelo de datos del RDC — ingeniería inversa y esquema (Fase A)
 
-Estado: **entregable para revisión**. Este documento describe cómo funciona HOY la
-aplicación RDC en producción. No propone tablas todavía (eso es A.2): documenta lo
-que existe, para que el diseño del esquema se derive del código real y no de
-suposiciones (restricción 7 del plan).
+Estado: **entregable para revisión**. Las secciones 1 a 9 describen cómo funciona
+HOY la aplicación RDC en producción (Fase A.1), para que el diseño del esquema se
+derive del código real y no de suposiciones (restricción 7 del plan). La sección 10
+resume el esquema que salió de ahí (Fases A.2 y A.3), ya escrito como migraciones.
 
 Fuente: copia de solo lectura en `_referencia-rdc/` (el original en OneDrive no se
 tocó). Archivos leídos: `js/rdc.js` (3316 líneas), `js/config.js` (449),
@@ -583,3 +583,91 @@ sin elementos críticos, y un reporte corregido (sufijo `(C)`).
 - Contenido de la tabla `frentes` del Sistema: quedó bloqueado por RLS, pero dejó de
   ser necesario para avanzar — el RDC mantiene su propio catálogo y la comparación
   se retoma cuando se haga la uniformización (§8.3).
+
+---
+
+## 10. Esquema resultante (Fases A.2 y A.3)
+
+Traducción del modelo de arriba a tablas, ya escrita como migraciones en
+`backend/supabase/migrations/`. Diecinueve tablas, todas con prefijo `rdc_`.
+
+### 10.1 Catálogos (`20260909100000_rdc_catalogos.sql`)
+
+| Tabla | Origen | Filas |
+|---|---|---|
+| `rdc_sectores` | tabla `sectores` del RDC | 10 |
+| `rdc_frentes` | tabla `frentes` del RDC | 21 |
+| `rdc_supervisores` | tabla `supervisores` + `usuario_id` nuevo | 18 |
+| `rdc_capataces` | tabla `capataces` del RDC | 32 |
+| `rdc_redline_supervisores` | tabla `redline_supervisores` del RDC | 6 |
+| `rdc_prefijos` | tabla `prefijos`, con `frente` normalizado a FK | 30 |
+| `rdc_maquinarias` | **nueva** — tipo + modelo + placa | 10 tipos |
+| `rdc_partidas_estandar` | constantes de bloques 1 y 3, con código estable | 15 (seed) |
+| `rdc_partidas_edt` | constante `PARTIDAS` de config.js | 343 |
+| `rdc_pernos_biblioteca` | constante `BIBLIOTECA_PERNOS` de config.js | 339 |
+
+### 10.2 Reportes (`20260909100100_rdc_reportes.sql`)
+
+`rdc_reportes` (cabecera) más ocho tablas de detalle, todas con
+`on delete cascade`: `rdc_reporte_personal`, `rdc_reporte_maquinaria`,
+`rdc_reporte_hitos`, `rdc_reporte_metrados`, `rdc_reporte_elementos`,
+`rdc_reporte_bitacora`, `rdc_reporte_standby` y `rdc_reporte_programacion`.
+
+Lo que impone el trabajo sin señal:
+
+- **Las PK no tienen `default gen_random_uuid()`.** El UUID lo genera el
+  cliente antes de que el reporte exista en el servidor, así reintentar un
+  envío interrumpido es un upsert sobre la misma fila y no crea un duplicado.
+  Sin default, un cliente que se olvide falla ruidosamente en vez de recibir
+  un id nuevo del servidor, que es exactamente el bug que rompe la
+  idempotencia.
+- **`creado_en_dispositivo` ≠ `created_at`.** El primero es cuándo se llenó el
+  reporte (hora local del celular); el segundo, cuándo llegó al servidor.
+  Pueden separarse por días.
+- **`estado_sharepoint`** (pendiente/enviado/error) con su contador de
+  intentos y su mensaje de error, para reintentar solo lo que falló.
+
+Lo que se **deriva** y por lo tanto no se guarda: los totales del bloque 2
+(salen de `rdc_reporte_elementos`), los minutos de stand by, el tiempo
+efectivo de jornada, y las entradas de bitácora autogeneradas desde metrados.
+Guardarlas sería tener dos fuentes de verdad que pueden discrepar.
+
+### 10.3 Permisos y RLS (`20260909100200_rdc_permisos_rls.sql`)
+
+Seis permisos nuevos: `rdc.crear`, `rdc.editar_propio`, `rdc.ver_propios`,
+`rdc.ver_todos`, `rdc.exportar` y `rdc.catalogos_gestionar`.
+
+| Rol | Permisos RDC |
+|---|---|
+| Administrador | los seis |
+| Supervisor | crear, editar_propio, ver_propios, exportar |
+| Planeamiento | ver_todos, exportar |
+| Consulta | ver_todos, exportar |
+| Almacén | ninguno — un almacenero no llena reportes de campo |
+
+Reglas que quedan garantizadas en la base de datos, no solo en la interfaz:
+
+- **La autoría no se puede falsificar**: el INSERT exige
+  `creado_por = auth.uid()`. Esto cierra el agujero actual, donde cualquiera
+  emite un reporte a nombre de cualquier supervisor eligiéndolo de una lista.
+- **Un supervisor solo ve y edita lo suyo**: los reportes que llenó o de los
+  que es responsable.
+- **Editar es posible mientras el reporte sigue abierto**: en borrador
+  siempre, y ya finalizado solo el mismo día — que es el flujo "corregir y
+  reenviar" que el RDC ya tiene.
+- **Los reportes no se borran** (no hay política de DELETE sobre la
+  cabecera), igual que kardex, vales y auditoría en el resto del Sistema.
+
+**Por qué no se usa `current_frente_id()`:** ese helper devuelve
+`usuarios.frente_id`, que apunta a la tabla `frentes` del Sistema, mientras
+que los reportes apuntan a `rdc_frentes` — otro maestro. Comparar ambos ids
+daría siempre falso. Mientras los frentes no se unifiquen, el alcance de un
+supervisor se resuelve por su identidad (vía `rdc_supervisores.usuario_id`),
+que además es más preciso que "todo su frente".
+
+### 10.4 Carga de datos (`backend/scripts/migrar-catalogos-rdc.mjs`)
+
+Trae las 809 filas de catálogo desde los dos orígenes (el Supabase del RDC en
+producción, solo lectura, y su `config.js`). Es idempotente —sincroniza por
+clave natural— así que sirve también para re-sincronizar mientras el RDC viejo
+siga en uso. Por defecto hace un simulacro; escribe solo con `--apply`.
