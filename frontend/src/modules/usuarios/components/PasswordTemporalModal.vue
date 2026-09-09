@@ -2,6 +2,7 @@
 defineProps({
   usuario: { type: Object, required: true },
   passwordTemporal: { type: String, required: true },
+  titulo: { type: String, default: 'Usuario creado' },
 })
 
 defineEmits(['cerrar'])
@@ -10,10 +11,10 @@ defineEmits(['cerrar'])
 <template>
   <div class="overlay" @click.self="$emit('cerrar')">
     <div class="modal">
-      <h2>Usuario creado</h2>
+      <h2>{{ titulo }}</h2>
       <p class="texto">
-        Comparte esta contraseña temporal con <strong>{{ usuario.nombre }}</strong> ({{ usuario.email }}) por un
-        canal seguro. No se va a poder volver a ver — si se pierde, tendrás que restablecerla desde Supabase.
+        Comparte esta contraseña con <strong>{{ usuario.nombre }}</strong> ({{ usuario.email }}) por un canal
+        seguro. No se va a poder volver a ver — si se pierde, hay que restablecerla de nuevo.
       </p>
       <div class="password">{{ passwordTemporal }}</div>
       <button type="button" @click="$emit('cerrar')">Listo</button>
@@ -37,8 +38,8 @@ defineEmits(['cerrar'])
   width: 360px;
   max-width: calc(100vw - 2rem);
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -48,7 +49,7 @@ h2 {
 .texto {
   margin: 0;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 .password {
   font-family: 'Courier New', monospace;
@@ -57,17 +58,17 @@ h2 {
   letter-spacing: 0.05em;
   text-align: center;
   padding: 0.75rem;
-  background: #f3f4f6;
-  border-radius: 6px;
-  color: #111827;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
+  color: var(--color-text);
   user-select: all;
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }

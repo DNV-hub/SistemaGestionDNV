@@ -47,20 +47,26 @@ Deno.serve(async (req) => {
   if (errorPermiso) return respuesta({ error: 'No se pudo verificar el permiso.' }, 500)
   if (!tienePermiso) return respuesta({ error: 'No tiene permiso para crear usuarios.' }, 403)
 
-  let body: { email?: string; nombre?: string; rol_id?: string; frente_id?: string | null }
+  let body: { email?: string; nombre?: string; rol_id?: string; frente_id?: string | null; password?: string }
   try {
     body = await req.json()
   } catch {
     return respuesta({ error: 'Cuerpo de la solicitud inválido.' }, 400)
   }
 
-  const { email, nombre, rol_id, frente_id } = body
+  const { email, nombre, rol_id, frente_id, password } = body
   if (!email || !nombre || !rol_id) {
     return respuesta({ error: 'email, nombre y rol_id son obligatorios.' }, 400)
   }
+  if (password && password.length < 8) {
+    return respuesta({ error: 'La contraseña debe tener al menos 8 caracteres.' }, 400)
+  }
 
   const clienteAdmin = createClient(supabaseUrl, serviceRoleKey)
-  const passwordTemporal = generarPasswordTemporal()
+  // Si el admin no escribió una contraseña propia, se genera una temporal
+  // (igual que antes) que hay que compartirle a la persona por un canal
+  // seguro; si la escribió, esa es la que queda.
+  const passwordTemporal = password || generarPasswordTemporal()
 
   const { data: nuevoAuth, error: errorAuth } = await clienteAdmin.auth.admin.createUser({
     email,

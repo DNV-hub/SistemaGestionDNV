@@ -4,6 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useProcuraStore } from '../store/procura'
 import { useAuthStore } from '../../../store/auth'
 import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
+import ImportarMetradoModal from '../components/ImportarMetradoModal.vue'
+import EditarMetradoModal from '../components/EditarMetradoModal.vue'
+import BotonIcono from '../../../components/BotonIcono.vue'
+
+const ESTRUCTURA_IMPORT_MASIVO =
+  'Estructura del Excel: columnas CODIGO, CANTIDAD CONTRACTUAL y CANTIDAD PROCURA (OBSERVACION es opcional). El código debe existir ya en el catálogo.'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +27,44 @@ const aviso = ref('')
 const cuerpoPlanilla = ref(null)
 const nuevaFila = reactive({ material_id: '', cantidad_contractual: '', cantidad_procura: '' })
 const guardandoNueva = ref(false)
+const mostrarModalImportar = ref(false)
+const filaEnEdicion = ref(null)
+
+async function guardarEdicion(payload) {
+  aviso.value = ''
+  await procura.guardarFila({
+    frente_id: filaEnEdicion.value.frente_id,
+    material_id: filaEnEdicion.value.material_id,
+    unidad: filaEnEdicion.value.unidad,
+    responsable_id: auth.session.user.id,
+    ...payload,
+  })
+  aviso.value = `"${filaEnEdicion.value.materiales?.codigo}" actualizado.`
+  filaEnEdicion.value = null
+}
+
+async function eliminarFila(fila) {
+  if (!confirm(`¿Quitar "${fila.materiales?.codigo} — ${fila.materiales?.descripcion}" del metrado de este frente?`))
+    return
+  aviso.value = ''
+  await procura.eliminarFila(fila, auth.session.user.id)
+  aviso.value = `"${fila.materiales?.codigo}" se quitó del metrado.`
+}
+
+async function importarMetrado(filasAImportar) {
+  aviso.value = ''
+  const payloads = filasAImportar.map((f) => ({
+    frente_id: frenteId.value,
+    material_id: f.material_id,
+    unidad: f.unidad,
+    cantidad_contractual: f.cantidad_contractual,
+    cantidad_procura: f.cantidad_procura,
+    responsable_id: auth.session.user.id,
+    observaciones: f.observacion,
+  }))
+  await procura.importarMetradoMasivo(payloads)
+  aviso.value = `Se importaron ${payloads.length} materiales al metrado.`
+}
 
 function cargar() {
   procura.cargarDetalleFrente(frenteId.value)
@@ -156,14 +200,25 @@ function claseConsumo(pct) {
 
     <template v-else-if="frente">
       <header class="cabecera">
-        <h1>{{ frente.codigo }} — {{ frente.nombre }}</h1>
+        <h1>{{ frente.codigo ? frente.codigo + ' — ' : '' }}{{ frente.nombre }}</h1>
         <p class="subtitulo">{{ frente.area ?? 'Sin área asignada' }}</p>
       </header>
 
       <p v-if="aviso" class="aviso">{{ aviso }}</p>
 
       <section>
-        <h2>Planilla de metrado</h2>
+        <div class="seccion-cabecera">
+          <h2>Planilla de metrado</h2>
+          <button
+            v-if="puedeEditar"
+            type="button"
+            class="secundario"
+            :title="ESTRUCTURA_IMPORT_MASIVO"
+            @click="mostrarModalImportar = true"
+          >
+            Importar metrado masivo
+          </button>
+        </div>
         <p class="nota-ayuda">
           Navega con <span class="tecla">↑</span><span class="tecla">↓</span><span class="tecla">←</span
           ><span class="tecla">→</span> o <span class="tecla">Tab</span> · <span class="tecla">Enter</span> baja de fila
@@ -177,16 +232,19 @@ function claseConsumo(pct) {
                 <th class="col-num">#</th>
                 <th>Código</th>
                 <th>Material</th>
+                <th>Unidad</th>
                 <th>Contractual</th>
                 <th>Procura</th>
                 <th class="col-total">Total previsto</th>
+                <th v-if="puedeEditar"></th>
               </tr>
             </thead>
             <tbody ref="cuerpoPlanilla" @keydown="onTeclaCelda">
               <tr v-for="(fila, i) in filas" :key="fila.id">
                 <td class="col-num">{{ i + 1 }}</td>
                 <td class="col-codigo">{{ fila.materiales?.codigo }}</td>
-                <td class="col-descripcion">{{ fila.materiales?.descripcion }}<span class="unidad">{{ fila.unidad }}</span></td>
+                <td class="col-descripcion">{{ fila.materiales?.descripcion }}</td>
+                <td class="col-unidad">{{ fila.unidad }}</td>
                 <td class="celda-editable">
                   <input
                     type="number"
@@ -213,10 +271,14 @@ function claseConsumo(pct) {
                     @change="guardarCelda(fila, 'cantidad_procura', $event.target.value)"
                   />
                 </td>
-                <td class="col-total">{{ total(fila) }} {{ fila.unidad }}</td>
+                <td class="col-total">{{ total(fila) }}</td>
+                <td v-if="puedeEditar" class="acciones-fila">
+                  <BotonIcono variante="editar" titulo="Editar" @click="filaEnEdicion = fila" />
+                  <BotonIcono variante="eliminar" titulo="Quitar del metrado" @click="eliminarFila(fila)" />
+                </td>
               </tr>
               <tr v-if="!filas.length">
-                <td colspan="6" class="vacio">Este frente todavía no tiene materiales previstos.</td>
+                <td colspan="8" class="vacio">Este frente todavía no tiene materiales previstos.</td>
               </tr>
             </tbody>
           </table>
@@ -239,7 +301,9 @@ function claseConsumo(pct) {
             <thead>
               <tr>
                 <th>Fecha</th>
+                <th>Código</th>
                 <th>Material</th>
+                <th>Unidad</th>
                 <th>Versión</th>
                 <th>Contractual</th>
                 <th>Procura</th>
@@ -251,7 +315,9 @@ function claseConsumo(pct) {
             <tbody>
               <tr v-for="h in historialConDelta" :key="h.id">
                 <td>{{ new Date(h.created_at).toLocaleString() }}</td>
-                <td class="col-descripcion">{{ h.materiales?.codigo }} — {{ h.materiales?.descripcion }}</td>
+                <td class="col-codigo">{{ h.materiales?.codigo }}</td>
+                <td class="col-descripcion">{{ h.materiales?.descripcion }}</td>
+                <td class="col-unidad">{{ h.unidad }}</td>
                 <td>v{{ h.version }}</td>
                 <td>{{ h.cantidad_contractual }}</td>
                 <td>{{ h.cantidad_procura }}</td>
@@ -261,11 +327,11 @@ function claseConsumo(pct) {
                     {{ h.deltaProcura > 0 ? '+' : '' }}{{ h.deltaProcura }}
                   </span>
                 </td>
-                <td class="col-total">{{ total(h) }} {{ h.unidad }}</td>
+                <td class="col-total">{{ total(h) }}</td>
                 <td>{{ h.usuarios?.nombre ?? '—' }}</td>
               </tr>
               <tr v-if="!historialConDelta.length">
-                <td colspan="8" class="vacio">Todavía no hay modificaciones registradas.</td>
+                <td colspan="10" class="vacio">Todavía no hay modificaciones registradas.</td>
               </tr>
             </tbody>
           </table>
@@ -278,7 +344,9 @@ function claseConsumo(pct) {
           <table>
             <thead>
               <tr>
+                <th>Código</th>
                 <th>Material</th>
+                <th>Unidad</th>
                 <th>Previsto</th>
                 <th>Reservado</th>
                 <th>Solicitado</th>
@@ -290,11 +358,10 @@ function claseConsumo(pct) {
             </thead>
             <tbody>
               <tr v-for="c in procura.comparacion" :key="c.material_id">
-                <td class="col-descripcion">
-                  {{ procura.materialPorId(c.material_id)?.codigo ?? '—' }} —
-                  {{ procura.materialPorId(c.material_id)?.descripcion ?? '—' }}
-                </td>
-                <td>{{ c.cantidad_prevista }} {{ c.unidad }}</td>
+                <td class="col-codigo">{{ procura.materialPorId(c.material_id)?.codigo ?? '—' }}</td>
+                <td class="col-descripcion">{{ procura.materialPorId(c.material_id)?.descripcion ?? '—' }}</td>
+                <td class="col-unidad">{{ c.unidad }}</td>
+                <td>{{ c.cantidad_prevista }}</td>
                 <td>{{ c.cantidad_reservada }}</td>
                 <td>{{ c.cantidad_solicitada }}</td>
                 <td>{{ c.cantidad_entregada }}</td>
@@ -305,13 +372,27 @@ function claseConsumo(pct) {
                 <td>{{ c.desviacion }}</td>
               </tr>
               <tr v-if="!procura.comparacion.length">
-                <td colspan="8" class="vacio">No hay datos de consumo para este frente.</td>
+                <td colspan="10" class="vacio">No hay datos de consumo para este frente.</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
     </template>
+
+    <ImportarMetradoModal
+      v-if="mostrarModalImportar"
+      :materiales="procura.materialesActivos"
+      @importar="importarMetrado"
+      @cerrar="mostrarModalImportar = false"
+    />
+
+    <EditarMetradoModal
+      v-if="filaEnEdicion"
+      :fila="filaEnEdicion"
+      @guardar="guardarEdicion"
+      @cerrar="filaEnEdicion = null"
+    />
   </div>
 </template>
 
@@ -322,7 +403,7 @@ function claseConsumo(pct) {
 .volver {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-weight: 600;
   padding: 0;
   cursor: pointer;
@@ -334,41 +415,50 @@ function claseConsumo(pct) {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 .subtitulo {
   margin: 0.2rem 0 0;
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 h2 {
   font-size: 1rem;
   margin: 0 0 0.5rem;
-  color: #111827;
+  color: var(--color-text);
 }
 section {
   margin-top: 2rem;
 }
+.seccion-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.seccion-cabecera h2 {
+  margin: 0;
+}
 .nota-ayuda {
   font-size: 0.78rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin: 0 0 0.6rem;
 }
 .tecla {
   font-family: ui-monospace, monospace;
   font-size: 0.7rem;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
   border-bottom-width: 2px;
   padding: 0.05rem 0.4rem;
-  border-radius: 4px;
-  color: #374151;
+  border-radius: var(--radius-control);
+  color: var(--color-text);
 }
 .marco-tabla {
   overflow-x: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
 }
 table {
   width: 100%;
@@ -378,24 +468,35 @@ table {
 th,
 td {
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.86rem;
   text-align: center;
   white-space: nowrap;
 }
 thead th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 td.col-descripcion {
   white-space: normal;
   min-width: 200px;
+  text-align: left;
 }
-.unidad {
-  color: #6b7280;
-  font-size: 0.78rem;
-  margin-left: 0.35rem;
+td.col-codigo {
+  font-weight: 600;
+}
+td.col-unidad {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}
+.acciones-fila {
+  display: flex;
+  gap: 0.15rem;
+  justify-content: center;
 }
 td.celda-editable {
   padding: 0;
@@ -410,19 +511,19 @@ td.celda-editable input {
   font: inherit;
   font-variant-numeric: tabular-nums;
   text-align: center;
-  color: #111827;
+  color: var(--color-text);
 }
 td.celda-editable input:disabled {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 td.celda-editable input:focus {
-  outline: 2px solid #1f2937;
+  outline: 2px solid var(--color-primary);
   outline-offset: -2px;
-  background: #f3f4f6;
+  background: var(--color-surface-2);
 }
 td.col-total {
-  background: #eef2f2;
-  color: #0f5132;
+  background: var(--color-success-soft);
+  color: var(--color-success);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -440,16 +541,16 @@ td.col-total {
 .agregar-fila input {
   width: 140px;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   text-align: center;
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -457,43 +558,48 @@ button:disabled {
   opacity: 0.6;
   cursor: default;
 }
+.secundario {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
 .badge-pct {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
 }
 .badge-pct.normal {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge-pct.riesgo {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 .badge-pct.sobre {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .delta-pos {
-  color: #166534;
+  color: var(--color-success);
   font-weight: 600;
 }
 .delta-neg {
-  color: #991b1b;
+  color: var(--color-danger);
   font-weight: 600;
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
   white-space: normal;
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>

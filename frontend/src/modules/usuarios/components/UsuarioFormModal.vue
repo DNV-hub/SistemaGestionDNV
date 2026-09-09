@@ -17,6 +17,7 @@ function estadoInicial() {
     rol_id: props.usuario?.rol_id ?? props.roles[0]?.id ?? '',
     frente_id: props.usuario?.frente_id ?? '',
     estado: props.usuario?.estado ?? 'activo',
+    password: '',
   }
 }
 
@@ -39,6 +40,10 @@ async function onSubmit() {
     error.value = 'El correo es obligatorio.'
     return
   }
+  if (!props.usuario && form.password && form.password.length < 8) {
+    error.value = 'La contraseña debe tener al menos 8 caracteres.'
+    return
+  }
 
   guardando.value = true
   try {
@@ -55,6 +60,7 @@ async function onSubmit() {
         nombre: form.nombre.trim(),
         rol_id: form.rol_id,
         frente_id: form.frente_id || null,
+        password: form.password.trim() || undefined,
       })
     }
   } catch (e) {
@@ -76,6 +82,11 @@ async function onSubmit() {
         <input v-model="form.email" type="email" required :disabled="!!usuario" />
       </label>
 
+      <label v-if="!usuario">
+        Contraseña inicial (opcional)
+        <input v-model="form.password" type="text" placeholder="Dejar en blanco para generar una automática" minlength="8" />
+      </label>
+
       <label>
         Nombre
         <input v-model="form.nombre" type="text" required />
@@ -92,7 +103,7 @@ async function onSubmit() {
         Frente asignado (opcional, para Supervisores)
         <select v-model="form.frente_id">
           <option value="">Ninguno</option>
-          <option v-for="f in frentes" :key="f.id" :value="f.id">{{ f.codigo }} — {{ f.nombre }}</option>
+          <option v-for="f in frentes" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
         </select>
       </label>
 
@@ -134,8 +145,8 @@ async function onSubmit() {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -147,18 +158,18 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 input,
 select {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 input:disabled {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .acciones {
   display: flex;
@@ -169,9 +180,9 @@ input:disabled {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -181,11 +192,11 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }

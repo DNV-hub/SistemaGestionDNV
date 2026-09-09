@@ -18,6 +18,21 @@ export async function listarKardex(filtros = {}) {
   return data
 }
 
+/** Igual que listarKardex pero sin el tope de 300 — solo para exportar. */
+export async function listarKardexParaExportar(filtros = {}) {
+  let query = supabase.from('kardex').select(SELECT_KARDEX).order('fecha_hora', { ascending: false })
+
+  if (filtros.materialId) query = query.eq('material_id', filtros.materialId)
+  if (filtros.almacenId) query = query.eq('almacen_id', filtros.almacenId)
+  if (filtros.tipoMovimiento) query = query.eq('tipo_movimiento', filtros.tipoMovimiento)
+  if (filtros.desde) query = query.gte('fecha_hora', filtros.desde)
+  if (filtros.hasta) query = query.lte('fecha_hora', `${filtros.hasta}T23:59:59`)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')

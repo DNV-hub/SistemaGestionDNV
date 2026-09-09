@@ -78,8 +78,8 @@ async function onSubmit() {
   width: 380px;
   max-width: calc(100vw - 2rem);
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -89,31 +89,31 @@ h2 {
 .resumen {
   margin: 0;
   font-size: 0.85rem;
-  color: #374151;
-  background: #f9fafb;
+  color: var(--color-text);
+  background: var(--color-surface-2);
   padding: 0.5rem 0.65rem;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   line-height: 1.5;
 }
 .aviso-texto {
   margin: 0;
   font-size: 0.8rem;
-  color: #92400e;
-  background: #fffbeb;
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
   padding: 0.5rem 0.65rem;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 textarea {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 .acciones {
@@ -125,9 +125,9 @@ textarea {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -137,11 +137,11 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }

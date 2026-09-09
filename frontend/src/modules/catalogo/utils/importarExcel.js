@@ -10,6 +10,8 @@ const ALIAS_CAMPOS = {
   'UNIDAD ALMACEN': 'unidad',
   UNIDAD: 'unidad',
   'UNIDAD EDP': 'unidadEdp',
+  CATEGORIA: 'categoriaNombre',
+  'STOCK MINIMO': 'stockMinimo',
 }
 
 function normalizarEncabezado(texto) {
@@ -50,13 +52,16 @@ export async function leerArchivoExcel(file) {
 /**
  * Procesa filas crudas: valida obligatorios, resuelve/crea sufijos para
  * códigos repetidos dentro del archivo, detecta choques con códigos ya
- * existentes en el catálogo y resuelve el nombre EDP contra el catálogo de
- * nombres EDP ya cargado (o marca cuáles hay que crear).
+ * existentes en el catálogo y resuelve el nombre EDP y la categoría contra
+ * lo ya cargado (o marca cuáles hay que crear) — mismo criterio para ambos.
  */
-export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExistentes }) {
+export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExistentes, categoriasExistentes = [] }) {
   const codigosExistentesSet = new Set([...codigosExistentes].map((c) => c.toLowerCase()))
   const nombresEdpPorNombre = new Map(
     nombresEdpExistentes.map((n) => [normalizarClave(n.nombre), n])
+  )
+  const categoriasPorNombre = new Map(
+    categoriasExistentes.map((c) => [normalizarClave(c.nombre), c])
   )
 
   const errores = []
@@ -81,6 +86,7 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
 
   const contadorAsignado = new Map()
   const nombresEdpNuevos = new Map() // clave normalizada -> nombre original
+  const categoriasNuevas = new Map() // clave normalizada -> nombre original
 
   const filasProcesadas = validas.map((f) => {
     const claveCodigo = f.codigo.toLowerCase()
@@ -106,6 +112,21 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
       }
     }
 
+    let categoriaId = null
+    let categoriaNueva = null
+    if (f.categoriaNombre) {
+      const clave = normalizarClave(f.categoriaNombre)
+      const existente = categoriasPorNombre.get(clave)
+      if (existente) {
+        categoriaId = existente.id
+      } else {
+        categoriaNueva = f.categoriaNombre
+        if (!categoriasNuevas.has(clave)) categoriasNuevas.set(clave, f.categoriaNombre)
+      }
+    }
+
+    const stockMinimo = f.stockMinimo ? Number(f.stockMinimo) : null
+
     return {
       fila: f._fila,
       codigoOriginal: f.codigo,
@@ -117,6 +138,10 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
       descripcionEdpNombre: f.descripcionEdpNombre || null,
       descripcionEdpId,
       descripcionEdpNueva,
+      categoriaNombre: f.categoriaNombre || null,
+      categoriaId,
+      categoriaNueva,
+      stock_minimo_default: Number.isFinite(stockMinimo) ? stockMinimo : null,
       yaExiste,
     }
   })
@@ -128,5 +153,6 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
     aImportar: filasProcesadas.filter((f) => !f.yaExiste),
     conConflicto: filasProcesadas.filter((f) => f.yaExiste),
     nombresEdpNuevos: [...nombresEdpNuevos.values()],
+    categoriasNuevas: [...categoriasNuevas.values()],
   }
 }

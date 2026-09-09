@@ -5,6 +5,7 @@ import { leerArchivoExcel, procesarFilas } from '../utils/importarExcel'
 const props = defineProps({
   codigosExistentes: { type: Array, required: true },
   nombresEdpExistentes: { type: Array, required: true },
+  categoriasExistentes: { type: Array, default: () => [] },
 })
 
 defineEmits(['cerrar'])
@@ -34,6 +35,7 @@ async function onArchivoSeleccionado(ev) {
     resultado.value = procesarFilas(filasCrudas, {
       codigosExistentes: props.codigosExistentes,
       nombresEdpExistentes: props.nombresEdpExistentes,
+      categoriasExistentes: props.categoriasExistentes,
     })
   } catch (e) {
     console.error(e)
@@ -53,6 +55,7 @@ async function confirmarImportacion() {
     await attrs.onImportar({
       filas: resultado.value.aImportar,
       nombresEdpNuevos: resultado.value.nombresEdpNuevos,
+      categoriasNuevas: resultado.value.categoriasNuevas,
     })
     hecho.value = true
   } catch (e) {
@@ -70,8 +73,9 @@ async function confirmarImportacion() {
       <h2>Importar catálogo desde Excel</h2>
       <p class="ayuda">
         Columnas esperadas: <strong>CODIGO</strong>, <strong>DESCRIPCION ALMACEN</strong>,
-        <strong>DESCRIPCION EDP</strong>, <strong>UNIDAD ALMACEN</strong>, <strong>UNIDAD EDP</strong>
-        (la columna de nombres EDP y de categoría son opcionales).
+        <strong>UNIDAD ALMACEN</strong> (obligatorias) — <strong>DESCRIPCION EDP</strong>,
+        <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong> y <strong>STOCK MINIMO</strong> son opcionales.
+        Si el nombre EDP o la categoría no existen todavía, se crean automáticamente.
       </p>
 
       <label class="archivo">
@@ -109,6 +113,10 @@ async function confirmarImportacion() {
             <strong>{{ resultado.nombresEdpNuevos.length }}</strong> nombres EDP nuevos se crearán:
             {{ resultado.nombresEdpNuevos.join(', ') }}
           </div>
+          <div v-if="resultado.categoriasNuevas.length" class="info">
+            <strong>{{ resultado.categoriasNuevas.length }}</strong> categorías nuevas se crearán:
+            {{ resultado.categoriasNuevas.join(', ') }}
+          </div>
         </div>
 
         <div class="tabla-wrap">
@@ -121,6 +129,8 @@ async function confirmarImportacion() {
                 <th>Descripción EDP</th>
                 <th>Unidad Almacén</th>
                 <th>Unidad EDP</th>
+                <th>Categoría</th>
+                <th>Stock mínimo</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -135,6 +145,11 @@ async function confirmarImportacion() {
                 <td>{{ f.descripcionEdpNombre ?? '—' }}</td>
                 <td>{{ f.unidad }}</td>
                 <td>{{ f.unidad_edp ?? '—' }}</td>
+                <td>
+                  {{ f.categoriaNombre ?? '—' }}
+                  <span v-if="f.categoriaNueva" class="etiqueta">nueva</span>
+                </td>
+                <td>{{ f.stock_minimo_default ?? '—' }}</td>
                 <td>{{ f.yaExiste ? 'Omitido (ya existe)' : 'Se importa' }}</td>
               </tr>
             </tbody>
@@ -172,8 +187,8 @@ async function confirmarImportacion() {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -183,7 +198,7 @@ h2 {
 .ayuda {
   margin: 0;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .archivo input {
   font-size: 0.85rem;
@@ -193,25 +208,25 @@ h2 {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   padding: 0.75rem;
 }
 .ok {
-  color: #166534;
+  color: var(--color-success);
 }
 .advertencia {
-  color: #b45309;
+  color: var(--color-warning);
 }
 .info {
-  color: #374151;
+  color: var(--color-text);
 }
 .tabla-wrap {
   max-height: 320px;
   overflow: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 .tabla {
   width: 100%;
@@ -222,21 +237,26 @@ h2 {
 .tabla td {
   text-align: left;
   padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 .tabla th {
-  background: #f3f4f6;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   position: sticky;
   top: 0;
 }
 .tabla tr.conflicto {
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 .etiqueta {
   display: block;
   font-size: 0.7rem;
-  color: #9ca3af;
+  color: var(--color-text-muted);
 }
 .acciones {
   display: flex;
@@ -246,9 +266,9 @@ h2 {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -258,16 +278,16 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 </style>

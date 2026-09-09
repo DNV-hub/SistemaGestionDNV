@@ -7,15 +7,18 @@ import {
   listarStock,
   listarIngresos,
   crearIngreso,
+  crearIngresosMasivo,
   listarAjustes,
   crearAjuste,
   listarSalidas,
   listarMaterialesActivos,
 } from '../services/almacenService'
+import { listarContratos } from '../../../services/contratosService'
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
     almacenes: [],
+    contratos: [],
     stock: [],
     ingresos: [],
     ajustes: [],
@@ -30,8 +33,9 @@ export const useAlmacenStore = defineStore('almacen', {
       this.cargando = true
       this.error = ''
       try {
-        const [almacenes, stock, ingresos, ajustes, salidas, materialesActivos] = await Promise.all([
+        const [almacenes, contratos, stock, ingresos, ajustes, salidas, materialesActivos] = await Promise.all([
           listarAlmacenes(),
+          listarContratos(),
           listarStock(),
           listarIngresos(),
           listarAjustes(),
@@ -39,6 +43,7 @@ export const useAlmacenStore = defineStore('almacen', {
           listarMaterialesActivos(),
         ])
         this.almacenes = almacenes
+        this.contratos = contratos
         this.stock = stock
         this.ingresos = ingresos
         this.ajustes = ajustes
@@ -94,6 +99,13 @@ export const useAlmacenStore = defineStore('almacen', {
       this.ingresos.unshift(ingreso)
       await this.refrescarStock()
       return ingreso
+    },
+
+    async importarIngresosMasivo(filas) {
+      const creados = await crearIngresosMasivo(filas)
+      this.ingresos.unshift(...creados)
+      await this.refrescarStock()
+      return creados
     },
 
     async registrarAjuste(payload) {

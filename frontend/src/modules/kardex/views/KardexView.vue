@@ -1,9 +1,12 @@
 <script setup>
 import { onMounted, reactive, watch } from 'vue'
 import { useKardexStore } from '../store/kardex'
+import { useAuthStore } from '../../../store/auth'
 import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
+import { descargarExcel } from '../../../utils/exportarExcel'
 
 const kardex = useKardexStore()
+const auth = useAuthStore()
 
 const filtros = reactive({
   materialId: '',
@@ -45,12 +48,51 @@ onMounted(async () => {
   await kardex.cargarFiltros()
   buscar()
 })
+
+const ETIQUETAS_TIPO_EXPORT = {
+  ingreso: 'Ingreso',
+  salida: 'Salida',
+  ajuste_positivo: 'Ajuste positivo',
+  ajuste_negativo: 'Ajuste negativo',
+}
+
+async function exportar() {
+  const movimientos = await kardex.obtenerParaExportar({
+    materialId: filtros.materialId || null,
+    almacenId: filtros.almacenId || null,
+    tipoMovimiento: filtros.tipoMovimiento || null,
+    desde: filtros.desde || null,
+    hasta: filtros.hasta || null,
+  })
+
+  descargarExcel(`kardex_${filtros.desde || 'inicio'}_${filtros.hasta || 'hoy'}.xlsx`, [
+    {
+      nombre: 'Kardex',
+      filas: movimientos.map((m) => ({
+        'Fecha/Hora': new Date(m.fecha_hora).toLocaleString(),
+        Tipo: ETIQUETAS_TIPO_EXPORT[m.tipo_movimiento] ?? m.tipo_movimiento,
+        Almacén: m.almacenes?.nombre ?? '',
+        Código: m.materiales?.codigo ?? '',
+        Descripción: m.materiales?.descripcion ?? '',
+        Cantidad: m.cantidad,
+        Unidad: m.materiales?.unidad ?? '',
+        'Saldo resultante': m.saldo_resultante,
+        Vale: m.vales?.numero ?? '',
+        Usuario: m.usuarios?.nombre ?? '',
+        Observación: m.observacion ?? '',
+      })),
+    },
+  ])
+}
 </script>
 
 <template>
   <div class="kardex">
     <header class="cabecera">
       <h1>Kardex</h1>
+      <button v-if="auth.tienePermiso('kardex.exportar')" class="secundario" :disabled="kardex.exportando" @click="exportar">
+        {{ kardex.exportando ? 'Exportando…' : 'Exportar Excel' }}
+      </button>
     </header>
 
     <div class="filtros">
@@ -125,11 +167,14 @@ onMounted(async () => {
 }
 .cabecera {
   margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 .filtros {
   display: flex;
@@ -144,78 +189,85 @@ h1 {
 .filtros select,
 .filtros input {
   padding: 0.5rem 0.65rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.85rem;
   white-space: nowrap;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .badge {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .badge.ingreso {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge.salida {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.ajuste_positivo {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.ajuste_negativo {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
   white-space: normal;
 }
 .aviso-limite {
   margin-top: 0.5rem;
   font-size: 0.8rem;
-  color: #92400e;
+  color: var(--color-warning);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>

@@ -83,8 +83,8 @@ function onBlur() {
 input {
   width: 100%;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 .opciones {
@@ -98,9 +98,9 @@ input {
   margin: 0;
   padding: 0;
   list-style: none;
-  background: #fff;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 .opciones li {
@@ -112,10 +112,10 @@ input {
   align-items: baseline;
 }
 .opciones li:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-2);
 }
 .opciones li.vacio {
-  color: #6b7280;
+  color: var(--color-text-muted);
   cursor: default;
 }
 .opciones li.vacio:hover {
@@ -123,7 +123,7 @@ input {
 }
 .unidad {
   margin-left: auto;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.75rem;
 }
 </style>

@@ -11,6 +11,7 @@ import { reservasRoutes } from '../modules/reservas/routes'
 import { usuariosRoutes } from '../modules/usuarios/routes'
 import { procuraRoutes } from '../modules/procura/routes'
 import { alertasRoutes } from '../modules/alertas/routes'
+import { reportesRoutes } from '../modules/reportes/routes'
 
 // `permiso` es el código que la matriz de docs/MODELO_DATOS_Y_FLUJOS.md §2
 // exige para ver el módulo — la app lo revisa aquí (experiencia de usuario)
@@ -26,6 +27,7 @@ const routes = [
   ...kardexRoutes,
   ...procuraRoutes,
   ...alertasRoutes,
+  ...reportesRoutes,
   ...usuariosRoutes,
 ]
 
@@ -37,8 +39,12 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const auth = useAuthStore()
 
-  if (to.meta.publica) return true
+  // Sin esto, refrescar la página estando logueado y con la URL en /login
+  // (típico si el refresh pasa justo antes del router.push('/') del login)
+  // deja el panel montado sobre la ruta de login en vez de redirigir.
+  if (to.meta.publica) return auth.estaAutenticado ? { name: 'dashboard' } : true
   if (!auth.estaAutenticado) return { name: 'login' }
   if (to.meta.permiso && !auth.tienePermiso(to.meta.permiso)) return { name: 'dashboard' }
+  if (to.meta.rolesExcluidos?.includes(auth.nombreRol)) return { name: 'dashboard' }
   return true
 })

@@ -91,8 +91,8 @@ async function onSubmit() {
   width: 360px;
   max-width: calc(100vw - 2rem);
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -102,20 +102,20 @@ h2 {
 .resumen {
   margin: 0;
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 input,
 select {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 .cantidad-con-unidad {
@@ -128,10 +128,10 @@ select {
 }
 .unidad-badge {
   padding: 0.3rem 0.6rem;
-  background: #f3f4f6;
-  border-radius: 4px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
   font-size: 0.8rem;
-  color: #374151;
+  color: var(--color-text);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -144,9 +144,9 @@ select {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -156,11 +156,11 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }

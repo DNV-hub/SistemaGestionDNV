@@ -73,7 +73,7 @@ async function onSubmit() {
         Frente
         <select v-model="form.frente_id" required>
           <option value="" disabled>Selecciona un frente…</option>
-          <option v-for="f in frentesActivos" :key="f.id" :value="f.id">{{ f.codigo }} — {{ f.nombre }}</option>
+          <option v-for="f in frentesActivos" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
         </select>
       </label>
 
@@ -123,8 +123,8 @@ async function onSubmit() {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -136,14 +136,14 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 input,
 select,
 textarea {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 .lineas {
@@ -151,14 +151,14 @@ textarea {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.6rem;
-  background: #f9fafb;
-  border-radius: 6px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
 }
 .etiqueta {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text);
 }
 .linea {
   display: flex;
@@ -174,20 +174,20 @@ textarea {
 .unidad-badge {
   min-width: 2.5rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-weight: 600;
 }
 .quitar {
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--color-text-muted);
   font-size: 1.2rem;
   line-height: 1;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
 }
 .quitar:hover {
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 .agregar-linea {
   align-self: flex-start;
@@ -201,9 +201,9 @@ textarea {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -213,11 +213,11 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }

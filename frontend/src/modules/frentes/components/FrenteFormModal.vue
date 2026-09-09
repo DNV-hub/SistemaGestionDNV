@@ -3,6 +3,11 @@ import { reactive, ref, useAttrs, watch } from 'vue'
 
 const props = defineProps({
   frente: { type: Object, default: null }, // null = creando, objeto = editando
+  // Al copiar una tarjeta: crea uno nuevo (frente sigue null) pero con área/
+  // sector/contrato ya rellenados — nombre, código, estado y fecha siempre
+  // arrancan de cero, nunca se copian.
+  plantilla: { type: Object, default: null },
+  contratos: { type: Array, default: () => [] },
   puedeEditarEstado: { type: Boolean, default: false },
 })
 
@@ -13,10 +18,13 @@ defineEmits(['cerrar'])
 const attrs = useAttrs()
 
 function estadoInicial() {
+  const base = props.frente ?? props.plantilla
   return {
-    codigo: props.frente?.codigo ?? '',
+    area: base?.area ?? '',
+    sector: base?.sector ?? '',
     nombre: props.frente?.nombre ?? '',
-    area: props.frente?.area ?? '',
+    codigo: props.frente?.codigo ?? '',
+    contrato_id: base?.contrato_id ?? props.contratos[0]?.id ?? '',
     estado: props.frente?.estado ?? 'activo',
     fecha_inicio: props.frente?.fecha_inicio ?? new Date().toISOString().slice(0, 10),
     fecha_cierre: props.frente?.fecha_cierre ?? '',
@@ -34,17 +42,19 @@ watch(
 
 async function onSubmit() {
   error.value = ''
-  if (!form.codigo.trim() || !form.nombre.trim()) {
-    error.value = 'Código y nombre son obligatorios.'
+  if (!form.area.trim() || !form.sector.trim() || !form.nombre.trim() || !form.contrato_id) {
+    error.value = 'Área, sector, frente y contrato son obligatorios.'
     return
   }
 
   guardando.value = true
   try {
     await attrs.onGuardar({
-      codigo: form.codigo.trim(),
+      area: form.area.trim(),
+      sector: form.sector.trim(),
       nombre: form.nombre.trim(),
-      area: form.area.trim() || null,
+      codigo: form.codigo.trim() || null,
+      contrato_id: form.contrato_id,
       estado: form.estado,
       fecha_inicio: form.fecha_inicio,
       fecha_cierre: form.fecha_cierre || null,
@@ -63,21 +73,36 @@ async function onSubmit() {
 <template>
   <div class="overlay" @click.self="$emit('cerrar')">
     <form class="modal" @submit.prevent="onSubmit">
-      <h2>{{ frente ? 'Editar frente' : 'Nuevo frente' }}</h2>
+      <h2>{{ frente ? 'Editar frente' : plantilla ? 'Copiar frente' : 'Nuevo frente' }}</h2>
+      <p v-if="plantilla" class="ayuda">
+        Se copiaron área, sector y contrato de "{{ plantilla.nombre }}" — completa el nombre (y el código, si aplica).
+      </p>
 
       <label>
-        Código
-        <input v-model="form.codigo" type="text" required :disabled="!!frente" />
+        Área
+        <input v-model="form.area" type="text" required />
       </label>
 
       <label>
-        Nombre
+        Sector
+        <input v-model="form.sector" type="text" required />
+      </label>
+
+      <label>
+        Frente
         <input v-model="form.nombre" type="text" required />
       </label>
 
       <label>
-        Área (opcional)
-        <input v-model="form.area" type="text" />
+        Código (opcional)
+        <input v-model="form.codigo" type="text" :disabled="!!frente" />
+      </label>
+
+      <label>
+        Contrato
+        <select v-model="form.contrato_id" required>
+          <option v-for="c in contratos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
       </label>
 
       <label>
@@ -89,6 +114,7 @@ async function onSubmit() {
         Estado
         <select v-model="form.estado">
           <option value="activo">Activo</option>
+          <option value="paralizado">Paralizado</option>
           <option value="cerrado">Cerrado</option>
         </select>
       </label>
@@ -128,8 +154,8 @@ async function onSubmit() {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -141,18 +167,18 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 input,
 select {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 input:disabled {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .acciones {
   display: flex;
@@ -163,9 +189,9 @@ input:disabled {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -175,12 +201,17 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
+}
+.ayuda {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 </style>

@@ -33,7 +33,8 @@ export async function listarMaterialesActivos() {
   return data
 }
 
-const SELECT_STOCK = '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_default)'
+const SELECT_STOCK =
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_default), contratos(id, codigo, nombre)'
 
 export async function listarStock() {
   const { data, error } = await supabase
@@ -44,7 +45,8 @@ export async function listarStock() {
   return data
 }
 
-const SELECT_MOVIMIENTO = '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad)'
+const SELECT_MOVIMIENTO =
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), contratos(id, codigo, nombre), usuarios(id, nombre)'
 
 export async function listarIngresos() {
   const { data, error } = await supabase
@@ -60,6 +62,25 @@ export async function crearIngreso(payload) {
   const { data, error } = await supabase.from('ingresos').insert(payload).select(SELECT_MOVIMIENTO).single()
   if (error) throw error
   return data
+}
+
+/**
+ * Inserta muchos ingresos de una vez (carga inicial de stock desde Excel).
+ * En lotes de 300: una sola fila por INSERT no tiene límite práctico aquí,
+ * pero evita mandar de una un archivo enorme en un solo request.
+ */
+export async function crearIngresosMasivo(filas) {
+  const LOTE = 300
+  const creados = []
+  for (let i = 0; i < filas.length; i += LOTE) {
+    const { data, error } = await supabase
+      .from('ingresos')
+      .insert(filas.slice(i, i + LOTE))
+      .select(SELECT_MOVIMIENTO)
+    if (error) throw error
+    creados.push(...data)
+  }
+  return creados
 }
 
 export async function listarAjustes() {
@@ -78,7 +99,8 @@ export async function crearAjuste(payload) {
   return data
 }
 
-const SELECT_SALIDA = '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), frentes(id, codigo, nombre)'
+const SELECT_SALIDA =
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), frentes(id, codigo, nombre), contratos(id, codigo, nombre), usuarios(id, nombre)'
 
 export async function listarSalidas() {
   const { data, error } = await supabase

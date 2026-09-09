@@ -4,7 +4,12 @@ import {
   contarValesPendientes,
   contarReservasActivas,
   contarFrentesActivos,
-  contarStockBajo,
+  listarStockCritico,
+  listarFrentesSobreconsumo,
+  listarMaterialesSinMetrado,
+  listarMovimientosSemana,
+  listarStockPorCategoria,
+  listarUltimosMovimientos,
   listarAlertasCriticasRecientes,
   listarValesPendientesRecientes,
 } from '../services/dashboardService'
@@ -12,10 +17,15 @@ import {
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
     alertas: null,
-    valesPendientes: null,
+    valesPorAprobar: null,
     reservasActivas: null,
     frentesActivos: null,
-    stockBajo: null,
+    stockCritico: [],
+    frentesSobreconsumo: [],
+    materialesSinMetrado: [],
+    movimientosSemana: [],
+    stockPorCategoria: [],
+    ultimosMovimientos: [],
     alertasRecientes: [],
     valesRecientes: [],
     cargando: false,
@@ -23,8 +33,8 @@ export const useDashboardStore = defineStore('dashboard', {
 
   actions: {
     /**
-     * Cada tile solo se pide si el usuario tiene el permiso del módulo que
-     * la alimenta, y cada una se atrapa por separado: si una falla (o el rol
+     * Cada panel solo se pide si el usuario tiene el permiso del módulo que
+     * lo alimenta, y cada uno se atrapa por separado: si uno falla (o el rol
      * no tiene acceso a esa tabla) el resto del dashboard igual se pinta.
      */
     async cargar(permisos) {
@@ -44,7 +54,7 @@ export const useDashboardStore = defineStore('dashboard', {
       if (permisos.vales) {
         tareas.push(
           contarValesPendientes()
-            .then((v) => (this.valesPendientes = v))
+            .then((v) => (this.valesPorAprobar = v))
             .catch(() => {}),
           listarValesPendientesRecientes()
             .then((v) => (this.valesRecientes = v))
@@ -67,8 +77,31 @@ export const useDashboardStore = defineStore('dashboard', {
       }
       if (permisos.stock) {
         tareas.push(
-          contarStockBajo()
-            .then((v) => (this.stockBajo = v))
+          listarStockCritico()
+            .then((v) => (this.stockCritico = v))
+            .catch(() => {}),
+          listarStockPorCategoria()
+            .then((v) => (this.stockPorCategoria = v))
+            .catch(() => {})
+        )
+      }
+      if (permisos.kardex) {
+        tareas.push(
+          listarMovimientosSemana()
+            .then((v) => (this.movimientosSemana = v))
+            .catch(() => {}),
+          listarUltimosMovimientos()
+            .then((v) => (this.ultimosMovimientos = v))
+            .catch(() => {})
+        )
+      }
+      if (permisos.procura) {
+        tareas.push(
+          listarFrentesSobreconsumo()
+            .then((v) => (this.frentesSobreconsumo = v))
+            .catch(() => {}),
+          listarMaterialesSinMetrado()
+            .then((v) => (this.materialesSinMetrado = v))
             .catch(() => {})
         )
       }

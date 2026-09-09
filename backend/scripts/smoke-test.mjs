@@ -436,7 +436,61 @@ async function usuarios() {
   assert(!!data.passwordTemporal, 'la función debería devolver una contraseña temporal')
   ctx.segundoUsuarioId = data.usuario.id
 
-  return `usuario ${email} creado vía Edge Function con contraseña temporal`
+  // Nadie debería poder eliminarse a sí mismo — la Edge Function lo rechaza.
+  const { data: dataAutoborrado, error: e3 } = await auth.functions.invoke('eliminar-usuario', {
+    body: { id: ctx.testUserId },
+  })
+  const rechazado = e3 || dataAutoborrado?.error
+  assert(!!rechazado, 'eliminar-usuario debería rechazar que un usuario se borre a sí mismo')
+
+  // Crear con contraseña elegida por el admin (no autogenerada) y probar
+  // que de verdad sirve para iniciar sesión.
+  const emailConPassword = `smoke.password.${runId}@dnv.test`
+  const passwordElegida = `Elegida!${runId}Aa`
+  const { data: dataConPassword, error: e4 } = await auth.functions.invoke('crear-usuario', {
+    body: {
+      email: emailConPassword,
+      nombre: `Test Smoke Password ${runId}`,
+      rol_id: rolConsulta.id,
+      frente_id: null,
+      password: passwordElegida,
+    },
+  })
+  if (e4) throw e4
+  if (dataConPassword?.error) throw new Error(dataConPassword.error)
+  ctx.terceroUsuarioId = dataConPassword.usuario.id
+
+  const verificador = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  const { error: eLogin1 } = await verificador.auth.signInWithPassword({
+    email: emailConPassword,
+    password: passwordElegida,
+  })
+  if (eLogin1) throw new Error(`no se pudo iniciar sesión con la contraseña elegida al crear: ${eLogin1.message}`)
+  await verificador.auth.signOut()
+
+  // Restablecer sin indicar contraseña (se genera una) y probar que la
+  // vieja ya no sirve y la nueva sí.
+  const { data: dataReset, error: e5 } = await auth.functions.invoke('restablecer-password', {
+    body: { id: ctx.terceroUsuarioId },
+  })
+  if (e5) throw e5
+  if (dataReset?.error) throw new Error(dataReset.error)
+  assert(!!dataReset.password, 'restablecer-password debería devolver la contraseña generada')
+
+  const { error: eLoginVieja } = await verificador.auth.signInWithPassword({
+    email: emailConPassword,
+    password: passwordElegida,
+  })
+  assert(!!eLoginVieja, 'la contraseña anterior ya no debería servir después de restablecerla')
+
+  const { error: eLoginNueva } = await verificador.auth.signInWithPassword({
+    email: emailConPassword,
+    password: dataReset.password,
+  })
+  if (eLoginNueva) throw new Error(`la contraseña restablecida debería servir para entrar: ${eLoginNueva.message}`)
+  await verificador.auth.signOut()
+
+  return `usuario con contraseña elegida + restablecimiento verificados con inicio de sesión real; auto-eliminación rechazada correctamente`
 }
 
 // ---------------------------------------------------------------------------
@@ -466,22 +520,39 @@ async function limpieza() {
 
   await auth.from('categorias').delete().eq('id', ctx.categoriaId)
 
-  // El usuario bootstrap queda referenciado como responsable/usuario_id en
-  // todo lo que tocó (ingresos, ajustes, vales, salidas, procura) — esas FK
-  // no son "on delete cascade" a propósito (mismo principio de auditoría
-  // que protege frentes/materiales/almacenes), así que borrar la cuenta
-  // falla. Igual que el resto de la app, si no se puede borrar se desactiva.
+  // Ninguno de estos dos tiene historial propio: se borran de verdad vía
+  // la Edge Function eliminar-usuario (probando esa función tal como la
+  // usaría la app, no con el service role directo).
   for (const [id, etiqueta] of [
     [ctx.segundoUsuarioId, 'usuario Consulta'],
-    [ctx.testUserId, 'usuario Administrador de bootstrap'],
+    [ctx.terceroUsuarioId, 'usuario de prueba de contraseñas'],
   ]) {
     if (!id) continue
-    const { error } = await admin.auth.admin.deleteUser(id)
-    if (error) {
-      await admin.from('usuarios').update({ estado: 'inactivo' }).eq('id', id)
-      notas.push(`${etiqueta}: tenía historial asociado, quedó inactivo (no se pudo borrar)`)
+    const { data, error } = await auth.functions.invoke('eliminar-usuario', { body: { id } })
+    if (error || data?.error) {
+      notas.push(`${etiqueta}: no se pudo eliminar (${data?.error || error.message})`)
     } else {
-      notas.push(`${etiqueta}: borrado`)
+      notas.push(`${etiqueta}: ${data.eliminado ? 'borrado' : 'quedó inactivo'} (vía Edge Function)`)
+    }
+  }
+
+  // El usuario bootstrap sí queda referenciado como responsable/usuario_id
+  // en todo lo que tocó (ingresos, ajustes, vales, salidas, procura, y
+  // también en `auditoria.usuario_id` por cada acción que hizo) — esas FK
+  // no son "on delete cascade" a propósito (mismo principio de auditoría
+  // que protege frentes/materiales/almacenes), así que este delete termina
+  // en "queda inactivo" en una corrida normal — es lo esperado. Si alguna
+  // vez hace falta purgar todo el rastro de una corrida (no solo
+  // desactivar), hay que borrar también las filas de `auditoria` con
+  // usuario_id = este id además de las de kardex/salidas/reservas/etc., o
+  // eliminar-usuario sigue fallando aunque ya no quede negocio real.
+  if (ctx.testUserId) {
+    const { error } = await admin.auth.admin.deleteUser(ctx.testUserId)
+    if (error) {
+      await admin.from('usuarios').update({ estado: 'inactivo' }).eq('id', ctx.testUserId)
+      notas.push('usuario Administrador de bootstrap: tenía historial asociado, quedó inactivo (no se pudo borrar)')
+    } else {
+      notas.push('usuario Administrador de bootstrap: borrado')
     }
   }
 

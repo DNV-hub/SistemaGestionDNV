@@ -5,10 +5,12 @@ import {
   actualizarFrente,
   eliminarFrente,
 } from '../services/frentesService'
+import { listarContratos } from '../../../services/contratosService'
 
 export const useFrentesStore = defineStore('frentes', {
   state: () => ({
     frentes: [],
+    contratos: [],
     cargando: false,
     error: '',
   }),
@@ -18,7 +20,9 @@ export const useFrentesStore = defineStore('frentes', {
       this.cargando = true
       this.error = ''
       try {
-        this.frentes = await listarFrentes()
+        const [frentes, contratos] = await Promise.all([listarFrentes(), listarContratos()])
+        this.frentes = frentes
+        this.contratos = contratos
       } catch (e) {
         this.error = 'No se pudo cargar los frentes.'
         console.error(e)

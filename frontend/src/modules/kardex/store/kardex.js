@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { listarKardex, listarMaterialesActivos, listarAlmacenes } from '../services/kardexService'
+import { listarKardex, listarKardexParaExportar, listarMaterialesActivos, listarAlmacenes } from '../services/kardexService'
 
 export const useKardexStore = defineStore('kardex', {
   state: () => ({
@@ -7,6 +7,7 @@ export const useKardexStore = defineStore('kardex', {
     materialesActivos: [],
     almacenes: [],
     cargando: false,
+    exportando: false,
     error: '',
   }),
 
@@ -27,6 +28,16 @@ export const useKardexStore = defineStore('kardex', {
         console.error(e)
       } finally {
         this.cargando = false
+      }
+    },
+
+    /** Trae todos los movimientos que calzan con los filtros (sin el tope de 300 de la vista). */
+    async obtenerParaExportar(filtros) {
+      this.exportando = true
+      try {
+        return await listarKardexParaExportar(filtros)
+      } finally {
+        this.exportando = false
       }
     },
   },

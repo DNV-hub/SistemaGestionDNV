@@ -5,8 +5,9 @@ import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
 const props = defineProps({
   almacenes: { type: Array, default: () => [] },
   materiales: { type: Array, default: () => [] },
+  contratos: { type: Array, default: () => [] },
   // Valores iniciales cuando se abre desde "Corregir" en una fila de
-  // Ingresos/Ajustes: { almacen_id, material_id, tipo, cantidad, motivo }.
+  // Ingresos/Ajustes: { almacen_id, contrato_id, material_id, tipo, cantidad, motivo }.
   prellenado: { type: Object, default: null },
 })
 
@@ -18,6 +19,7 @@ const attrs = useAttrs()
 
 const form = reactive({
   almacen_id: props.prellenado?.almacen_id ?? props.almacenes[0]?.id ?? '',
+  contrato_id: props.prellenado?.contrato_id ?? props.contratos[0]?.id ?? '',
   material_id: props.prellenado?.material_id ?? '',
   tipo: props.prellenado?.tipo ?? 'positivo',
   cantidad: props.prellenado?.cantidad ?? '',
@@ -30,8 +32,8 @@ const materialSeleccionado = computed(() => props.materiales.find((m) => m.id ==
 
 async function onSubmit() {
   error.value = ''
-  if (!form.almacen_id || !form.material_id || !form.cantidad || !form.motivo.trim()) {
-    error.value = 'Almacén, material, cantidad y motivo son obligatorios.'
+  if (!form.almacen_id || !form.contrato_id || !form.material_id || !form.cantidad || !form.motivo.trim()) {
+    error.value = 'Almacén, contrato, material, cantidad y motivo son obligatorios.'
     return
   }
   if (Number(form.cantidad) <= 0) {
@@ -43,6 +45,7 @@ async function onSubmit() {
   try {
     await attrs.onGuardar({
       almacen_id: form.almacen_id,
+      contrato_id: form.contrato_id,
       material_id: form.material_id,
       tipo: form.tipo,
       cantidad: Number(form.cantidad),
@@ -69,6 +72,13 @@ async function onSubmit() {
         Almacén
         <select v-model="form.almacen_id" required>
           <option v-for="a in almacenes" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
+        </select>
+      </label>
+
+      <label>
+        Contrato
+        <select v-model="form.contrato_id" required>
+          <option v-for="c in contratos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
         </select>
       </label>
 
@@ -128,8 +138,8 @@ async function onSubmit() {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
   padding: 1.5rem;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 h2 {
@@ -139,9 +149,9 @@ h2 {
 .nota-correccion {
   margin: 0;
   padding: 0.5rem 0.65rem;
-  background: #fffbeb;
-  color: #92400e;
-  border-radius: 4px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-radius: var(--radius-control);
   font-size: 0.8rem;
 }
 label {
@@ -149,14 +159,14 @@ label {
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 input,
 select,
 textarea {
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
   font: inherit;
 }
 .cantidad-con-unidad {
@@ -169,10 +179,10 @@ textarea {
 }
 .unidad-badge {
   padding: 0.3rem 0.6rem;
-  background: #f3f4f6;
-  border-radius: 4px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
   font-size: 0.8rem;
-  color: #374151;
+  color: var(--color-text);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -185,9 +195,9 @@ textarea {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -197,11 +207,11 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
 }

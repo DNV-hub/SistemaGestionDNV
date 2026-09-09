@@ -1,16 +1,32 @@
 :root {
-  color-scheme: light dark;
-  font: 15px/1.5 system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark light;
+  font: 15px/1.5 var(--font-principal);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  /* Red de seguridad: si algún contenido (tabla ancha, fila con varios
+     chips) se pasa del ancho de pantalla, que haga scroll horizontal él
+     solo — nunca la página entera. En iOS, dejar que la página completa
+     scrollee de lado es además lo que hace que la barra de pestañas fija
+     (position: fixed) parezca "flotar" o moverse al bajar. */
+  overflow-x: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 #app {
   min-height: 100svh;
+}
+
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
 }

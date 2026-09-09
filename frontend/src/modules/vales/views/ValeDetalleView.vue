@@ -102,6 +102,39 @@ async function registrarEntrega(payload) {
   entregaEnProgreso.value = null
   aviso.value = 'Entrega registrada.'
 }
+
+/**
+ * Situación de una línea frente a stock y Procura, para alertar al que
+ * aprueba/revisa sin que tenga que ir a mirar otras pantallas (Almacén,
+ * Procura). Ver vales.store._cargarAlertas.
+ */
+function situacion(linea) {
+  const disponible = vales.alertasStockPorMaterial.get(linea.material_id) ?? 0
+  const procura = vales.alertasProcuraPorMaterial.get(linea.material_id) ?? null
+  const umbral = vales.alertasUmbralSobreconsumo
+
+  const stock = {
+    texto: disponible > 0 ? `Stock: ${disponible}` : 'Sin stock',
+    nivel: disponible <= 0 ? 'danger' : disponible < linea.cantidad_solicitada ? 'warning' : 'ok',
+  }
+
+  if (!procura) {
+    return { stock, procura: { texto: 'No contemplado en Procura', nivel: 'warning' }, saldo: null }
+  }
+
+  const pct = procura.porcentaje_consumo
+  const procuraChip = {
+    texto: pct === null ? `Previsto: ${procura.cantidad_prevista}` : `Procura: ${pct}% consumido`,
+    nivel: pct !== null && pct >= umbral ? 'danger' : pct !== null && pct >= umbral * 0.8 ? 'warning' : 'ok',
+  }
+
+  const saldo =
+    procura.saldo < Number(linea.cantidad_solicitada)
+      ? { texto: `Excede el saldo de Procura (saldo: ${procura.saldo})`, nivel: 'danger' }
+      : null
+
+  return { stock, procura: procuraChip, saldo }
+}
 </script>
 
 <template>
@@ -116,7 +149,7 @@ async function registrarEntrega(payload) {
         <div>
           <h1>{{ vale.numero }}</h1>
           <p class="subtitulo">
-            {{ vale.frentes?.codigo }} — {{ vale.frentes?.nombre }} · Supervisor: {{ vale.usuarios?.nombre }} · {{ vale.fecha }}
+            {{ vale.frentes?.codigo ? vale.frentes.codigo + ' — ' : '' }}{{ vale.frentes?.nombre }} · Supervisor: {{ vale.usuarios?.nombre }} · {{ vale.fecha }}
           </p>
         </div>
         <span class="badge" :class="vale.estado.toLowerCase().replace(/\s+/g, '-')">{{ vale.estado }}</span>
@@ -130,6 +163,7 @@ async function registrarEntrega(payload) {
         <button v-if="puedeCancelar" class="peligro" @click="mostrarModalCancelar = true">Cancelar vale</button>
       </div>
 
+      <div class="tabla-wrap">
       <table class="tabla">
         <thead>
           <tr>
@@ -143,33 +177,43 @@ async function registrarEntrega(payload) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="l in vale.lineas" :key="l.id">
-            <td>{{ l.materiales?.codigo }} — {{ l.materiales?.descripcion }}</td>
-            <td>{{ l.materiales?.unidad }}</td>
-            <td>{{ l.cantidad_solicitada }}</td>
-            <td>{{ l.cantidad_aprobada ?? '—' }}</td>
-            <td>{{ l.cantidad_entregada }}</td>
-            <td>
-              <span class="badge-linea" :class="l.estado.toLowerCase().replace(/\s+/g, '-')">{{ l.estado }}</span>
-            </td>
-            <td class="acciones-fila">
-              <template v-if="puedeAprobarRechazar && l.estado === 'Pendiente'">
-                <button class="mini" @click="lineaEnAprobacion = l">Aprobar</button>
-                <button class="mini peligro" @click="rechazar(l)">Rechazar</button>
-              </template>
-              <button v-else-if="puedeEditarLineas && l.estado === 'Pendiente'" class="mini peligro" @click="quitarLinea(l)">
-                Quitar
-              </button>
-              <button v-if="puedeRegistrarEntrega && LINEAS_CON_SALDO.includes(l.estado)" class="mini" @click="abrirEntrega(l)">
-                Registrar entrega
-              </button>
-            </td>
-          </tr>
+          <template v-for="l in vale.lineas" :key="l.id">
+            <tr>
+              <td>{{ l.materiales?.codigo }} — {{ l.materiales?.descripcion }}</td>
+              <td>{{ l.materiales?.unidad }}</td>
+              <td>{{ l.cantidad_solicitada }}</td>
+              <td>{{ l.cantidad_aprobada ?? '—' }}</td>
+              <td>{{ l.cantidad_entregada }}</td>
+              <td>
+                <span class="badge-linea" :class="l.estado.toLowerCase().replace(/\s+/g, '-')">{{ l.estado }}</span>
+              </td>
+              <td class="acciones-fila">
+                <template v-if="puedeAprobarRechazar && l.estado === 'Pendiente'">
+                  <button class="mini" @click="lineaEnAprobacion = l">Aprobar</button>
+                  <button class="mini peligro" @click="rechazar(l)">Rechazar</button>
+                </template>
+                <button v-else-if="puedeEditarLineas && l.estado === 'Pendiente'" class="mini peligro" @click="quitarLinea(l)">
+                  Quitar
+                </button>
+                <button v-if="puedeRegistrarEntrega && LINEAS_CON_SALDO.includes(l.estado)" class="mini" @click="abrirEntrega(l)">
+                  Registrar entrega
+                </button>
+              </td>
+            </tr>
+            <tr class="fila-situacion">
+              <td colspan="7">
+                <span class="chip" :class="situacion(l).stock.nivel">{{ situacion(l).stock.texto }}</span>
+                <span class="chip" :class="situacion(l).procura.nivel">{{ situacion(l).procura.texto }}</span>
+                <span v-if="situacion(l).saldo" class="chip" :class="situacion(l).saldo.nivel">{{ situacion(l).saldo.texto }}</span>
+              </td>
+            </tr>
+          </template>
           <tr v-if="!vale.lineas.length">
             <td colspan="7" class="vacio">Este vale todavía no tiene materiales.</td>
           </tr>
         </tbody>
       </table>
+      </div>
 
       <div v-if="puedeEditarLineas" class="agregar-linea">
         <BuscadorMaterial v-model="nuevaLinea.material_id" :materiales="vales.materialesActivos" class="buscador" />
@@ -209,7 +253,7 @@ async function registrarEntrega(payload) {
 .volver {
   background: none;
   border: none;
-  color: #2563eb;
+  color: var(--color-primary);
   font-weight: 600;
   padding: 0;
   cursor: pointer;
@@ -224,19 +268,19 @@ async function registrarEntrega(payload) {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 .subtitulo {
   margin: 0.2rem 0 0;
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .observaciones {
   font-size: 0.85rem;
-  color: #374151;
-  background: #f9fafb;
+  color: var(--color-text);
+  background: var(--color-surface-2);
   padding: 0.5rem 0.7rem;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   margin: 0.5rem 0;
 }
 .acciones-vale {
@@ -247,86 +291,121 @@ h1 {
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
 button.peligro {
-  background: #b91c1c;
+  background: var(--color-danger);
 }
 button.mini {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
 }
+.tabla-wrap {
+  /* La tabla puede necesitar más ancho del que entra en un celular: que
+     haga scroll horizontal ella sola, nunca la página completa (eso es lo
+     que hacía "temblar" la barra de pestañas fija en iOS). */
+  overflow-x: auto;
+  border-radius: var(--radius-card);
+}
 .tabla {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
+  background: var(--color-surface);
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.9rem;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .acciones-fila {
   display: flex;
   gap: 0.4rem;
 }
+.fila-situacion td {
+  padding: 0 0.75rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+}
+.chip.ok {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+.chip.warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+.chip.danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
 .badge,
 .badge-linea {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .badge.borrador,
 .badge-linea.pendiente {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .badge.enviado,
 .badge.en-revision {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.aprobado,
 .badge.reservado,
 .badge-linea.reservado {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.parcialmente-atendido,
 .badge-linea.parcialmente-entregado {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 .badge.atendido,
 .badge-linea.entregado {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge.rechazado,
 .badge.cancelado,
 .badge-linea.rechazado,
 .badge-linea.cancelado {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .badge.cerrado {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .agregar-linea {
   display: flex;
@@ -340,19 +419,41 @@ button.mini {
 .agregar-linea input {
   width: 120px;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .detalle {
+    padding: 1rem;
+  }
+  .cabecera {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .acciones-vale {
+    flex-direction: column;
+  }
+  .acciones-vale button {
+    width: 100%;
+  }
+  .agregar-linea {
+    flex-wrap: wrap;
+  }
+  .agregar-linea input {
+    width: 100%;
+  }
 }
 </style>

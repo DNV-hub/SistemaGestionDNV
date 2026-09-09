@@ -20,6 +20,13 @@ export async function crearCategoria(payload) {
   return data
 }
 
+export async function crearCategoriasEnLote(payloads) {
+  if (!payloads.length) return []
+  const { data, error } = await supabase.from('categorias').insert(payloads).select()
+  if (error) throw error
+  return data
+}
+
 export async function listarNombresEdp() {
   const { data, error } = await supabase.from('nombres_edp').select('*').order('nombre')
   if (error) throw error

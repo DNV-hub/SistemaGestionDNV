@@ -40,6 +40,14 @@ export async function crearVersionMetrado(payload) {
   return data
 }
 
+/** Carga masiva: cada fila crea una nueva versión (trg_metrados_versionar se encarga del resto). */
+export async function crearVersionesMetradoEnLote(payloads) {
+  if (!payloads.length) return []
+  const { data, error } = await supabase.from('metrados_procura').insert(payloads).select(SELECT_METRADO)
+  if (error) throw error
+  return data
+}
+
 export async function listarComparacion(frenteId) {
   const { data, error } = await supabase.from('procura_vs_consumo').select('*').eq('frente_id', frenteId)
   if (error) throw error
@@ -49,9 +57,20 @@ export async function listarComparacion(frenteId) {
 export async function listarFrentesActivos() {
   const { data, error } = await supabase
     .from('frentes')
-    .select('id, codigo, nombre, area, estado')
+    .select('id, codigo, nombre, area, sector, estado, contrato_id, contratos(id, codigo, nombre)')
     .eq('estado', 'activo')
     .order('codigo')
+  if (error) throw error
+  return data
+}
+
+/** Frentes con consumo/reserva de un material que todavía no tiene metrado vigente (fn_evaluar_alertas). */
+export async function listarAlertasNoPrevisto() {
+  const { data, error } = await supabase
+    .from('alertas')
+    .select('frente_id, material_id')
+    .eq('tipo', 'material_no_previsto')
+    .eq('estado', 'activa')
   if (error) throw error
   return data
 }

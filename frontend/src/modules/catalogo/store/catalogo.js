@@ -5,6 +5,7 @@ import {
   crearMaterial,
   actualizarMaterial,
   crearCategoria,
+  crearCategoriasEnLote,
   listarNombresEdp,
   crearNombreEdp,
   crearNombresEdpEnLote,
@@ -73,17 +74,21 @@ export const useCatalogoStore = defineStore('catalogo', {
 
     /**
      * Aplica el resultado de `procesarFilas` (ver utils/importarExcel.js):
-     * crea primero los nombres EDP que no existían y luego inserta los
-     * materiales en un solo lote, ya con el descripcion_edp_id resuelto.
+     * crea primero los nombres EDP y categorías que no existían, y luego
+     * inserta los materiales en un solo lote, ya con esos ids resueltos.
      */
-    async importarMateriales({ filas, nombresEdpNuevos }) {
-      const nombresCreados = await crearNombresEdpEnLote(
-        nombresEdpNuevos.map((nombre) => ({ nombre }))
-      )
+    async importarMateriales({ filas, nombresEdpNuevos, categoriasNuevas = [] }) {
+      const [nombresCreados, categoriasCreadas] = await Promise.all([
+        crearNombresEdpEnLote(nombresEdpNuevos.map((nombre) => ({ nombre }))),
+        crearCategoriasEnLote(categoriasNuevas.map((nombre) => ({ nombre }))),
+      ])
       this.nombresEdp.push(...nombresCreados)
       this.nombresEdp.sort((a, b) => a.nombre.localeCompare(b.nombre))
+      this.categorias.push(...categoriasCreadas)
+      this.categorias.sort((a, b) => a.nombre.localeCompare(b.nombre))
 
       const idPorNombreEdp = new Map(this.nombresEdp.map((n) => [normalizarClave(n.nombre), n.id]))
+      const idPorCategoria = new Map(this.categorias.map((c) => [normalizarClave(c.nombre), c.id]))
 
       const payloads = filas.map((f) => ({
         codigo: f.codigo,
@@ -94,6 +99,9 @@ export const useCatalogoStore = defineStore('catalogo', {
           f.descripcionEdpId ??
           (f.descripcionEdpNombre ? idPorNombreEdp.get(normalizarClave(f.descripcionEdpNombre)) : null) ??
           null,
+        categoria_id:
+          f.categoriaId ?? (f.categoriaNombre ? idPorCategoria.get(normalizarClave(f.categoriaNombre)) : null) ?? null,
+        stock_minimo_default: f.stock_minimo_default ?? null,
       }))
 
       const creados = await crearMaterialesEnLote(payloads)

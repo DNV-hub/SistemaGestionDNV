@@ -15,6 +15,30 @@ const aviso = ref('')
 const puedeCrear = computed(() => auth.tienePermiso('vales.crear'))
 const puedeVerTodos = computed(() => auth.tienePermiso('vales.ver_todos'))
 
+// Bandeja de entrada: los vales que todavía necesitan una decisión suben
+// arriba, ordenados por hora de envío (el más antiguo esperando primero,
+// para que ninguno se quede olvidado); el resto (ya resueltos, o borradores
+// que aún no se enviaron) queda abajo, más reciente primero.
+const ESTADOS_ACCIONABLES = ['Enviado', 'En revision']
+
+const valesOrdenados = computed(() => {
+  const accionables = vales.vales.filter((v) => ESTADOS_ACCIONABLES.includes(v.estado))
+  const resto = vales.vales.filter((v) => !ESTADOS_ACCIONABLES.includes(v.estado))
+  accionables.sort((a, b) => new Date(a.fecha_envio ?? a.created_at) - new Date(b.fecha_envio ?? b.created_at))
+  resto.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  return [...accionables, ...resto]
+})
+
+function tiempoDesde(fechaIso) {
+  if (!fechaIso) return null
+  const minutos = Math.floor((Date.now() - new Date(fechaIso).getTime()) / 60000)
+  if (minutos < 1) return 'recién'
+  if (minutos < 60) return `hace ${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  if (horas < 24) return `hace ${horas} h`
+  return `hace ${Math.floor(horas / 24)} d`
+}
+
 onMounted(() => vales.cargarLista())
 
 async function crear(payload) {
@@ -32,7 +56,10 @@ function abrir(vale) {
 <template>
   <div class="vales">
     <header class="cabecera">
-      <h1>Vales</h1>
+      <div>
+        <h1>Vales</h1>
+        <p v-if="puedeVerTodos" class="subtitulo">Los que esperan una decisión aparecen primero, del más antiguo al más nuevo.</p>
+      </div>
       <button v-if="puedeCrear" @click="mostrarModal = true">+ Nuevo vale</button>
     </header>
 
@@ -48,20 +75,30 @@ function abrir(vale) {
           <th>Frente</th>
           <th v-if="puedeVerTodos">Supervisor</th>
           <th>Estado</th>
+          <th v-if="puedeVerTodos">Esperando</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="v in vales.vales" :key="v.id" class="fila-clicable" @click="abrir(v)">
+        <tr
+          v-for="v in valesOrdenados"
+          :key="v.id"
+          class="fila-clicable"
+          :class="{ accionable: ESTADOS_ACCIONABLES.includes(v.estado) }"
+          @click="abrir(v)"
+        >
           <td>{{ v.numero }}</td>
           <td>{{ v.fecha }}</td>
-          <td>{{ v.frentes?.codigo }} — {{ v.frentes?.nombre }}</td>
+          <td>{{ v.frentes?.codigo ? v.frentes.codigo + ' — ' : '' }}{{ v.frentes?.nombre }}</td>
           <td v-if="puedeVerTodos">{{ v.usuarios?.nombre ?? '—' }}</td>
           <td>
             <span class="badge" :class="v.estado.toLowerCase().replace(/\s+/g, '-')">{{ v.estado }}</span>
           </td>
+          <td v-if="puedeVerTodos" class="tiempo-espera">
+            {{ ESTADOS_ACCIONABLES.includes(v.estado) ? tiempoDesde(v.fecha_envio ?? v.created_at) : '—' }}
+          </td>
         </tr>
-        <tr v-if="!vales.vales.length">
-          <td :colspan="puedeVerTodos ? 5 : 4" class="vacio">No hay vales para mostrar.</td>
+        <tr v-if="!valesOrdenados.length">
+          <td :colspan="puedeVerTodos ? 6 : 4" class="vacio">No hay vales para mostrar.</td>
         </tr>
       </tbody>
     </table>
@@ -89,90 +126,106 @@ function abrir(vale) {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
+}
+.subtitulo {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.9rem;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .fila-clicable {
   cursor: pointer;
 }
 .fila-clicable:hover {
-  background: #f9fafb;
+  background: var(--color-surface-2);
+}
+.fila-clicable.accionable {
+  box-shadow: inset 3px 0 0 var(--color-info);
+}
+.tiempo-espera {
+  color: var(--color-warning);
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 .badge {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .badge.borrador {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .badge.enviado,
 .badge.en-revision {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.aprobado,
 .badge.reservado {
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.parcialmente-atendido {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 .badge.atendido {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge.rechazado,
 .badge.cancelado {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .badge.cerrado {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>

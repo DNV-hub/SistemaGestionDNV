@@ -117,7 +117,7 @@ async function guardarConfig() {
       </select>
       <select v-model="filtros.frenteId" @change="buscar">
         <option value="">Todos los frentes</option>
-        <option v-for="f in alertas.frentesActivos" :key="f.id" :value="f.id">{{ f.codigo }} — {{ f.nombre }}</option>
+        <option v-for="f in alertas.frentesActivos" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
       </select>
       <button type="button" class="secundario" @click="limpiarFiltros">Limpiar</button>
     </div>
@@ -203,12 +203,12 @@ async function guardarConfig() {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 h2 {
   font-size: 0.95rem;
   margin: 0 0 0.6rem;
-  color: #111827;
+  color: var(--color-text);
 }
 .filtros {
   display: flex;
@@ -218,13 +218,13 @@ h2 {
 }
 .filtros select {
   padding: 0.5rem 0.65rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 .config-umbrales {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
   padding: 1rem 1.1rem;
   margin-bottom: 1.25rem;
 }
@@ -239,7 +239,7 @@ h2 {
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--color-text);
 }
 .con-sufijo {
   display: flex;
@@ -249,19 +249,19 @@ h2 {
 .con-sufijo input {
   width: 90px;
   padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 .con-sufijo span {
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.85rem;
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
@@ -271,8 +271,8 @@ button:disabled {
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 button.mini {
   padding: 0.3rem 0.6rem;
@@ -281,25 +281,28 @@ button.mini {
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.85rem;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .referencia {
   white-space: nowrap;
-  color: #374151;
+  color: var(--color-text);
 }
 .mensaje {
   max-width: 320px;
@@ -307,51 +310,51 @@ button.mini {
 .badge-nivel,
 .badge-estado {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
   text-transform: capitalize;
 }
 .badge-nivel.info {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge-nivel.advertencia {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 .badge-nivel.critica {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .badge-estado.activa {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 .badge-estado.resuelta {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .detalle-resuelta {
   margin-top: 0.2rem;
   font-size: 0.72rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .acciones-fila {
   white-space: nowrap;
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.85rem;
   margin: 0.6rem 0 0;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>

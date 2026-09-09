@@ -5,6 +5,8 @@ import {
   listarFrentes,
   crearUsuario,
   actualizarUsuario,
+  eliminarUsuario,
+  restablecerPassword,
 } from '../services/usuariosService'
 
 export const useUsuariosStore = defineStore('usuarios', {
@@ -45,6 +47,21 @@ export const useUsuariosStore = defineStore('usuarios', {
       const idx = this.usuarios.findIndex((u) => u.id === id)
       if (idx !== -1) this.usuarios[idx] = usuario
       return usuario
+    },
+
+    async restablecerPassword(id, password) {
+      return restablecerPassword(id, password)
+    },
+
+    async eliminar(id) {
+      const resultado = await eliminarUsuario(id)
+      if (resultado.eliminado) {
+        this.usuarios = this.usuarios.filter((u) => u.id !== id)
+      } else {
+        const idx = this.usuarios.findIndex((u) => u.id === id)
+        if (idx !== -1) this.usuarios[idx] = { ...this.usuarios[idx], estado: 'inactivo' }
+      }
+      return resultado
     },
   },
 })

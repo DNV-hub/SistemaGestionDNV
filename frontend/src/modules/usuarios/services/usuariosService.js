@@ -38,3 +38,29 @@ export async function actualizarUsuario(id, payload) {
   if (error) throw error
   return data
 }
+
+/** Llama a la Edge Function restablecer-password: define una contraseña
+ * nueva (elegida o generada) para un usuario existente. Nunca se puede leer
+ * la contraseña anterior — no es reversible. Devuelve { usuario, password }. */
+export async function restablecerPassword(id, password) {
+  const { data, error } = await supabase.functions.invoke('restablecer-password', { body: { id, password } })
+  if (error) {
+    const detalle = await error.context?.json?.().catch(() => null)
+    throw new Error(detalle?.error || error.message)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data
+}
+
+/** Llama a la Edge Function eliminar-usuario: borra la cuenta de acceso si
+ * no tiene historial asociado, o la desactiva si sí lo tiene. Devuelve
+ * { eliminado, desactivado }. */
+export async function eliminarUsuario(id) {
+  const { data, error } = await supabase.functions.invoke('eliminar-usuario', { body: { id } })
+  if (error) {
+    const detalle = await error.context?.json?.().catch(() => null)
+    throw new Error(detalle?.error || error.message)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data
+}

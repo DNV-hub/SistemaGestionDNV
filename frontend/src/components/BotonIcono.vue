@@ -1,6 +1,6 @@
 <script setup>
 defineProps({
-  variante: { type: String, required: true }, // 'editar' | 'eliminar' | 'corregir'
+  variante: { type: String, required: true }, // 'editar' | 'eliminar' | 'corregir' | 'copiar'
   titulo: { type: String, default: '' },
 })
 </script>
@@ -33,7 +33,7 @@ defineProps({
       <line x1="14" y1="11" x2="14" y2="17" />
     </svg>
     <svg
-      v-else
+      v-else-if="variante === 'corregir'"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -43,6 +43,18 @@ defineProps({
     >
       <polyline points="1 4 1 10 7 10" />
       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+    <svg
+      v-else
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <rect x="9" y="9" width="12" height="12" rx="1.5" />
+      <path d="M6 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V6" />
     </svg>
   </button>
 </template>
@@ -56,25 +68,28 @@ defineProps({
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: none;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .boton-icono svg {
   width: 16px;
   height: 16px;
 }
 .boton-icono:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-2);
 }
 .boton-icono.editar:hover {
-  color: #2563eb;
+  color: var(--color-primary);
 }
 .boton-icono.eliminar:hover {
-  color: #b91c1c;
+  color: var(--color-danger);
 }
 .boton-icono.corregir:hover {
-  color: #b45309;
+  color: var(--color-warning);
+}
+.boton-icono.copiar:hover {
+  color: var(--color-primary);
 }
 </style>

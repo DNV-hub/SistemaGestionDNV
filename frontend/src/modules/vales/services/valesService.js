@@ -1,6 +1,6 @@
 import { supabase } from '../../../services/supabaseClient'
 
-const SELECT_VALE = '*, frentes(id, codigo, nombre, estado), usuarios!supervisor_id(id, nombre)'
+const SELECT_VALE = '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre)'
 const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad)'
 
 export function generarNumeroVale() {
@@ -160,4 +160,48 @@ export async function listarAlmacenesActivos() {
   const { data, error } = await supabase.from('almacenes').select('id, codigo, nombre').eq('estado', 'activo').order('nombre')
   if (error) throw error
   return data
+}
+
+/**
+ * Situación de cada material de un vale frente a Procura y al stock del
+ * almacén, para alertar al que aprueba (¿hay stock?, ¿está contemplado en el
+ * metrado?, ¿ya hay sobreconsumo?) sin tener que ir a mirar otras pantallas.
+ */
+export async function obtenerAlertasVale({ frenteId, contratoId, materialIds }) {
+  if (!materialIds.length) {
+    return { stockPorMaterial: new Map(), procuraPorMaterial: new Map(), umbralSobreconsumo: 90 }
+  }
+
+  const [{ data: stock, error: e1 }, { data: procura, error: e2 }, { data: umbralRow }] = await Promise.all([
+    supabase.from('stock').select('material_id, cantidad_disponible').eq('contrato_id', contratoId).in('material_id', materialIds),
+    supabase
+      .from('procura_vs_consumo')
+      .select('material_id, cantidad_prevista, cantidad_solicitada, cantidad_entregada, saldo, porcentaje_consumo')
+      .eq('frente_id', frenteId)
+      .in('material_id', materialIds),
+    supabase.from('configuracion').select('valor').eq('clave', 'umbral_riesgo_sobreconsumo').single(),
+  ])
+  if (e1) throw e1
+  if (e2) throw e2
+
+  const stockPorMaterial = new Map()
+  for (const s of stock ?? []) {
+    stockPorMaterial.set(s.material_id, (stockPorMaterial.get(s.material_id) ?? 0) + Number(s.cantidad_disponible))
+  }
+
+  return {
+    stockPorMaterial,
+    procuraPorMaterial: new Map((procura ?? []).map((p) => [p.material_id, p])),
+    umbralSobreconsumo: Number(umbralRow?.valor ?? 90),
+  }
+}
+
+/** Stock en tiempo real por almacén, para que el supervisor vea qué hay disponible antes de pedir. */
+export async function listarStockDisponible() {
+  const { data, error } = await supabase
+    .from('stock')
+    .select('cantidad_disponible, almacenes(codigo, nombre), materiales(codigo, descripcion, unidad, estado)')
+    .order('material_id')
+  if (error) throw error
+  return data.filter((s) => s.materiales?.estado === 'activo')
 }

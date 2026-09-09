@@ -16,6 +16,8 @@ import {
   listarFrentesActivos,
   listarMaterialesActivos,
   listarAlmacenesActivos,
+  listarStockDisponible,
+  obtenerAlertasVale,
 } from '../services/valesService'
 
 export const useValesStore = defineStore('vales', {
@@ -25,6 +27,10 @@ export const useValesStore = defineStore('vales', {
     frentesActivos: [],
     materialesActivos: [],
     almacenesActivos: [],
+    stockDisponible: [],
+    alertasStockPorMaterial: new Map(),
+    alertasProcuraPorMaterial: new Map(),
+    alertasUmbralSobreconsumo: 90,
     cargando: false,
     error: '',
   }),
@@ -64,6 +70,7 @@ export const useValesStore = defineStore('vales', {
         this.valeActual = vale
         this.materialesActivos = materialesActivos
         this.almacenesActivos = almacenesActivos
+        await this._cargarAlertas()
       } catch (e) {
         this.error = 'No se pudo cargar el vale.'
         console.error(e)
@@ -72,9 +79,38 @@ export const useValesStore = defineStore('vales', {
       }
     },
 
+    /**
+     * Situación de cada material del vale frente a stock y Procura. Se
+     * atrapa aparte (no bloquea el resto del detalle si falla, ej. un rol
+     * sin procura.ver_comparacion) y en silencio deja los mapas vacíos.
+     */
+    async _cargarAlertas() {
+      const vale = this.valeActual
+      if (!vale?.lineas?.length || !vale.frentes?.contrato_id) {
+        this.alertasStockPorMaterial = new Map()
+        this.alertasProcuraPorMaterial = new Map()
+        return
+      }
+      try {
+        const { stockPorMaterial, procuraPorMaterial, umbralSobreconsumo } = await obtenerAlertasVale({
+          frenteId: vale.frente_id,
+          contratoId: vale.frentes.contrato_id,
+          materialIds: [...new Set(vale.lineas.map((l) => l.material_id))],
+        })
+        this.alertasStockPorMaterial = stockPorMaterial
+        this.alertasProcuraPorMaterial = procuraPorMaterial
+        this.alertasUmbralSobreconsumo = umbralSobreconsumo
+      } catch (e) {
+        console.error(e)
+        this.alertasStockPorMaterial = new Map()
+        this.alertasProcuraPorMaterial = new Map()
+      }
+    },
+
     async recargarDetalle() {
       if (!this.valeActual) return
       this.valeActual = await obtenerVale(this.valeActual.id)
+      await this._cargarAlertas()
     },
 
     async crear(payload) {
@@ -83,8 +119,18 @@ export const useValesStore = defineStore('vales', {
       return vale
     },
 
+    /** Panel móvil del supervisor: un solo paso, sin pasar por Borrador editable. */
+    async crearYEnviar(payload) {
+      const vale = await this.crear(payload)
+      return this.enviar(vale.id)
+    },
+
+    async cargarStockDisponible() {
+      this.stockDisponible = await listarStockDisponible()
+    },
+
     async enviar(id) {
-      const vale = await actualizarVale(id, { estado: 'Enviado' })
+      const vale = await actualizarVale(id, { estado: 'Enviado', fecha_envio: new Date().toISOString() })
       this._actualizarEnLista(vale)
       if (this.valeActual?.id === id) this.valeActual = { ...this.valeActual, ...vale }
       return vale

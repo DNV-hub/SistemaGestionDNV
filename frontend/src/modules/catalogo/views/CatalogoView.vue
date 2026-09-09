@@ -189,6 +189,7 @@ async function eliminar(material) {
       v-if="mostrarModalImportar"
       :codigos-existentes="catalogo.materiales.map((m) => m.codigo)"
       :nombres-edp-existentes="catalogo.nombresEdp"
+      :categorias-existentes="catalogo.categorias"
       @importar="importarMateriales"
       @cerrar="mostrarModalImportar = false"
     />
@@ -212,7 +213,7 @@ async function eliminar(material) {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 .filtros {
   margin-bottom: 1rem;
@@ -221,55 +222,58 @@ h1 {
   width: 320px;
   max-width: 100%;
   padding: 0.5rem 0.65rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
 .secundario {
   background: none;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.9rem;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .badge {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
 }
 .badge.activo {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge.inactivo {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
 }
 .acciones-fila {
   display: flex;
@@ -277,14 +281,14 @@ button {
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>

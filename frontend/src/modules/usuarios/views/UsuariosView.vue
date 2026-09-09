@@ -4,6 +4,7 @@ import { useUsuariosStore } from '../store/usuarios'
 import { useAuthStore } from '../../../store/auth'
 import UsuarioFormModal from '../components/UsuarioFormModal.vue'
 import PasswordTemporalModal from '../components/PasswordTemporalModal.vue'
+import RestablecerPasswordModal from '../components/RestablecerPasswordModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
 
 const usuarios = useUsuariosStore()
@@ -13,12 +14,15 @@ const busqueda = ref('')
 const mostrarModal = ref(false)
 const usuarioEnEdicion = ref(null)
 const usuarioCreado = ref(null) // { usuario, passwordTemporal }
+const usuarioParaRestablecer = ref(null)
+const passwordRestablecida = ref(null) // { usuario, passwordTemporal }
 const aviso = ref('')
+const errorAccion = ref('')
 
 const puedeCrear = computed(() => auth.tienePermiso('usuarios.crear'))
-const puedeEditar = computed(
-  () => auth.tienePermiso('usuarios.editar') || auth.tienePermiso('usuarios.desactivar')
-)
+const puedeEliminar = computed(() => auth.tienePermiso('usuarios.desactivar'))
+const puedeRestablecerPassword = computed(() => auth.tienePermiso('usuarios.editar'))
+const puedeEditar = computed(() => auth.tienePermiso('usuarios.editar') || puedeEliminar.value)
 
 const usuariosFiltrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
@@ -57,6 +61,32 @@ async function guardar(payload) {
     usuarioCreado.value = { usuario, passwordTemporal }
   }
 }
+
+function abrirRestablecer(usuario) {
+  errorAccion.value = ''
+  usuarioParaRestablecer.value = usuario
+}
+
+async function confirmarRestablecer(password) {
+  const { usuario, password: passwordUsada } = await usuarios.restablecerPassword(usuarioParaRestablecer.value.id, password)
+  usuarioParaRestablecer.value = null
+  passwordRestablecida.value = { usuario, passwordTemporal: passwordUsada }
+}
+
+async function eliminar(usuario) {
+  if (!confirm(`¿Eliminar a "${usuario.nombre}"?`)) return
+  aviso.value = ''
+  errorAccion.value = ''
+  try {
+    const resultado = await usuarios.eliminar(usuario.id)
+    aviso.value = resultado.eliminado
+      ? 'Usuario eliminado.'
+      : 'Este usuario ya generó movimientos (ingresos, vales, etc.), así que no se puede eliminar: se desactivó en su lugar.'
+  } catch (e) {
+    console.error(e)
+    errorAccion.value = e.message || 'No se pudo eliminar el usuario.'
+  }
+}
 </script>
 
 <template>
@@ -71,6 +101,7 @@ async function guardar(payload) {
     </div>
 
     <p v-if="aviso" class="aviso">{{ aviso }}</p>
+    <p v-if="errorAccion" class="error">{{ errorAccion }}</p>
     <p v-if="usuarios.error" class="error">{{ usuarios.error }}</p>
 
     <p v-if="usuarios.cargando">Cargando usuarios…</p>
@@ -95,8 +126,20 @@ async function guardar(payload) {
           <td>
             <span class="badge" :class="u.estado">{{ u.estado }}</span>
           </td>
-          <td v-if="puedeEditar">
+          <td v-if="puedeEditar" class="acciones-fila">
             <BotonIcono variante="editar" titulo="Editar" @click="abrirEditar(u)" />
+            <BotonIcono
+              v-if="puedeRestablecerPassword"
+              variante="corregir"
+              titulo="Restablecer contraseña"
+              @click="abrirRestablecer(u)"
+            />
+            <BotonIcono
+              v-if="puedeEliminar && u.id !== auth.session?.user?.id"
+              variante="eliminar"
+              titulo="Eliminar"
+              @click="eliminar(u)"
+            />
           </td>
         </tr>
         <tr v-if="!usuariosFiltrados.length">
@@ -120,6 +163,21 @@ async function guardar(payload) {
       :password-temporal="usuarioCreado.passwordTemporal"
       @cerrar="usuarioCreado = null"
     />
+
+    <RestablecerPasswordModal
+      v-if="usuarioParaRestablecer"
+      :usuario="usuarioParaRestablecer"
+      @confirmar="confirmarRestablecer"
+      @cerrar="usuarioParaRestablecer = null"
+    />
+
+    <PasswordTemporalModal
+      v-if="passwordRestablecida"
+      titulo="Contraseña restablecida"
+      :usuario="passwordRestablecida.usuario"
+      :password-temporal="passwordRestablecida.passwordTemporal"
+      @cerrar="passwordRestablecida = null"
+    />
   </div>
 </template>
 
@@ -136,7 +194,7 @@ async function guardar(payload) {
 h1 {
   font-size: 1.25rem;
   margin: 0;
-  color: #111827;
+  color: var(--color-text);
 }
 .filtros {
   margin-bottom: 1rem;
@@ -145,61 +203,68 @@ h1 {
   width: 320px;
   max-width: 100%;
   padding: 0.5rem 0.65rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
 }
 button {
   padding: 0.55rem 1rem;
   border: none;
-  border-radius: 4px;
-  background: #1f2937;
-  color: #fff;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
 }
 .tabla {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 .tabla th,
 .tabla td {
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.9rem;
 }
 .tabla th {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
   font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .badge {
   padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
 }
 .badge.activo {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 .badge.inactivo {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
+}
+.acciones-fila {
+  display: flex;
+  gap: 0.25rem;
 }
 .vacio {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 .aviso {
-  color: #166534;
+  color: var(--color-success);
   font-size: 0.9rem;
 }
 .error {
-  color: #b91c1c;
+  color: var(--color-danger);
   font-size: 0.9rem;
 }
 </style>
