@@ -4,9 +4,16 @@ Migraciones SQL definitivas del esquema (tablas, RLS, triggers, funciones de
 negocio y seed de roles/permisos/configuración), correspondientes al modelo
 aprobado en [`docs/MODELO_DATOS_Y_FLUJOS.md`](../../docs/MODELO_DATOS_Y_FLUJOS.md).
 
-**Estado:** código versionado, todavía no aplicado a ningún proyecto Supabase
-(no existe un proyecto de desarrollo creado aún). Nada de esto afecta datos
-reales hasta que se ejecute contra un proyecto.
+**Estado:** aplicado. Existe un único proyecto Supabase
+(`Sistema-materiales-DNV`), que es el que la aplicación usa en vivo — no hay un
+entorno de desarrollo aparte. Cualquier `supabase db push` cae directamente
+sobre esa base, así que conviene revisar que la migración sea aditiva antes de
+aplicarla, y nunca editar una migración que ya se aplicó.
+
+El proyecto usa el **formato nuevo de claves** de Supabase: la clave pública
+empieza con `sb_publishable_` y la que se salta RLS (para scripts de carga)
+empieza con `sb_secret_`. Las claves legacy `anon` / `service_role` en formato
+JWT están deshabilitadas.
 
 ## Cómo aplicarlas cuando exista un proyecto Supabase
 
