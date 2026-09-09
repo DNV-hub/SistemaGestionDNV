@@ -40,7 +40,7 @@ function quitar(id) {
 <template>
   <div v-if="reporte">
     <div class="card">
-      <div class="card-title">Programación de mañana</div>
+      <div class="card-title"><i class="ti ti-calendar-plus" />Programación — día siguiente</div>
       <div v-for="p in programadas" :key="p.id" class="fila-prog">
         <select v-model="p.etiqueta" @change="guardar">
           <option value="">— Partida —</option>
@@ -54,7 +54,7 @@ function quitar(id) {
     </div>
 
     <div class="card">
-      <div class="card-title">Actividades no programadas</div>
+      <div class="card-title"><i class="ti ti-circle-plus" />Actividades no programadas</div>
       <div v-for="p in noProgramadas" :key="p.id" class="fila-prog">
         <input v-model="p.descripcion" type="text" placeholder="Actividad" @change="guardar" />
         <input v-model="p.etiqueta" type="text" placeholder="Nota (opcional)" @change="guardar" />
@@ -65,28 +65,28 @@ function quitar(id) {
     </div>
 
     <div class="card">
-      <div class="card-title">Observaciones</div>
+      <div class="card-title"><i class="ti ti-message-circle" />Observaciones</div>
       <div class="field">
         <textarea v-model="reporte.observaciones" placeholder="Observaciones de campo, calidad, condiciones del frente…" @change="guardar" />
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Requerimientos</div>
+      <div class="card-title"><i class="ti ti-tools" />Requerimientos</div>
       <div class="field">
         <textarea v-model="reporte.requerimientos" placeholder="Materiales, equipos, herramientas, personal o servicios que se necesitan…" @change="guardar" />
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Restricciones</div>
+      <div class="card-title"><i class="ti ti-shield-exclamation" />Restricciones</div>
       <div class="field">
         <textarea v-model="reporte.restricciones" placeholder="Restricciones operativas, de acceso, clima, permisos…" @change="guardar" />
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">Modificaciones / Redline</div>
+      <div class="card-title"><i class="ti ti-pencil-exclamation" />Modificaciones / Redline</div>
       <label class="toggle-row">
         <input v-model="reporte.redline" type="checkbox" @change="guardar" />
         <span>¿Hubo modificaciones respecto al plano original?</span>
