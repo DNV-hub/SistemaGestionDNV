@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRdcStore } from '../store/rdc'
 import { nuevoId } from '../services/rdcRepository'
 import { CAUSAS_STANDBY, CAUSA_TIEMPO_TOTAL, HITOS } from '../services/rdcConstantes'
@@ -39,15 +39,25 @@ const paradaEsTiempoTotal = computed(() => nuevaParada.value.causa === CAUSA_TIE
 
 const puedeAgregar = computed(() =>
   tipoNuevo.value === 'actividad'
-    ? !!nuevaActividad.value.actividad.trim()
+    ? !!nuevaActividad.value.horaInicio && !!nuevaActividad.value.actividad.trim()
     : !!nuevaParada.value.causa &&
       (paradaEsTiempoTotal.value
         ? Number(nuevaParada.value.totalHoras) > 0 || Number(nuevaParada.value.totalMinutos) > 0
         : !!nuevaParada.value.desde && !!nuevaParada.value.hasta),
 )
 
+const campoActividad = ref(null)
+
+/** Tras agregar un registro, la hora de inicio del siguiente se precarga con
+ * la hora de fin del que acaba de entrar.
+ *
+ * La jornada se registra en cadena —una actividad termina donde empieza la
+ * siguiente— así que arrastrar esa hora ahorra la mitad de los toques y evita
+ * el hueco que queda cuando alguien se olvida de ponerla. Sigue siendo un
+ * valor editable: si el siguiente registro no empieza ahí, se cambia. */
 function agregarRegistro() {
   if (!puedeAgregar.value) return
+
   if (tipoNuevo.value === 'actividad') {
     const a = nuevaActividad.value
     reporte.value.bitacora.push({
@@ -57,7 +67,9 @@ function agregarRegistro() {
       actividad: a.actividad.trim(),
       orden: reporte.value.bitacora.length + 1,
     })
-    nuevaActividad.value = { horaInicio: '', horaFin: '', actividad: '' }
+    encadenar(a.horaFin || a.horaInicio)
+    nuevaActividad.value.actividad = ''
+    campoActividad.value?.focus()
   } else {
     const p = nuevaParada.value
     reporte.value.standby.push({
@@ -74,9 +86,32 @@ function agregarRegistro() {
       orden: reporte.value.standby.length + 1,
     })
     nuevaParada.value = { ...PARADA_VACIA }
+    // Misma cadena que en las actividades. Una parada declarada por tiempo
+    // total no tiene hora de fin, así que ahí no hay nada que arrastrar.
+    encadenar(p.hasta)
   }
+
   guardar()
 }
+
+/** Deja la hora en los DOS formularios, no solo en el que se acaba de usar:
+ * después de una actividad suele venir una parada y al revés, y el supervisor
+ * no tendría por qué volver a escribir la misma hora al cambiar de pestaña. */
+function encadenar(hora) {
+  nuevaActividad.value.horaInicio = hora || ''
+  nuevaActividad.value.horaFin = ''
+  nuevaParada.value.desde = hora || ''
+  nuevaParada.value.hasta = ''
+}
+
+// Al cambiar de causa se limpia el texto de "otra causa": quedaría colgado de
+// una causa que ya no es OTRO.
+watch(
+  () => nuevaParada.value.causa,
+  (causa) => {
+    if (causa !== 'OTRO') nuevaParada.value.causaOtro = ''
+  },
+)
 
 // --- Línea de tiempo -----------------------------------------------------
 // Actividades y paradas se combinan en UNA sola lista ordenada por hora de
@@ -184,7 +219,7 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
           </div>
           <div class="field">
             <label>Descripción de Actividad</label>
-            <textarea v-model="nuevaActividad.actividad" placeholder="Escribir actividad…" />
+            <textarea ref="campoActividad" v-model="nuevaActividad.actividad" placeholder="Escribir actividad…" />
           </div>
         </template>
 
@@ -202,6 +237,8 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
             <input v-model="nuevaParada.causaOtro" type="text" placeholder="Describe la causa…" />
           </div>
 
+          <!-- El horario aparece recién al elegir la causa: es ella la que
+               decide si se declara por rango o por tiempo total del día. -->
           <div v-if="paradaEsTiempoTotal" style="margin-bottom: 10px">
             <p class="note" style="margin-bottom: 8px">
               Este tipo de Stand By se registra como <strong>tiempo total del día</strong>.
@@ -211,7 +248,7 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
               <div class="field"><label>Minutos</label><input v-model="nuevaParada.totalMinutos" type="number" min="0" max="59" inputmode="numeric" placeholder="0" /></div>
             </div>
           </div>
-          <div v-else class="grid2" style="margin-bottom: 10px">
+          <div v-else-if="nuevaParada.causa" class="grid2" style="margin-bottom: 10px">
             <div class="field"><label>Desde</label><input v-model="nuevaParada.desde" type="time" /></div>
             <div class="field"><label>Hasta</label><input v-model="nuevaParada.hasta" type="time" /></div>
           </div>
