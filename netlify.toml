@@ -7,8 +7,21 @@ publish = "dist"
 NODE_VERSION = "20"
 
 # vue-router usa history mode: sin esto, refrescar una ruta como /catalogo
-# devolvería 404 en Netlify en vez de servir la SPA.
+# devolvería 404 en Netlify en vez de servir la SPA. Netlify solo aplica este
+# redirect cuando no existe un archivo real con ese nombre en dist/ (sw.js,
+# manifest.webmanifest, /icons/*, etc. siguen sirviéndose directos).
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# El Service Worker de la PWA (vite-plugin-pwa) nunca debe quedar cacheado
+# por el CDN: si un navegador recibe una copia vieja de sw.js, puede tardar
+# mucho en enterarse de que hay una versión nueva de la app disponible.
+# no-cache obliga a revalidar contra el servidor en cada carga, aunque el
+# propio Service Worker adentro siga usando su estrategia de caché normal
+# para el resto del app shell.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
