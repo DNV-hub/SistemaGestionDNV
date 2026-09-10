@@ -3,7 +3,7 @@ import { computed, ref, useAttrs } from 'vue'
 import { leerArchivoExcel, procesarFilas } from '../utils/importarExcel'
 
 const props = defineProps({
-  codigosExistentes: { type: Array, required: true },
+  materialesExistentes: { type: Array, required: true },
   nombresEdpExistentes: { type: Array, required: true },
   categoriasExistentes: { type: Array, default: () => [] },
 })
@@ -33,7 +33,7 @@ async function onArchivoSeleccionado(ev) {
   try {
     const filasCrudas = await leerArchivoExcel(file)
     resultado.value = procesarFilas(filasCrudas, {
-      codigosExistentes: props.codigosExistentes,
+      materialesExistentes: props.materialesExistentes,
       nombresEdpExistentes: props.nombresEdpExistentes,
       categoriasExistentes: props.categoriasExistentes,
     })
@@ -46,17 +46,23 @@ async function onArchivoSeleccionado(ev) {
 }
 
 const filasRenombradas = computed(() => resultado.value?.filas.filter((f) => f.renombrado) ?? [])
+const hayAlgoQueHacer = computed(() => resultado.value && (resultado.value.aImportar.length || resultado.value.aActualizar.length))
 
 async function confirmarImportacion() {
-  if (!resultado.value || !resultado.value.aImportar.length) return
+  if (!resultado.value || !hayAlgoQueHacer.value) return
   error.value = ''
   importando.value = true
   try {
-    await attrs.onImportar({
-      filas: resultado.value.aImportar,
-      nombresEdpNuevos: resultado.value.nombresEdpNuevos,
-      categoriasNuevas: resultado.value.categoriasNuevas,
-    })
+    if (resultado.value.aImportar.length) {
+      await attrs.onImportar({
+        filas: resultado.value.aImportar,
+        nombresEdpNuevos: resultado.value.nombresEdpNuevos,
+        categoriasNuevas: resultado.value.categoriasNuevas,
+      })
+    }
+    if (resultado.value.aActualizar.length) {
+      await attrs.onActualizarConversion(resultado.value.aActualizar)
+    }
     hecho.value = true
   } catch (e) {
     console.error(e)
@@ -74,8 +80,11 @@ async function confirmarImportacion() {
       <p class="ayuda">
         Columnas esperadas: <strong>CODIGO</strong>, <strong>DESCRIPCION ALMACEN</strong>,
         <strong>UNIDAD ALMACEN</strong> (obligatorias) — <strong>DESCRIPCION EDP</strong>,
-        <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong> y <strong>STOCK MINIMO</strong> son opcionales.
-        Si el nombre EDP o la categoría no existen todavía, se crean automáticamente.
+        <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong>, <strong>STOCK MINIMO</strong> y
+        <strong>CONVERSION</strong> (ninguna / area / longitud) son opcionales.
+        Si el nombre EDP o la categoría no existen todavía, se crean automáticamente. Un código que <strong>ya
+        existe</strong> no se vuelve a crear, pero si trae algo en CONVERSION esa columna sí se actualiza — así se
+        puede exportar el catálogo, corregir esa columna en Excel, y volver a subir el mismo archivo.
       </p>
 
       <label class="archivo">
@@ -87,10 +96,9 @@ async function confirmarImportacion() {
 
       <template v-if="hecho">
         <p class="aviso">
-          Se importaron {{ resultado.aImportar.length }} materiales
-          <span v-if="resultado.nombresEdpNuevos.length">
-            y se crearon {{ resultado.nombresEdpNuevos.length }} nombres EDP nuevos</span
-          >.
+          <span v-if="resultado.aImportar.length">Se importaron {{ resultado.aImportar.length }} materiales nuevos. </span>
+          <span v-if="resultado.aActualizar.length">Se actualizó la conversión de {{ resultado.aActualizar.length }} materiales. </span>
+          <span v-if="resultado.nombresEdpNuevos.length">Se crearon {{ resultado.nombresEdpNuevos.length }} nombres EDP nuevos.</span>
         </p>
         <button type="button" @click="$emit('cerrar')">Cerrar</button>
       </template>
@@ -98,12 +106,15 @@ async function confirmarImportacion() {
       <template v-else-if="resultado">
         <div class="resumen">
           <div><strong>{{ resultado.total }}</strong> filas leídas</div>
-          <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se importarán</div>
+          <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se crearán</div>
+          <div v-if="resultado.aActualizar.length" class="ok">
+            <strong>{{ resultado.aActualizar.length }}</strong> ya existen y se les actualiza la conversión
+          </div>
           <div v-if="resultado.conConflicto.length" class="advertencia">
-            <strong>{{ resultado.conConflicto.length }}</strong> omitidas: el código ya existe en el catálogo
+            <strong>{{ resultado.conConflicto.length }}</strong> omitidas: el código ya existe y no traen nada en CONVERSION
           </div>
           <div v-if="resultado.errores.length" class="advertencia">
-            <strong>{{ resultado.errores.length }}</strong> omitidas: falta código, descripción o unidad
+            <strong>{{ resultado.errores.length }}</strong> con errores (falta código/descripción/unidad, o CONVERSION inválida)
           </div>
           <div v-if="filasRenombradas.length" class="info">
             <strong>{{ filasRenombradas.length }}</strong> códigos repetidos en el archivo se renombraron
@@ -131,11 +142,12 @@ async function confirmarImportacion() {
                 <th>Unidad EDP</th>
                 <th>Categoría</th>
                 <th>Stock mínimo</th>
+                <th>Conversión</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="f in resultado.filas" :key="f.fila" :class="{ conflicto: f.yaExiste }">
+              <tr v-for="f in resultado.filas" :key="f.fila" :class="{ conflicto: f.yaExiste && !f.tipoConversion }">
                 <td>{{ f.fila }}</td>
                 <td>
                   {{ f.codigo }}
@@ -150,7 +162,18 @@ async function confirmarImportacion() {
                   <span v-if="f.categoriaNueva" class="etiqueta">nueva</span>
                 </td>
                 <td>{{ f.stock_minimo_default ?? '—' }}</td>
-                <td>{{ f.yaExiste ? 'Omitido (ya existe)' : 'Se importa' }}</td>
+                <td>{{ f.tipoConversion === undefined ? 'inválida' : f.tipoConversion ?? '—' }}</td>
+                <td>
+                  {{
+                    f.tipoConversion === undefined
+                      ? 'Error: CONVERSION inválida'
+                      : f.yaExiste
+                        ? f.tipoConversion
+                          ? 'Se actualiza la conversión'
+                          : 'Omitido (ya existe)'
+                        : 'Se crea'
+                  }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -158,8 +181,12 @@ async function confirmarImportacion() {
 
         <div class="acciones">
           <button type="button" class="secundario" @click="$emit('cerrar')">Cancelar</button>
-          <button type="button" :disabled="importando || !resultado.aImportar.length" @click="confirmarImportacion">
-            {{ importando ? 'Importando…' : `Importar ${resultado.aImportar.length} materiales` }}
+          <button type="button" :disabled="importando || !hayAlgoQueHacer" @click="confirmarImportacion">
+            {{
+              importando
+                ? 'Aplicando…'
+                : `Aplicar (${resultado.aImportar.length} nuevos, ${resultado.aActualizar.length} actualizados)`
+            }}
           </button>
         </div>
       </template>

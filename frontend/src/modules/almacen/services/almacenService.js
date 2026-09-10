@@ -98,6 +98,33 @@ export async function crearIngresosMasivo(filas) {
   return creados
 }
 
+/** Ingresos de materiales que necesitan conversión y todavía no tienen sus
+ * medidas cargadas (típicamente el stock inicial, subido antes de que
+ * existiera esta columna) — para exportar, completar en Excel y reimportar. */
+export async function listarIngresosSinMedidas() {
+  const { data, error } = await supabase
+    .from('ingresos')
+    .select(
+      'id, fecha, cantidad, documento_referencia, materiales!inner(codigo, descripcion, unidad, tipo_conversion), almacenes(codigo, nombre)'
+    )
+    .neq('materiales.tipo_conversion', 'ninguna')
+    .is('factor_conversion', null)
+    .order('fecha')
+  if (error) throw error
+  return data
+}
+
+/** Le agrega ancho/largo a un ingreso ya existente — no toca cantidad ni
+ * cantidad_restante, así que no hay riesgo de descuadrar stock/kardex. */
+export async function actualizarMedidasIngreso(id, { ancho, largo }) {
+  const { error } = await supabase.rpc('fn_actualizar_medidas_ingreso', {
+    p_ingreso_id: id,
+    p_ancho: ancho ?? null,
+    p_largo: largo ?? null,
+  })
+  if (error) throw error
+}
+
 export async function listarAjustes() {
   const { data, error } = await supabase
     .from('ajustes')

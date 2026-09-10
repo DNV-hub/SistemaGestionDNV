@@ -12,6 +12,8 @@ import {
   crearAjuste,
   listarSalidas,
   listarMaterialesActivos,
+  listarIngresosSinMedidas,
+  actualizarMedidasIngreso,
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
 
@@ -106,6 +108,25 @@ export const useAlmacenStore = defineStore('almacen', {
       this.ingresos.unshift(...creados)
       await this.refrescarStock()
       return creados
+    },
+
+    async obtenerIngresosSinMedidas() {
+      return listarIngresosSinMedidas()
+    },
+
+    /** aAplicar de procesarFilasMedidas: [{id, ancho, largo}]. Devuelve los
+     * que fallaron (cada fila es independiente, una no tumba al resto). */
+    async importarMedidasIngresos(aAplicar) {
+      const fallidos = []
+      for (const { id, ancho, largo } of aAplicar) {
+        try {
+          await actualizarMedidasIngreso(id, { ancho, largo })
+        } catch (e) {
+          fallidos.push({ id, error: e.message ?? String(e) })
+        }
+      }
+      await this.refrescarStock()
+      return fallidos
     },
 
     async registrarAjuste(payload) {

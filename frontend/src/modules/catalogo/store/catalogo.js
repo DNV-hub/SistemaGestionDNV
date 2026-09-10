@@ -11,6 +11,7 @@ import {
   crearNombresEdpEnLote,
   crearMaterialesEnLote,
   eliminarMaterial,
+  actualizarConversionEnLote,
 } from '../services/catalogoService'
 import { normalizarClave } from '../utils/importarExcel'
 
@@ -104,10 +105,24 @@ export const useCatalogoStore = defineStore('catalogo', {
         stock_minimo_default: f.stock_minimo_default ?? null,
       }))
 
-      const creados = await crearMaterialesEnLote(payloads)
+      const creados = payloads.length ? await crearMaterialesEnLote(payloads) : []
       this.materiales.push(...creados)
       this.materiales.sort((a, b) => a.codigo.localeCompare(b.codigo))
       return creados
+    },
+
+    /** aActualizar de procesarFilas: [{id, codigo, tipo_conversion}]. */
+    async importarActualizacionesConversion(aActualizar) {
+      if (!aActualizar.length) return { ok: 0, fallidos: [] }
+      const resultados = await actualizarConversionEnLote(aActualizar)
+      for (const r of resultados) {
+        if (!r.ok) continue
+        const idx = this.materiales.findIndex((m) => m.id === r.id)
+        const original = aActualizar.find((a) => a.id === r.id)
+        if (idx !== -1 && original) this.materiales[idx] = { ...this.materiales[idx], tipo_conversion: original.tipo_conversion }
+      }
+      const fallidos = resultados.filter((r) => !r.ok)
+      return { ok: resultados.length - fallidos.length, fallidos }
     },
 
     /**

@@ -12,6 +12,18 @@ const ALIAS_CAMPOS = {
   'UNIDAD EDP': 'unidadEdp',
   CATEGORIA: 'categoriaNombre',
   'STOCK MINIMO': 'stockMinimo',
+  CONVERSION: 'conversion',
+  CONVERSIÓN: 'conversion',
+}
+
+const VALORES_CONVERSION = new Set(['ninguna', 'area', 'longitud'])
+
+/** null = celda vacía, no se toca lo que ya tenía el material.
+ * undefined = el valor no es ninguno de los tres válidos (fila con error). */
+function normalizarConversion(valor) {
+  if (!valor) return null
+  const limpio = normalizarEncabezado(valor).toLowerCase()
+  return VALORES_CONVERSION.has(limpio) ? limpio : undefined
 }
 
 function normalizarEncabezado(texto) {
@@ -54,9 +66,15 @@ export async function leerArchivoExcel(file) {
  * códigos repetidos dentro del archivo, detecta choques con códigos ya
  * existentes en el catálogo y resuelve el nombre EDP y la categoría contra
  * lo ya cargado (o marca cuáles hay que crear) — mismo criterio para ambos.
+ *
+ * Los códigos que YA existen no se saltean del todo: si traen algo en la
+ * columna CONVERSION, se arma `aActualizar` con esos cambios (así el mismo
+ * archivo sirve para exportar el catálogo, corregir esa columna en Excel, y
+ * reimportar) — el resto de los campos de una fila existente no se toca.
  */
-export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExistentes, categoriasExistentes = [] }) {
-  const codigosExistentesSet = new Set([...codigosExistentes].map((c) => c.toLowerCase()))
+export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresEdpExistentes, categoriasExistentes = [] }) {
+  const codigosExistentesSet = new Set(materialesExistentes.map((m) => m.codigo.toLowerCase()))
+  const idPorCodigo = new Map(materialesExistentes.map((m) => [m.codigo.toLowerCase(), m.id]))
   const nombresEdpPorNombre = new Map(
     nombresEdpExistentes.map((n) => [normalizarClave(n.nombre), n])
   )
@@ -126,6 +144,7 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
     }
 
     const stockMinimo = f.stockMinimo ? Number(f.stockMinimo) : null
+    const tipoConversion = normalizarConversion(f.conversion)
 
     return {
       fila: f._fila,
@@ -142,16 +161,29 @@ export function procesarFilas(filasCrudas, { codigosExistentes, nombresEdpExiste
       categoriaId,
       categoriaNueva,
       stock_minimo_default: Number.isFinite(stockMinimo) ? stockMinimo : null,
+      tipoConversion, // null: celda vacía. undefined: valor inválido. 'ninguna'/'area'/'longitud': válido.
       yaExiste,
     }
   })
 
+  // Filas de códigos que ya existen con una columna CONVERSION válida: se
+  // arma la actualización acá, no se tocan al crear (aImportar las excluye
+  // igual que antes).
+  const aActualizar = filasProcesadas
+    .filter((f) => f.yaExiste && f.tipoConversion)
+    .map((f) => ({ id: idPorCodigo.get(f.codigo.toLowerCase()), codigo: f.codigo, tipo_conversion: f.tipoConversion }))
+
+  const erroresConversion = filasProcesadas
+    .filter((f) => f.tipoConversion === undefined)
+    .map((f) => ({ fila: f.fila, motivo: `Columna CONVERSION inválida: debe ser "ninguna", "area" o "longitud".` }))
+
   return {
     total: filasCrudas.length,
-    errores,
+    errores: [...errores, ...erroresConversion],
     filas: filasProcesadas,
     aImportar: filasProcesadas.filter((f) => !f.yaExiste),
-    conConflicto: filasProcesadas.filter((f) => f.yaExiste),
+    conConflicto: filasProcesadas.filter((f) => f.yaExiste && !f.tipoConversion),
+    aActualizar,
     nombresEdpNuevos: [...nombresEdpNuevos.values()],
     categoriasNuevas: [...categoriasNuevas.values()],
   }

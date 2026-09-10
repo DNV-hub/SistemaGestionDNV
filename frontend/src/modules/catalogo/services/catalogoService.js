@@ -80,3 +80,16 @@ export async function actualizarMaterial(id, payload) {
   if (error) throw error
   return data
 }
+
+/** Actualiza solo tipo_conversion de varios materiales por id (viene del
+ * importador: exportar catálogo, corregir la columna CONVERSION en Excel,
+ * reimportar). Una petición por fila — nada masivo, y así cada una puede
+ * fallar sin tirar abajo el resto. */
+export async function actualizarConversionEnLote(actualizaciones) {
+  const resultados = []
+  for (const { id, tipo_conversion } of actualizaciones) {
+    const { error } = await supabase.from('materiales').update({ tipo_conversion }).eq('id', id)
+    resultados.push({ id, ok: !error, error: error?.message ?? null })
+  }
+  return resultados
+}

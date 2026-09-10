@@ -6,9 +6,11 @@ import AlmacenesModal from '../components/AlmacenesModal.vue'
 import IngresoFormModal from '../components/IngresoFormModal.vue'
 import AjusteFormModal from '../components/AjusteFormModal.vue'
 import ImportarIngresosModal from '../components/ImportarIngresosModal.vue'
+import ImportarMedidasIngresoModal from '../components/ImportarMedidasIngresoModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
 import { useDevolucionesStore } from '../../devoluciones/store/devoluciones'
 import RecibirDevolucionModal from '../../devoluciones/components/RecibirDevolucionModal.vue'
+import { descargarExcel } from '../../../utils/exportarExcel'
 
 const almacen = useAlmacenStore()
 const auth = useAuthStore()
@@ -19,6 +21,9 @@ const mostrarModalAlmacenes = ref(false)
 const mostrarModalIngreso = ref(false)
 const mostrarModalAjuste = ref(false)
 const mostrarModalImportar = ref(false)
+const mostrarModalImportarMedidas = ref(false)
+const ingresosSinMedidas = ref([])
+const exportandoSinMedidas = ref(false)
 const ajustePrellenado = ref(null)
 const devolucionARecibir = ref(null)
 const aviso = ref('')
@@ -97,6 +102,61 @@ async function importarIngresosMasivo({ almacen_id, filas }) {
   aviso.value = `Se registraron ${payload.length} ingresos.`
 }
 
+/**
+ * Exporta los ingresos que necesitan conversión (ej. malla, anclajes) y
+ * todavía no tienen ancho/largo cargados — típicamente el stock inicial,
+ * subido por Excel antes de que existiera esta columna. La columna ID no
+ * se toca: es lo que usa "Importar medidas" para encontrar cada fila real.
+ */
+async function exportarSinMedidas() {
+  aviso.value = ''
+  exportandoSinMedidas.value = true
+  try {
+    ingresosSinMedidas.value = await almacen.obtenerIngresosSinMedidas()
+    if (!ingresosSinMedidas.value.length) {
+      aviso.value = 'No hay ingresos pendientes de medidas.'
+      return
+    }
+    descargarExcel(`ingresos_sin_medidas_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+      {
+        nombre: 'Sin medidas',
+        filas: ingresosSinMedidas.value.map((i) => ({
+          ID: i.id,
+          FECHA: i.fecha,
+          ALMACEN: i.almacenes ? `${i.almacenes.codigo} — ${i.almacenes.nombre}` : '',
+          CODIGO: i.materiales?.codigo ?? '',
+          DESCRIPCION: i.materiales?.descripcion ?? '',
+          CANTIDAD: i.cantidad,
+          UNIDAD: i.materiales?.unidad ?? '',
+          TIPO_CONVERSION: i.materiales?.tipo_conversion ?? '',
+          DOCUMENTO: i.documento_referencia ?? '',
+          ANCHO: '',
+          LARGO: '',
+        })),
+      },
+    ])
+  } catch (e) {
+    console.error(e)
+    aviso.value = 'No se pudo exportar.'
+  } finally {
+    exportandoSinMedidas.value = false
+  }
+}
+
+async function abrirImportarMedidas() {
+  aviso.value = ''
+  if (!ingresosSinMedidas.value.length) {
+    ingresosSinMedidas.value = await almacen.obtenerIngresosSinMedidas()
+  }
+  mostrarModalImportarMedidas.value = true
+}
+
+async function importarMedidas(aAplicar) {
+  const fallidos = await almacen.importarMedidasIngresos(aAplicar)
+  ingresosSinMedidas.value = await almacen.obtenerIngresosSinMedidas()
+  return fallidos
+}
+
 async function registrarAjuste(payload) {
   aviso.value = ''
   await almacen.registrarAjuste({ ...payload, usuario_id: auth.session.user.id })
@@ -166,6 +226,12 @@ function abrirCorregirAjuste(a) {
           @click="mostrarModalImportar = true"
         >
           Importar ingreso masivo
+        </button>
+        <button v-if="puedeRegistrarIngreso" class="secundario" :disabled="exportandoSinMedidas" @click="exportarSinMedidas">
+          {{ exportandoSinMedidas ? 'Exportando…' : 'Exportar sin medidas' }}
+        </button>
+        <button v-if="puedeRegistrarIngreso" class="secundario" @click="abrirImportarMedidas">
+          Importar medidas
         </button>
         <button
           v-if="puedeRegistrarIngreso"
@@ -419,6 +485,13 @@ function abrirCorregirAjuste(a) {
       :materiales="almacen.materialesActivos"
       @importar="importarIngresosMasivo"
       @cerrar="mostrarModalImportar = false"
+    />
+
+    <ImportarMedidasIngresoModal
+      v-if="mostrarModalImportarMedidas"
+      :ingresos-sin-medidas="ingresosSinMedidas"
+      @aplicar="importarMedidas"
+      @cerrar="mostrarModalImportarMedidas = false"
     />
 
     <RecibirDevolucionModal

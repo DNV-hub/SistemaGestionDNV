@@ -7,6 +7,7 @@ import CategoriasModal from '../components/CategoriasModal.vue'
 import NombresEdpModal from '../components/NombresEdpModal.vue'
 import ImportarExcelModal from '../components/ImportarExcelModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
+import { descargarExcel } from '../../../utils/exportarExcel'
 
 const catalogo = useCatalogoStore()
 const auth = useAuthStore()
@@ -80,9 +81,35 @@ async function crearNombreEdp(payload) {
 }
 
 async function importarMateriales(payload) {
-  aviso.value = ''
   const creados = await catalogo.importarMateriales(payload)
-  aviso.value = `Se importaron ${creados.length} materiales.`
+  aviso.value = [aviso.value, `Se crearon ${creados.length} materiales.`].filter(Boolean).join(' ')
+}
+
+async function actualizarConversion(aActualizar) {
+  const { ok, fallidos } = await catalogo.importarActualizacionesConversion(aActualizar)
+  const mensaje = fallidos.length
+    ? `Se actualizó la conversión de ${ok} materiales (${fallidos.length} fallaron).`
+    : `Se actualizó la conversión de ${ok} materiales.`
+  aviso.value = [aviso.value, mensaje].filter(Boolean).join(' ')
+}
+
+function exportarCatalogo() {
+  descargarExcel(`catalogo_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+    {
+      nombre: 'Catálogo',
+      filas: catalogo.materiales.map((m) => ({
+        CODIGO: m.codigo,
+        'DESCRIPCION ALMACEN': m.descripcion,
+        'UNIDAD ALMACEN': m.unidad,
+        'DESCRIPCION EDP': m.nombres_edp?.nombre ?? '',
+        'UNIDAD EDP': m.unidad_edp ?? '',
+        CATEGORIA: m.categorias?.nombre ?? '',
+        'STOCK MINIMO': m.stock_minimo_default ?? '',
+        CONVERSION: m.tipo_conversion ?? 'ninguna',
+        ESTADO: m.estado,
+      })),
+    },
+  ])
 }
 
 async function eliminar(material) {
@@ -106,7 +133,8 @@ async function eliminar(material) {
         <button v-if="puedeGestionarCategorias" class="secundario" @click="mostrarModalNombresEdp = true">
           Nombres EDP
         </button>
-        <button v-if="puedeImportar" class="secundario" @click="mostrarModalImportar = true">
+        <button v-if="puedeImportar" class="secundario" @click="exportarCatalogo">Exportar Excel</button>
+        <button v-if="puedeImportar" class="secundario" @click="aviso = ''; mostrarModalImportar = true">
           Importar Excel
         </button>
         <button v-if="puedeCrear" @click="abrirCrear">+ Nuevo material</button>
@@ -187,10 +215,11 @@ async function eliminar(material) {
 
     <ImportarExcelModal
       v-if="mostrarModalImportar"
-      :codigos-existentes="catalogo.materiales.map((m) => m.codigo)"
+      :materiales-existentes="catalogo.materiales.map((m) => ({ id: m.id, codigo: m.codigo }))"
       :nombres-edp-existentes="catalogo.nombresEdp"
       :categorias-existentes="catalogo.categorias"
       @importar="importarMateriales"
+      @actualizar-conversion="actualizarConversion"
       @cerrar="mostrarModalImportar = false"
     />
   </div>
