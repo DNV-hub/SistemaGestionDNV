@@ -117,21 +117,27 @@ async function exportarSinMedidas() {
       aviso.value = 'No hay ingresos pendientes de medidas.'
       return
     }
+    // Las columnas que necesitás leer para completar ANCHO/LARGO van
+    // primero y con los mismos nombres que usa el Catálogo (Código,
+    // Descripción Almacén); el ID técnico —el que conecta cada fila con el
+    // ingreso real al reimportar, no se edita ni se borra— va al final,
+    // y hay un N° simple para no tener que mirar ese ID mientras completás.
     descargarExcel(`ingresos_sin_medidas_${new Date().toISOString().slice(0, 10)}.xlsx`, [
       {
         nombre: 'Sin medidas',
-        filas: ingresosSinMedidas.value.map((i) => ({
-          ID: i.id,
-          FECHA: i.fecha,
-          ALMACEN: i.almacenes ? `${i.almacenes.codigo} — ${i.almacenes.nombre}` : '',
+        filas: ingresosSinMedidas.value.map((i, idx) => ({
+          'N°': idx + 1,
           CODIGO: i.materiales?.codigo ?? '',
-          DESCRIPCION: i.materiales?.descripcion ?? '',
+          'DESCRIPCION ALMACEN': i.materiales?.descripcion ?? '',
+          'UNIDAD ALMACEN': i.materiales?.unidad ?? '',
+          CONVERSION: i.materiales?.tipo_conversion ?? '',
           CANTIDAD: i.cantidad,
-          UNIDAD: i.materiales?.unidad ?? '',
-          TIPO_CONVERSION: i.materiales?.tipo_conversion ?? '',
-          DOCUMENTO: i.documento_referencia ?? '',
           ANCHO: '',
           LARGO: '',
+          FECHA: i.fecha,
+          ALMACEN: i.almacenes ? `${i.almacenes.codigo} — ${i.almacenes.nombre}` : '',
+          DOCUMENTO: i.documento_referencia ?? '',
+          ID: i.id,
         })),
       },
     ])
