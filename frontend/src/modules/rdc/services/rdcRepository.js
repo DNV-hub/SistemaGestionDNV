@@ -89,7 +89,25 @@ export function crearBorrador({ supervisorId = null, creadoPor, sectorId = null,
 }
 
 export async function guardar(reporte) {
-  const conMarca = { ...reporte, actualizadoEn: new Date().toISOString() }
+  // `reporte` es (o cuelga de) el estado reactivo de Pinia. Un `{...spread}`
+  // superficial no alcanza: Vue envuelve en un Proxy nuevo cada array/objeto
+  // anidado en cuanto se LEE a través del proxy raíz, así que el spread
+  // termina copiando esos proxies, no los datos planos de abajo. Peor
+  // todavía, algunas operaciones del store (reasignar `personal` completo
+  // tras filtrar/mapear, por ejemplo) guardan esos proxies como VALOR dentro
+  // del array — a partir de ahí ni `toRaw()` en la raíz los limpia, porque
+  // ya no son una envoltura de lectura: son el dato mismo.
+  //
+  // IndexedDB no puede clonar un Proxy (`DataCloneError`), así que
+  // cualquiera de estos casos hacía fallar el guardado ENTERO en silencio
+  // — no solo el campo contaminado, todo el objeto, porque el clonado
+  // estructurado es atómico. `JSON.parse(JSON.stringify(...))` no tiene este
+  // problema: como stringify lee cada valor a través de cualquier trampa que
+  // exista y el resultado es texto, lo que sale de parsearlo de vuelta son
+  // siempre objetos y arrays nativos, nunca proxies, sin importar cuántos
+  // haya atrapados ni cómo hayan llegado ahí.
+  const plano = JSON.parse(JSON.stringify(reporte))
+  const conMarca = { ...plano, actualizadoEn: new Date().toISOString() }
   await db.reportes.put(conMarca)
   return conMarca
 }

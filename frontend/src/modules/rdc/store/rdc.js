@@ -162,7 +162,22 @@ export const useRdcStore = defineStore('rdc', {
       // ACTUAL (no el que había cuando se pidió el guardado) y lo escribe;
       // si varios guardados quedaron en fila, los primeros terminan siendo
       // redundantes y el último siempre grava lo más reciente.
-      colaGuardado = colaGuardado.then(() => (this.actual ? repo.guardar(this.actual) : null))
+      //
+      // Los dos `.catch()` son imprescindibles y no cosméticos: sin ellos,
+      // si UN SOLO guardado fallaba alguna vez (una escritura rechazada,
+      // una cuota de almacenamiento llena, lo que sea), `colaGuardado`
+      // quedaba rechazada PARA SIEMPRE — cualquier `.then()` que se le
+      // encadene después hereda ese rechazo sin ejecutarse. Como `abrir()`
+      // ahora espera esta misma cola antes de leer un borrador, esa única
+      // falla bastaba para que la app se quedara colgada en "Cargando…"
+      // para siempre, en cualquier borrador, no solo el que falló. El
+      // primer `.catch()` ignora si el guardado ANTERIOR falló (para poder
+      // intentar este de todas formas); el segundo evita que ESTE intento,
+      // si falla, vuelva a romper la cola para el que venga después.
+      colaGuardado = colaGuardado
+        .catch(() => {})
+        .then(() => (this.actual ? repo.guardar(this.actual) : null))
+        .catch((error) => console.error('No se pudo guardar el reporte RDC', error))
       await colaGuardado
     },
 
