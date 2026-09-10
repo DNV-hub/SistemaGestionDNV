@@ -65,18 +65,19 @@ if (auth.estaAutenticado) cargarContadores()
 // pantallas que las incrustan (Vales, Kardex, Almacén) — Almacén los
 // necesita para eso pero no gestiona esos módulos, así que se le oculta el
 // link acá (rolesExcluidos) en vez de quitarle el permiso de verdad.
-// Un supervisor ve solo lo suyo: el Reporte Diario de Campo y Vales (más
-// Fotografías y Sketch's cuando existan). No es una cuestión de permisos —
-// necesita catalogo.ver, frentes.ver y stock.ver para que Vales y el propio
-// RDC funcionen por dentro— sino de a qué módulos entra: su trabajo pasa en el
-// frente, y un menú con Almacén, Procura o Kardex es ruido que además invita a
-// tocar donde no corresponde. Se resuelve con rolesExcluidos, igual que ya se
-// hacía con Almacén en Catálogo y Frentes.
+// Un supervisor ve solo lo suyo: el Reporte Diario de Campo, Fotografías,
+// Vales y Sketch's (este último cuando exista). No es una cuestión de
+// permisos — necesita catalogo.ver, frentes.ver y stock.ver para que Vales y
+// el propio RDC funcionen por dentro— sino de a qué módulos entra: su trabajo
+// pasa en el frente, y un menú con Almacén, Procura o Kardex es ruido que
+// además invita a tocar donde no corresponde. Se resuelve con
+// rolesExcluidos, igual que ya se hacía con Almacén en Catálogo y Frentes.
 const SOLO_CAMPO = ['Supervisor']
 
 const navPrincipal = [
   { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios' },
+  { to: '/fotos', label: 'Fotografías', icono: 'camara', permiso: 'rdc.crear' },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
 ]
 

@@ -78,6 +78,11 @@ defineProps({
       <line x1="8.5" y1="14" x2="13" y2="14" />
     </template>
 
+    <template v-else-if="nombre === 'camara'">
+      <path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5h2l1.2-1.8A1 1 0 0 1 9.5 4.7h5a1 1 0 0 1 .83.5L16.5 7h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5Z" />
+      <circle cx="12" cy="13" r="3.3" />
+    </template>
+
     <template v-else-if="nombre === 'usuarios'">
       <circle cx="12" cy="8.3" r="3.3" />
       <path d="M5 20c0-3.6 3.1-6.3 7-6.3s7 2.7 7 6.3" />
