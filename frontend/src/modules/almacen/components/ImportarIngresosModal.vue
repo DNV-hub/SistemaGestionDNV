@@ -81,11 +81,14 @@ async function confirmarImportacion() {
     <div class="modal">
       <h2>Importar ingreso masivo</h2>
       <p class="ayuda">
-        Para cargar de una vez el stock actual desde Excel. Columnas esperadas: <strong>CODIGO</strong> (código de
-        almacén, debe existir ya en el catálogo) y <strong>CANTIDAD</strong>. Documento, proveedor y observación son
-        opcionales. <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de los dos
-        contratos, agrega esa columna con el nombre o código del contrato de cada fila; si no la traes, todas las
-        filas usan el contrato por defecto que elijas abajo.
+        Para cargar de una vez el stock actual desde Excel (¿no sabés qué columnas van? "Descargar plantilla" te da
+        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong> (código
+        de almacén, debe existir ya en el catálogo) y <strong>CANTIDAD</strong>. Documento, proveedor y observación
+        son opcionales. Si el material tiene conversión configurada en el catálogo, también hacen falta
+        <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO si es de tipo longitud).
+        <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de los dos contratos, agrega
+        esa columna con el nombre o código del contrato de cada fila; si no la traes, todas las filas usan el
+        contrato por defecto que elijas abajo.
       </p>
 
       <div class="fila-selects">
@@ -132,6 +135,8 @@ async function confirmarImportacion() {
                 <th>Código</th>
                 <th>Descripción</th>
                 <th>Cantidad</th>
+                <th>Ancho</th>
+                <th>Largo</th>
                 <th>Contrato</th>
                 <th>Estado</th>
               </tr>
@@ -142,6 +147,8 @@ async function confirmarImportacion() {
                 <td>{{ f.codigo }}</td>
                 <td>{{ f.descripcion ?? '—' }}</td>
                 <td>{{ f.cantidad ?? '—' }} {{ f.unidad ?? '' }}</td>
+                <td>{{ f.ancho ?? '—' }}</td>
+                <td>{{ f.largo ?? '—' }}</td>
                 <td>{{ f.contrato_nombre ?? '—' }}</td>
                 <td>{{ f.estado === 'ok' ? 'Se importa' : f.motivo }}</td>
               </tr>

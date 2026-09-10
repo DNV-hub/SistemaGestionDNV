@@ -93,6 +93,8 @@ async function importarIngresosMasivo({ almacen_id, filas }) {
     contrato_id: f.contrato_id,
     material_id: f.material_id,
     cantidad: f.cantidad,
+    ancho: f.ancho,
+    largo: f.largo,
     documento_referencia: f.documento_referencia,
     proveedor: f.proveedor,
     observacion: f.observacion,
@@ -100,6 +102,31 @@ async function importarIngresosMasivo({ almacen_id, filas }) {
   }))
   await almacen.importarIngresosMasivo(payload)
   aviso.value = `Se registraron ${payload.length} ingresos.`
+}
+
+/** Plantilla lista para llenar: un renglón por cada material activo, con
+ * su código/descripción/conversión ya puestos — solo hay que cargar
+ * cantidad (y ancho/largo donde corresponda) y borrar las filas que no
+ * apliquen para este ingreso. */
+function descargarPlantillaIngresos() {
+  descargarExcel('plantilla_ingreso_masivo.xlsx', [
+    {
+      nombre: 'Ingresos',
+      filas: almacen.materialesActivos.map((m) => ({
+        CODIGO: m.codigo,
+        'DESCRIPCION ALMACEN': m.descripcion,
+        'UNIDAD ALMACEN': m.unidad,
+        CONVERSION: m.tipo_conversion ?? 'ninguna',
+        CANTIDAD: '',
+        ANCHO: '',
+        LARGO: '',
+        CONTRATO: '',
+        DOCUMENTO: '',
+        PROVEEDOR: '',
+        OBSERVACION: '',
+      })),
+    },
+  ])
 }
 
 /**
@@ -232,6 +259,9 @@ function abrirCorregirAjuste(a) {
           @click="mostrarModalImportar = true"
         >
           Importar ingreso masivo
+        </button>
+        <button v-if="puedeRegistrarIngreso" class="secundario" @click="descargarPlantillaIngresos">
+          Descargar plantilla
         </button>
         <button v-if="puedeRegistrarIngreso" class="secundario" :disabled="exportandoSinMedidas" @click="exportarSinMedidas">
           {{ exportandoSinMedidas ? 'Exportando…' : 'Exportar sin medidas' }}

@@ -6,6 +6,8 @@ const ALIAS_CAMPOS = {
   CODIGO: 'codigo',
   'CODIGO ALMACEN': 'codigo',
   CANTIDAD: 'cantidad',
+  ANCHO: 'ancho',
+  LARGO: 'largo',
   CONTRATO: 'contrato',
   DOCUMENTO: 'documento_referencia',
   'DOCUMENTO DE REFERENCIA': 'documento_referencia',
@@ -83,6 +85,18 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       return
     }
 
+    const tipoConversion = material.tipo_conversion ?? 'ninguna'
+    const ancho = f.ancho ? Number(f.ancho) : null
+    const largo = f.largo ? Number(f.largo) : null
+    if (tipoConversion === 'area' && (!ancho || !largo)) {
+      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Este material necesita ANCHO y LARGO del rollo.' })
+      return
+    }
+    if (tipoConversion === 'longitud' && !largo) {
+      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Este material necesita LARGO.' })
+      return
+    }
+
     let contratoId = contratoIdPorDefecto
     let contratoNombre = contratosDisponibles.find((c) => c.id === contratoIdPorDefecto)?.nombre ?? null
     if (f.contrato) {
@@ -107,6 +121,8 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       unidad: material.unidad,
       material_id: material.id,
       cantidad,
+      ancho: tipoConversion === 'area' ? ancho : null,
+      largo: tipoConversion !== 'ninguna' ? largo : null,
       contrato_id: contratoId,
       contrato_nombre: contratoNombre,
       documento_referencia: f.documento_referencia || null,
