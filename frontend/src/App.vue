@@ -145,7 +145,7 @@ function visibles(items) {
 // más usados como pestañas fijas (siguiendo el orden Principal → Planeamiento
 // → Almacén) y el resto queda dentro de "Más", junto con tema/usuarios/salir.
 const navTodos = computed(() => [
-  ...visibles(navPrincipal),
+  ...visibles(navPrincipal.value),
   ...visibles(navPlaneamiento.value),
   ...visibles(navAlmacen.value),
 ])
