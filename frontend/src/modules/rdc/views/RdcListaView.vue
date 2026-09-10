@@ -40,6 +40,15 @@ function detalleEnvio(r) {
 const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
 const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
 
+const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+/** "10 ago 26" — el título que pidió el usuario para cada tarjeta del historial. */
+function fechaCorta(iso) {
+  if (!iso) return '—'
+  const [y, m, d] = iso.split('-').map(Number)
+  return `${d} ${MESES_ABREV[m - 1]} ${String(y).slice(2)}`
+}
+const titulo = (fechaIso, frente) => `${fechaCorta(fechaIso)} - ${frente}`
+
 async function nuevo() {
   const reporte = await rdc.nuevo()
   router.push({ name: 'rdc-editar', params: { id: reporte.id } })
@@ -91,8 +100,7 @@ async function borrar(r) {
         <div v-for="r in rdc.reportes" :key="r.id" class="card reporte" @click="abrir(r)">
           <div class="reporte-fila">
             <div class="reporte-datos">
-              <div class="reporte-frente">{{ nombre('frentes', r.frenteId) }}</div>
-              <div class="reporte-meta">{{ fmtFecha(r.fecha) }} · {{ nombre('supervisores', r.supervisorId) }}</div>
+              <div class="reporte-frente">{{ titulo(r.fecha, nombre('frentes', r.frenteId)) }}</div>
             </div>
             <span class="estado-pill" :class="estadoDe(r).clave" :title="detalleEnvio(r)">{{ estadoDe(r).texto }}</span>
           </div>
@@ -110,8 +118,8 @@ async function borrar(r) {
         <div v-for="r in rdc.historicoRemoto" :key="r.id" class="card reporte" @click="abrir(r)">
           <div class="reporte-fila">
             <div class="reporte-datos">
-              <div class="reporte-frente">{{ r.rdc_frentes?.nombre ?? '—' }}</div>
-              <div class="reporte-meta">{{ fmtFecha(r.fecha) }} · {{ r.rdc_supervisores?.nombre ?? '—' }}</div>
+              <div class="reporte-frente">{{ titulo(r.fecha, r.rdc_frentes?.nombre ?? '—') }}</div>
+              <div class="reporte-meta">{{ r.rdc_supervisores?.nombre ?? '—' }}</div>
             </div>
             <span class="estado-pill" :class="r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente'">
               {{ r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente' }}

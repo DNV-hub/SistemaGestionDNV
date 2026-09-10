@@ -119,7 +119,7 @@ async function onSubmit() {
       <div class="acciones">
         <button type="button" class="secundario" @click="$emit('cerrar')">Cancelar</button>
         <button type="submit" :disabled="guardando">
-          {{ guardando ? 'Guardando…' : 'Crear vale (Borrador)' }}
+          {{ guardando ? 'Enviando…' : 'Enviar vale' }}
         </button>
       </div>
     </form>

@@ -58,16 +58,19 @@ const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
 
 async function crear(payload) {
   aviso.value = ''
-  // Un supervisor crea su propio vale (queda en Borrador, lo envía él
-  // cuando quiera); Almacén cargando algo que llegó por WhatsApp lo manda
-  // directo a la cola de revisión — nadie más podría "enviarlo" después,
-  // porque no es el dueño del vale.
+  // "Nuevo vale" siempre manda directo a la cola de revisión: el formulario
+  // ya pide todas las líneas de una vez, así que no hay ninguna razón para
+  // dejarlo en Borrador esperando un segundo paso de "Enviar" que además,
+  // para lo que carga Almacén a nombre de otro supervisor, nadie más podría
+  // disparar (no es el dueño del vale). Antes esto dejaba el vale creado por
+  // un supervisor en Borrador para siempre si no volvía a entrar al detalle
+  // a tocar "Enviar para revisión".
   const datos = {
     ...payload,
     supervisor_id: esSupervisor.value ? auth.session.user.id : payload.supervisor_id,
     creado_por: esSupervisor.value ? null : auth.session.user.id,
   }
-  const vale = esSupervisor.value ? await vales.crear(datos) : await vales.crearYEnviar(datos)
+  const vale = await vales.crearYEnviar(datos)
   mostrarModal.value = false
   router.push(`/vales/${vale.id}`)
 }

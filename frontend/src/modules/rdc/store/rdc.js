@@ -67,7 +67,7 @@ export const useRdcStore = defineStore('rdc', {
       this.cargando = true
       try {
         this.catalogos = await repo.leerCatalogos()
-        this.reportes = await repo.listar()
+        await this.listar()
         this.sinCatalogos = !(await repo.hayCatalogos())
         // Refrescar catálogos es "mejor si se puede", nunca un requisito: si no
         // hay señal se sigue trabajando con la copia local.
@@ -94,8 +94,19 @@ export const useRdcStore = defineStore('rdc', {
       this.sinCatalogos = false
     },
 
+    /**
+     * IndexedDB es local al navegador, no a la sesión: si dos cuentas
+     * entraron alguna vez en el mismo dispositivo (dos supervisores, o un
+     * supervisor y quien lo esté probando), sin este filtro cualquiera de
+     * las dos veía los borradores y reportes de la otra. El historial de
+     * cada quien es solo lo que ESA cuenta creó — ver los de todos es
+     * rdc.ver_todos, servido aparte por cargarHistorico() contra Supabase,
+     * que si filtra por RLS.
+     */
     async listar() {
-      this.reportes = await repo.listar()
+      const auth = useAuthStore()
+      const todos = await repo.listar()
+      this.reportes = todos.filter((r) => r.creadoPor === auth.perfil?.id)
     },
 
     /** Reportes que viven solo en el servidor. Un supervisor casi no los tiene
