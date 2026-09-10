@@ -11,6 +11,7 @@ import BotonIcono from '../../../components/BotonIcono.vue'
 import { useDevolucionesStore } from '../../devoluciones/store/devoluciones'
 import RecibirDevolucionModal from '../../devoluciones/components/RecibirDevolucionModal.vue'
 import { descargarExcel } from '../../../utils/exportarExcel'
+import { formatearNumero } from '../../../utils/formatearNumero'
 
 const almacen = useAlmacenStore()
 const auth = useAuthStore()
@@ -327,10 +328,10 @@ function abrirCorregirAjuste(a) {
             <td>{{ fila.materiales?.codigo ?? '—' }}</td>
             <td>{{ fila.materiales?.descripcion ?? '—' }}</td>
             <td>{{ fila.materiales?.unidad ?? '—' }}</td>
-            <td>{{ fila.cantidad_fisica }}</td>
-            <td>{{ fila.cantidad_reservada }}</td>
-            <td>{{ fila.cantidad_disponible }}</td>
-            <td>{{ stockMinimoEfectivo(fila) ?? '—' }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_fisica) }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_reservada) }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_disponible) }}</td>
+            <td class="num">{{ formatearNumero(stockMinimoEfectivo(fila)) }}</td>
           </tr>
           <tr v-if="!almacen.stock.length">
             <td colspan="9" class="vacio">Sin movimientos de stock todavía.</td>
@@ -360,7 +361,7 @@ function abrirCorregirAjuste(a) {
             <td>{{ i.contratos?.nombre ?? '—' }}</td>
             <td>{{ i.materiales?.codigo ?? '—' }}</td>
             <td>{{ i.materiales?.descripcion ?? '—' }}</td>
-            <td>{{ i.cantidad }}</td>
+            <td class="num">{{ formatearNumero(i.cantidad) }}</td>
             <td>{{ i.documento_referencia ?? '—' }}</td>
             <td>{{ i.proveedor ?? '—' }}</td>
             <td>{{ i.usuarios?.nombre ?? '—' }}</td>
@@ -399,7 +400,7 @@ function abrirCorregirAjuste(a) {
             <td>
               <span class="badge" :class="a.tipo">{{ a.tipo }}</span>
             </td>
-            <td>{{ a.cantidad }}</td>
+            <td class="num">{{ formatearNumero(a.cantidad) }}</td>
             <td>{{ a.motivo }}</td>
             <td>{{ a.usuarios?.nombre ?? '—' }}</td>
             <td v-if="puedeRegistrarAjuste">
@@ -434,7 +435,7 @@ function abrirCorregirAjuste(a) {
             <td>{{ s.materiales?.codigo ?? '—' }}</td>
             <td>{{ s.materiales?.descripcion ?? '—' }}</td>
             <td>{{ s.frentes?.codigo ? s.frentes.codigo + ' — ' : '' }}{{ s.frentes?.nombre }}</td>
-            <td>{{ s.cantidad }}</td>
+            <td class="num">{{ formatearNumero(s.cantidad) }}</td>
             <td>{{ s.documento_referencia ?? '—' }}</td>
             <td>{{ s.usuarios?.nombre ?? '—' }}</td>
           </tr>
@@ -464,7 +465,7 @@ function abrirCorregirAjuste(a) {
             <td>{{ d.frentes?.codigo ? d.frentes.codigo + ' — ' : '' }}{{ d.frentes?.nombre }}</td>
             <td>{{ d.materiales?.codigo ?? '—' }}</td>
             <td>{{ d.materiales?.descripcion ?? '—' }}</td>
-            <td>{{ d.cantidad }} {{ d.materiales?.unidad }}</td>
+            <td class="num">{{ formatearNumero(d.cantidad) }} {{ d.materiales?.unidad }}</td>
             <td>
               <span class="badge" :class="d.estado_material">{{ d.estado_material === 'bueno' ? 'Bueno' : 'Dañado' }}</span>
             </td>
@@ -637,6 +638,13 @@ button {
 }
 .tabla tr.bajo-minimo td {
   background: var(--color-danger-soft);
+}
+/* Formato "Contabilidad" de Excel: números agrupados de a miles,
+   alineados a la derecha, con ancho de dígito fijo (que no "bailen" entre
+   filas). */
+.tabla td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .badge {
   padding: 0.15rem 0.5rem;

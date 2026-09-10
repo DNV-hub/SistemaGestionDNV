@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useReportesStore } from '../store/reportes'
 import { descargarExcel } from '../../../utils/exportarExcel'
+import { formatearNumero } from '../../../utils/formatearNumero'
 
 const reportes = useReportesStore()
 
@@ -256,7 +257,7 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
               <td>{{ f.codigo }}</td>
               <td class="col-descripcion">{{ f.descripcion }}</td>
               <td>{{ f.unidad }}</td>
-              <td>{{ f.cantidad }}</td>
+              <td class="num">{{ formatearNumero(f.cantidad) }}</td>
             </tr>
             <tr v-if="!filasSalidas.length">
               <td colspan="6" class="vacio">No hay salidas para estos filtros.</td>
@@ -303,12 +304,12 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
               <td>{{ f.codigo }}</td>
               <td class="col-descripcion">{{ f.descripcion }}</td>
               <td>{{ f.unidad }}</td>
-              <td>{{ f.previsto }}</td>
-              <td>{{ f.reservado }}</td>
-              <td>{{ f.solicitado }}</td>
-              <td>{{ f.entregado }}</td>
-              <td>{{ f.saldo }}</td>
-              <td>{{ f.porcentaje ?? '—' }}%</td>
+              <td class="num">{{ formatearNumero(f.previsto) }}</td>
+              <td class="num">{{ formatearNumero(f.reservado) }}</td>
+              <td class="num">{{ formatearNumero(f.solicitado) }}</td>
+              <td class="num">{{ formatearNumero(f.entregado) }}</td>
+              <td class="num">{{ formatearNumero(f.saldo) }}</td>
+              <td class="num">{{ f.porcentaje ?? '—' }}%</td>
               <td>
                 <span class="badge" :class="f.excedido ? 'danger' : 'success'">{{ f.excedido ? 'Sí' : 'No' }}</span>
               </td>
@@ -357,8 +358,8 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
               <td>{{ f.codigo }}</td>
               <td class="col-descripcion">{{ f.descripcion }}</td>
               <td>{{ f.descripcionEdp }}</td>
-              <td>{{ f.cantidadAlmacen }} {{ f.unidadAlmacen }}</td>
-              <td>{{ f.cantidadEdp.toFixed(2) }} {{ f.unidadEdp }}</td>
+              <td class="num">{{ formatearNumero(f.cantidadAlmacen) }} {{ f.unidadAlmacen }}</td>
+              <td class="num">{{ formatearNumero(f.cantidadEdp, { decimales: 2 }) }} {{ f.unidadEdp }}</td>
             </tr>
             <tr v-if="!filasEdp.length">
               <td colspan="6" class="vacio">No hay salidas con conversión de unidades para estos filtros.</td>
@@ -455,6 +456,10 @@ td {
   font-size: 0.86rem;
   text-align: left;
   white-space: nowrap;
+}
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 th {
   background: var(--color-surface-2);

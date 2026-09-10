@@ -7,6 +7,7 @@ import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
 import AprobarLineaModal from '../components/AprobarLineaModal.vue'
 import CancelarValeModal from '../components/CancelarValeModal.vue'
 import EntregaFormModal from '../components/EntregaFormModal.vue'
+import { formatearNumero } from '../../../utils/formatearNumero'
 
 const route = useRoute()
 const router = useRouter()
@@ -190,9 +191,9 @@ function situacion(linea) {
             <tr>
               <td>{{ l.materiales?.codigo }} — {{ l.materiales?.descripcion }}</td>
               <td>{{ l.materiales?.unidad }}</td>
-              <td>{{ l.cantidad_solicitada }}</td>
-              <td>{{ l.cantidad_aprobada ?? '—' }}</td>
-              <td>{{ l.cantidad_entregada }}</td>
+              <td class="num">{{ formatearNumero(l.cantidad_solicitada) }}</td>
+              <td class="num">{{ formatearNumero(l.cantidad_aprobada) }}</td>
+              <td class="num">{{ formatearNumero(l.cantidad_entregada) }}</td>
               <td>
                 <span class="badge-linea" :class="l.estado.toLowerCase().replace(/\s+/g, '-')">{{ l.estado }}</span>
               </td>
@@ -335,6 +336,10 @@ button.mini {
   padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--color-border);
   font-size: 0.9rem;
+}
+.tabla td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .tabla th {
   background: var(--color-surface-2);

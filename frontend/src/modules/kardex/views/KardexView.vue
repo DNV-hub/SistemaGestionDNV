@@ -4,6 +4,7 @@ import { useKardexStore } from '../store/kardex'
 import { useAuthStore } from '../../../store/auth'
 import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
 import { descargarExcel } from '../../../utils/exportarExcel'
+import { formatearNumero } from '../../../utils/formatearNumero'
 
 const kardex = useKardexStore()
 const auth = useAuthStore()
@@ -144,8 +145,8 @@ async function exportar() {
           <td>{{ m.almacenes?.nombre ?? '—' }}</td>
           <td>{{ m.materiales?.codigo ?? '—' }}</td>
           <td>{{ m.materiales?.descripcion ?? '—' }}</td>
-          <td>{{ m.cantidad }} {{ m.materiales?.unidad }}</td>
-          <td>{{ m.saldo_resultante }}</td>
+          <td class="num">{{ formatearNumero(m.cantidad) }} {{ m.materiales?.unidad }}</td>
+          <td class="num">{{ formatearNumero(m.saldo_resultante) }}</td>
           <td>{{ m.vales?.numero ?? '—' }}</td>
           <td>{{ m.usuarios?.nombre ?? '—' }}</td>
           <td>{{ m.observacion ?? '—' }}</td>
@@ -224,6 +225,10 @@ button:disabled {
   border-bottom: 1px solid var(--color-border);
   font-size: 0.85rem;
   white-space: nowrap;
+}
+.tabla td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .tabla th {
   background: var(--color-surface-2);
