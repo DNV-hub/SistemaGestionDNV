@@ -6,6 +6,8 @@ import { useTemaStore } from './store/tema'
 import IconoNav from './components/IconoNav.vue'
 import { contarValesPendientes, contarAlertasActivas } from './modules/dashboard/services/dashboardService'
 import { suplantandoAOtraCuenta, volverAMiCuenta } from './modules/developer/services/developerService'
+import { pendientes as rdcPendientes } from './modules/rdc/services/rdcRepository'
+import { pendientes as fotosPendientes } from './modules/fotos/services/fotosRepository'
 
 const auth = useAuthStore()
 const tema = useTemaStore()
@@ -41,6 +43,8 @@ async function cerrarSesion() {
 
 const badgeVales = ref(0)
 const badgeAlertas = ref(0)
+const badgeRdc = ref(0)
+const badgeFotos = ref(0)
 const mostrarMenu = ref(false)
 const mostrarMas = ref(false)
 
@@ -68,6 +72,19 @@ function cargarContadores() {
       .then((v) => (badgeAlertas.value = v.total))
       .catch(() => {})
   }
+  // RDC y Fotos son locales (IndexedDB) — el badge cuenta lo que todavía no
+  // terminó de sincronizar, no lo pendiente de aprobación como Vales. Se lee
+  // directo del repositorio, sin esperar a que se visite el módulo primero.
+  if (auth.tienePermiso('rdc.ver_propios')) {
+    rdcPendientes()
+      .then((filas) => (badgeRdc.value = filas.length))
+      .catch(() => {})
+  }
+  if (auth.tienePermiso('rdc.crear')) {
+    fotosPendientes()
+      .then((filas) => (badgeFotos.value = filas.length))
+      .catch(() => {})
+  }
 }
 
 // auth ya está inicializada cuando este componente se monta (ver main.js:
@@ -92,14 +109,17 @@ if (auth.estaAutenticado) cargarContadores()
 // rolesExcluidos, igual que ya se hacía con Almacén en Catálogo y Frentes.
 const SOLO_CAMPO = ['Supervisor']
 
-const navPrincipal = [
+// labelMovil: la pestaña flotante es angosta y solo tiene lugar para una
+// palabra — el sidebar de escritorio (label) no se toca, sigue con el
+// nombre completo.
+const navPrincipal = computed(() => [
   { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios' },
-  { to: '/fotos', label: 'Fotografías', icono: 'camara', permiso: 'rdc.crear' },
+  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value },
+  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value },
   { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios' },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
   { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
-]
+])
 
 const navPlaneamiento = computed(() => [
   { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
@@ -231,13 +251,19 @@ const inicialesUsuario = computed(() => {
 
     <nav v-if="!$route.meta.ocultarTabbar" class="tabbar">
       <router-link v-for="item in tabsMoviles" :key="item.to" :to="item.to" class="tab">
-        <IconoNav :nombre="item.icono" />
-        <span>{{ item.label }}</span>
-        <span v-if="item.badge" class="tab-badge">{{ item.badge }}</span>
+        <span class="tab-inner">
+          <span class="tab-icon">
+            <IconoNav :nombre="item.icono" />
+            <span v-if="item.badge" class="badge-n">{{ item.badge }}</span>
+          </span>
+          <span>{{ item.labelMovil ?? item.label }}</span>
+        </span>
       </router-link>
       <button type="button" class="tab" :class="{ 'router-link-active': mostrarMas }" @click="mostrarMas = true">
-        <IconoNav nombre="mas" />
-        <span>Más</span>
+        <span class="tab-inner">
+          <span class="tab-icon"><IconoNav nombre="mas" /></span>
+          <span>Más</span>
+        </span>
       </button>
     </nav>
 
@@ -541,8 +567,9 @@ const inicialesUsuario = computed(() => {
   overflow-y: auto;
 }
 
-/* Barra de pestañas inferior — solo existe en celular (ver media query).
-   En escritorio el sidebar de la izquierda cubre toda la navegación. */
+/* Barra de pestañas flotante — solo existe en celular/tablet (ver media
+   query). En escritorio el sidebar de la izquierda cubre toda la
+   navegación. */
 .tabbar {
   display: none;
 }
@@ -551,11 +578,14 @@ const inicialesUsuario = computed(() => {
   display: none;
 }
 
-/* Debajo de 640px el sidebar desaparece del todo y la navegación pasa a una
-   barra de pestañas fija abajo, como en las apps de celular: más cómoda con
-   el pulgar y dedicada solo a los módulos más usados — el resto y "Cerrar
-   sesión" viven en la hoja "Más". */
-@media (max-width: 640px) {
+/* Debajo de 1024px el sidebar desaparece del todo y la navegación pasa a
+   una barra de pestañas flotante abajo, como en las apps de celular: más
+   cómoda con el pulgar y dedicada solo a los módulos más usados — el resto
+   y "Cerrar sesión" viven en la hoja "Más". No pegada al borde (12px de
+   margen lateral, 20px + safe-area del fondo): por eso el contenido de
+   cada pantalla necesita su propio padding inferior (108px) para no
+   quedar tapado, esta barra ya no le resta alto al contenedor. */
+@media (max-width: 1024px) {
   .shell {
     display: block;
     height: 100vh;
@@ -566,57 +596,78 @@ const inicialesUsuario = computed(() => {
     display: none;
   }
   .contenido {
-    height: calc(100vh - 60px);
-    height: calc(100dvh - 60px);
+    height: 100vh;
+    height: 100dvh;
     overflow-x: hidden;
-    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .tabbar {
     display: flex;
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 60px;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: var(--sidebar-bg);
-    border-top: 1px solid var(--sidebar-border);
+    left: 12px;
+    right: 12px;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    height: 64px;
+    border-radius: 32px;
+    background: rgba(20, 20, 23, 0.88);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    align-items: center;
+    padding: 0 5px;
     z-index: 20;
   }
   .tab {
     flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.15rem;
     background: none;
     border: none;
-    color: var(--sidebar-text-muted);
     text-decoration: none;
-    font-size: 0.64rem;
-    font-weight: 600;
-    position: relative;
     cursor: pointer;
   }
-  .tab.router-link-active {
-    color: var(--sidebar-active-text);
+  .tab-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 7px 8px;
+    border-radius: 18px;
+    color: #6b7280;
   }
-  .tab-badge {
+  .tab-inner span {
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+  .tab.router-link-active .tab-inner {
+    background: rgba(245, 168, 0, 0.17);
+    color: var(--color-primary);
+  }
+  .tab.router-link-active .tab-inner span {
+    font-weight: 600;
+  }
+  .tab-icon {
+    position: relative;
+    display: flex;
+  }
+  .badge-n {
     position: absolute;
-    top: 2px;
-    right: calc(50% - 16px);
-    min-width: 1rem;
-    height: 1rem;
-    padding: 0 0.25rem;
-    border-radius: var(--radius-pill);
-    background: var(--color-danger);
-    color: #fff;
-    font-size: 0.6rem;
+    top: -3px;
+    right: -7px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--color-primary);
+    color: #1a1206;
+    font-size: 10px;
     font-weight: 700;
-    display: grid;
-    place-items: center;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .hoja-backdrop {

@@ -41,13 +41,65 @@ const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
 const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
 
 const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-/** "10 ago 26" — el título que pidió el usuario para cada tarjeta del historial. */
+const MESES_LARGOS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre',
+]
+/** "10 set." — fecha corta para el título de cada tarjeta del historial. */
 function fechaCorta(iso) {
   if (!iso) return '—'
-  const [y, m, d] = iso.split('-').map(Number)
-  return `${d} ${MESES_ABREV[m - 1]} ${String(y).slice(2)}`
+  const [, m, d] = iso.split('-').map(Number)
+  return `${d} ${MESES_ABREV[m - 1]}.`
 }
-const titulo = (fechaIso, frente) => `${fechaCorta(fechaIso)} - ${frente}`
+
+/** Cuenta y arma el "N personas" del meta de una tarjeta. Solo existe para
+ * los reportes locales — el histórico remoto no trae el detalle (traerlo
+ * fila por fila sería una consulta pesada solo para una lista). */
+function totalPersonal(r) {
+  const total = (r.personal ?? []).reduce((acc, p) => acc + (Number(p.cantidad) || 0), 0)
+  return total > 0 ? total : null
+}
+
+/** Historial local y remoto combinados en una sola lista cronológica
+ * (más reciente primero), agrupada por mes — como pide el mockup. Cada
+ * fila se normaliza a la misma forma para que la tarjeta no tenga que
+ * distinguir de dónde vino. */
+const historialAgrupado = computed(() => {
+  const locales = rdc.reportes.map((r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    frenteNombre: nombre('frentes', r.frenteId),
+    esLocal: true,
+    personas: totalPersonal(r),
+    partidas: r.estado === ESTADO.FINALIZADO ? (r.metrados?.length ?? 0) : null,
+    estado: estadoDe(r),
+    detalleEnvio: detalleEnvio(r),
+    raw: r,
+  }))
+  const remotos = rdc.historicoRemoto.map((r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    frenteNombre: r.rdc_frentes?.nombre ?? '—',
+    esLocal: false,
+    supervisorNombre: r.rdc_supervisores?.nombre ?? '—',
+    estado: {
+      clave: r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente',
+      texto: r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente',
+    },
+    raw: r,
+  }))
+
+  const todos = [...locales, ...remotos].sort((a, b) => b.fecha.localeCompare(a.fecha))
+
+  const grupos = new Map()
+  for (const item of todos) {
+    const [y, m] = item.fecha.split('-')
+    const clave = `${y}-${m}`
+    if (!grupos.has(clave)) grupos.set(clave, { etiqueta: `${MESES_LARGOS[Number(m) - 1].toUpperCase()} ${y}`, items: [] })
+    grupos.get(clave).items.push(item)
+  }
+  return [...grupos.values()]
+})
 
 async function nuevo() {
   const reporte = await rdc.nuevo()
@@ -59,6 +111,11 @@ function abrir(r) {
   else router.push({ name: 'rdc-detalle', params: { id: r.id } })
 }
 
+function abrirItem(item) {
+  if (item.esLocal) abrir(item.raw)
+  else router.push({ name: 'rdc-detalle', params: { id: item.id } })
+}
+
 async function borrar(r) {
   if (!confirm(`¿Borrar el borrador del ${fmtFecha(r.fecha)}? No se puede deshacer.`)) return
   await rdc.eliminarBorrador(r.id)
@@ -67,12 +124,18 @@ async function borrar(r) {
 
 <template>
   <div class="rdc-app">
-    <div class="app">
-      <header class="app-header">
-        <div class="app-logo"><i class="ti ti-clipboard-list" /><h1>Reporte Diario de Campo</h1></div>
-        <p>Sostenimiento y mantenimiento de talud</p>
-      </header>
+    <header class="appbar">
+      <h1>Reporte diario</h1>
+      <div class="conn">
+        <span class="conn-dot" :class="{ off: !enLinea }"></span>
+        <span>{{ enLinea ? 'En línea' : 'Sin conexión' }}</span>
+      </div>
+      <button type="button" class="icon-btn" aria-label="Filtrar">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h15L12 11v5.5L8 14.5V11L2.5 4.5z"/></svg>
+      </button>
+    </header>
 
+    <main class="content">
       <div v-if="rdc.sinCatalogos" class="alert alert-red">
         <i class="ti ti-alert-triangle" />
         <span>Todavía no se descargaron los catálogos. Conéctate una vez a internet para poder llenar reportes sin señal después.</span>
@@ -90,110 +153,248 @@ async function borrar(r) {
         </span>
       </div>
 
-      <button v-if="auth.tienePermiso('rdc.crear')" class="nav-btn primary" style="margin-bottom: 12px" @click="nuevo">
-        <i class="ti ti-circle-plus" /> Nuevo reporte
+      <button v-if="auth.tienePermiso('rdc.crear')" type="button" class="new-report" @click="nuevo">
+        <svg width="19" height="19" viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9.5 4v11M4 9.5h11"/></svg>
+        Nuevo reporte
       </button>
 
       <p v-if="rdc.cargando" class="empty-msg">Cargando…</p>
 
       <template v-else>
-        <div v-for="r in rdc.reportes" :key="r.id" class="card reporte" @click="abrir(r)">
-          <div class="reporte-fila">
-            <div class="reporte-datos">
-              <div class="reporte-frente">{{ titulo(r.fecha, nombre('frentes', r.frenteId)) }}</div>
-            </div>
-            <span class="estado-pill" :class="estadoDe(r).clave" :title="detalleEnvio(r)">{{ estadoDe(r).texto }}</span>
+        <template v-for="grupo in historialAgrupado" :key="grupo.etiqueta">
+          <div class="grp">
+            <span class="grp-label">{{ grupo.etiqueta }}</span>
+            <span class="grp-rule"></span>
           </div>
-          <div class="reporte-acciones" @click.stop>
-            <button class="secondary-btn" @click="abrir(r)">
-              <i class="ti" :class="r.estado === ESTADO.BORRADOR ? 'ti-pencil' : 'ti-file-description'" />
-              {{ r.estado === ESTADO.BORRADOR ? 'Continuar' : 'Ver' }}
-            </button>
-            <button v-if="r.estado === ESTADO.BORRADOR" class="del-btn" aria-label="Borrar borrador" @click="borrar(r)">
-              <i class="ti ti-x" />
-            </button>
-          </div>
-        </div>
 
-        <div v-for="r in rdc.historicoRemoto" :key="r.id" class="card reporte" @click="abrir(r)">
-          <div class="reporte-fila">
-            <div class="reporte-datos">
-              <div class="reporte-frente">{{ titulo(r.fecha, r.rdc_frentes?.nombre ?? '—') }}</div>
-              <div class="reporte-meta">{{ r.rdc_supervisores?.nombre ?? '—' }}</div>
+          <div v-for="item in grupo.items" :key="item.id" class="tarjeta" @click="abrirItem(item)">
+            <div class="card-main">
+              <div class="card-top">
+                <span class="card-date">{{ fechaCorta(item.fecha) }}</span>
+                <span class="badge" :class="item.estado.clave" :title="item.detalleEnvio">
+                  <svg v-if="item.estado.clave === 'pendiente'" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.2a2.4 2.4 0 011.2-4.5A3.4 3.4 0 019.6 4.6a2 2 0 01.1 3.9"/><path d="M1 1l10 10"/></svg>
+                  {{ item.estado.texto }}
+                </span>
+              </div>
+              <div class="card-frente">{{ item.frenteNombre }}</div>
+              <div class="card-meta">
+                <template v-if="item.esLocal">
+                  <span v-if="item.personas">{{ item.personas }} personas</span>
+                  <span v-if="item.personas && item.partidas !== null" class="dot-sep"></span>
+                  <span v-if="item.partidas !== null">{{ item.partidas }} partidas</span>
+                </template>
+                <span v-else>{{ item.supervisorNombre }}</span>
+              </div>
             </div>
-            <span class="estado-pill" :class="r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente'">
-              {{ r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente' }}
-            </span>
+            <svg class="chev" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L12 9l-5.5 5.5"/></svg>
           </div>
-        </div>
+        </template>
 
-        <p v-if="!rdc.reportes.length && !rdc.historicoRemoto.length" class="empty-msg">
+        <p v-if="!historialAgrupado.length" class="empty-msg">
           Todavía no hay reportes. Toca «Nuevo reporte» para empezar.
         </p>
       </template>
-    </div>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.app {
-  padding: 0 12px 24px;
+/* Paleta exacta del mockup (docs/mockups/02-rdc-lista.html) — nombres
+   propios (con guión) para no chocar con las variables sin guión que ya
+   usa rdc-tema.css (--text2, --border, etc.), así que declarar esto acá no
+   afecta a ningún otro componente del módulo. --bg sí comparte nombre con
+   rdc-tema.css a propósito: es el fondo general de página, y queremos que
+   ESTA pantalla (y solo esta, por ahora) use el tono nuevo. */
+.rdc-app {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border-lista: #e4e7ec;
+  --text-2: #667085;
+  --text-3: #98a2b3;
+  --amber-soft: #fff7e5;
+  --amber-ink: #b45309;
+  --ok: #059669;
+  --ok-bg: #ecfdf5;
+  --gray-bg: #f2f4f7;
 }
-.reporte {
-  cursor: pointer;
-}
-.reporte-fila {
+
+.appbar {
+  height: 56px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-lista);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  padding: 0 8px 0 16px;
+  gap: 8px;
 }
-.reporte-datos {
-  min-width: 0;
-}
-.reporte-frente {
-  font-size: 15px;
+.appbar h1 {
+  flex: 1;
+  font-size: 20px;
   font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
-.reporte-meta {
-  font-size: 12px;
-  color: var(--text3);
-  margin-top: 2px;
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
-.estado-pill {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  padding: 4px 9px;
-  border-radius: 20px;
-  white-space: nowrap;
+.conn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-right: 6px;
   flex-shrink: 0;
 }
-.estado-pill.borrador {
-  background: var(--neutral-bg);
-  color: var(--neutral-text);
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
 }
-.estado-pill.pendiente {
-  background: var(--amber-bg);
-  color: var(--amber-text);
+.conn-dot.off {
+  background: var(--text-3);
 }
-.estado-pill.enviado {
-  background: var(--green-bg);
-  color: var(--green-text);
+.conn span {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-2);
 }
-.estado-pill.error {
+
+.content {
+  padding: 14px 16px 108px;
+  background: var(--bg);
+  min-height: 100%;
+}
+
+.new-report {
+  width: 100%;
+  height: 54px;
+  /* #F5A800 hardcodeado, no var(--amber): esa variable ya la usa otra
+     parte del módulo (RDC "gran maestro", el toggle admin) con el tono
+     viejo (#D97706) y no la tocamos para no correrles el color. */
+  background: #f5a800;
+  border: none;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1206;
+  letter-spacing: -0.01em;
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+
+.grp {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.grp-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.grp-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border-lista);
+}
+
+.tarjeta {
+  background: var(--card);
+  border: 1px solid var(--border-lista);
+  border-radius: 12px;
+  padding: 13px 10px 13px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.card-main {
+  flex: 1;
+  min-width: 0;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.card-date {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.badge.enviado {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.badge.pendiente {
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+.badge.borrador {
+  background: var(--gray-bg);
+  color: var(--text-2);
+}
+.badge.error {
   background: var(--red-bg);
   color: var(--red-text);
 }
-.reporte-acciones {
+.card-frente {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-meta {
+  font-size: 12px;
+  color: var(--text-3);
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
 }
-.reporte-acciones .secondary-btn {
-  padding: 7px 13px;
-  font-size: 13px;
+.dot-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+}
+.chev {
+  color: var(--text-3);
+  flex-shrink: 0;
 }
 </style>

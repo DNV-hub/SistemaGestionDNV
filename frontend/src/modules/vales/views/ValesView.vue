@@ -49,6 +49,38 @@ function fechaHoraEnvio(vale) {
   return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+// ---------------------------------------------------------------------------
+// Lista en tarjetas para celular/tablet (<1024px) — la tabla de arriba sigue
+// intacta para escritorio. Mismo dato (valesOrdenados), presentado distinto.
+// ---------------------------------------------------------------------------
+const MESES_ABREV = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'set.', 'oct.', 'nov.', 'dic.']
+function fechaLarga(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.getDate()} ${MESES_ABREV[d.getMonth()]} ${d.getFullYear()}`
+}
+function horaCorta(iso) {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit' })
+}
+
+// Mismo criterio de color que ya usaba la tabla de escritorio (.badge.*),
+// llevado a las 4 categorías visuales del mockup — el texto del badge
+// siempre es el estado real, nunca uno inventado.
+const CATEGORIA_BADGE = {
+  Borrador: 'draft',
+  Enviado: 'wait',
+  'En revision': 'wait',
+  Aprobado: 'wait',
+  Reservado: 'wait',
+  'Parcialmente atendido': 'wait',
+  Atendido: 'ok',
+  Rechazado: 'err',
+  Cancelado: 'err',
+  Cerrado: 'draft',
+}
+const categoriaBadge = (estado) => CATEGORIA_BADGE[estado] ?? 'draft'
+
 onMounted(async () => {
   await vales.cargarLista()
   if (puedeCrearParaOtro.value) await vales.cargarSupervisores()
@@ -82,7 +114,8 @@ function abrir(vale) {
 
 <template>
   <div class="vales">
-    <header class="cabecera">
+    <!-- Escritorio (≥1024px): tabla, sin tocar. -->
+    <header class="cabecera solo-escritorio">
       <div>
         <h1>Vales</h1>
         <p v-if="puedeVerTodos" class="subtitulo">Los que esperan una decisión aparecen primero, del más antiguo al más nuevo.</p>
@@ -90,11 +123,11 @@ function abrir(vale) {
       <button v-if="puedeCrear" @click="mostrarModal = true">+ Nuevo vale</button>
     </header>
 
-    <p v-if="aviso" class="aviso">{{ aviso }}</p>
-    <p v-if="vales.error" class="error">{{ vales.error }}</p>
-    <p v-if="vales.cargando">Cargando vales…</p>
+    <p v-if="aviso" class="aviso solo-escritorio">{{ aviso }}</p>
+    <p v-if="vales.error" class="error solo-escritorio">{{ vales.error }}</p>
+    <p v-if="vales.cargando" class="solo-escritorio">Cargando vales…</p>
 
-    <table v-else class="tabla">
+    <table v-else class="tabla solo-escritorio">
       <thead>
         <tr>
           <th>Número</th>
@@ -129,6 +162,44 @@ function abrir(vale) {
         </tr>
       </tbody>
     </table>
+
+    <!-- Celular/tablet (<1024px): tarjetas (docs/mockups/03-vales-lista.html). -->
+    <div class="solo-movil movil-vales">
+      <header class="appbar">
+        <h1>Vales</h1>
+        <button v-if="puedeCrear" type="button" class="new-btn" @click="mostrarModal = true">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M7.5 3.5v8M3.5 7.5h8"/></svg>
+          Nuevo
+        </button>
+      </header>
+
+      <main class="content">
+        <p v-if="aviso" class="aviso">{{ aviso }}</p>
+        <p v-if="vales.error" class="error">{{ vales.error }}</p>
+        <p v-if="vales.cargando" class="empty-msg">Cargando vales…</p>
+
+        <template v-else>
+          <div v-for="v in valesOrdenados" :key="v.id" class="tarjeta" @click="abrir(v)">
+            <div class="card-top">
+              <span class="card-id">{{ v.numero }}</span>
+              <span class="badge-movil" :class="categoriaBadge(v.estado)">
+                <svg v-if="categoriaBadge(v.estado) === 'wait'" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.2a2.4 2.4 0 011.2-4.5A3.4 3.4 0 019.6 4.6a2 2 0 01.1 3.9"/><path d="M1 1l10 10"/></svg>
+                {{ v.estado }}
+              </span>
+            </div>
+            <div class="card-frente">{{ v.frentes?.codigo ? v.frentes.codigo + ' — ' : '' }}{{ v.frentes?.nombre }}</div>
+            <div class="card-meta">
+              <span>{{ fechaLarga(v.fecha_envio ?? v.created_at) }}</span>
+              <span class="dot-sep"></span>
+              <span>{{ horaCorta(v.fecha_envio ?? v.created_at) }}</span>
+              <span class="dot-sep"></span>
+              <span>{{ v.vale_detalle?.length ?? 0 }} materiales</span>
+            </div>
+          </div>
+          <p v-if="!valesOrdenados.length" class="empty-msg">No hay vales para mostrar.</p>
+        </template>
+      </main>
+    </div>
 
     <ValeFormModal
       v-if="mostrarModal"
@@ -255,5 +326,174 @@ button {
 .error {
   color: var(--color-danger);
   font-size: 0.9rem;
+}
+
+/* ---------------------------------------------------------------------
+   Celular/tablet (<1024px): tarjetas (docs/mockups/03-vales-lista.html).
+   Paleta propia, igual criterio que el módulo RDC — este "modo campo" es
+   siempre claro, no seguía el tema oscuro/claro del Sistema tampoco antes.
+   --------------------------------------------------------------------- */
+.movil-vales {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border-lista: #e4e7ec;
+  --text: #1e293b;
+  --text-2: #667085;
+  --text-3: #98a2b3;
+  --amber-soft: #fff7e5;
+  --amber-ink: #b45309;
+  --ok: #059669;
+  --ok-bg: #ecfdf5;
+  --err: #dc2626;
+  --err-bg: #fef2f2;
+  --gray-bg: #f2f4f7;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+}
+/* .solo-escritorio no necesita una regla acá: sin ninguna, cada elemento
+   usa el display que ya le da su propia clase (.cabecera es flex, .tabla
+   es tabla, un <p> es block…) — se oculta explícitamente recién en la
+   media query de abajo. Forzar "display: revert" acá volvería al default
+   del navegador para la etiqueta, no al de estas reglas, y rompería el
+   flex de .cabecera en escritorio. */
+.solo-movil {
+  display: none;
+}
+
+.movil-vales .appbar {
+  height: 56px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-lista);
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 16px;
+  gap: 10px;
+}
+.movil-vales .appbar h1 {
+  flex: 1;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin: 0;
+}
+.new-btn {
+  height: 38px;
+  background: #f5a800;
+  border: none;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1206;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.movil-vales .content {
+  padding: 14px 16px 108px;
+}
+.movil-vales .empty-msg {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 12px 0;
+}
+.movil-vales .aviso,
+.movil-vales .error {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.movil-vales .tarjeta {
+  background: var(--card);
+  border: 1px solid var(--border-lista);
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+.card-id {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge-movil {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.badge-movil.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+.badge-movil.wait {
+  background: var(--amber-soft);
+  color: var(--amber-ink);
+}
+.badge-movil.draft {
+  background: var(--gray-bg);
+  color: var(--text-2);
+}
+.badge-movil.err {
+  background: var(--err-bg);
+  color: var(--err);
+}
+.movil-vales .card-frente {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 3px;
+}
+.movil-vales .card-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.movil-vales .dot-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+}
+
+@media (max-width: 1024px) {
+  .vales {
+    padding: 0;
+  }
+  .solo-escritorio {
+    display: none !important;
+  }
+  .solo-movil {
+    display: block;
+  }
 }
 </style>

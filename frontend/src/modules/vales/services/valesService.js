@@ -1,7 +1,7 @@
 import { supabase } from '../../../services/supabaseClient'
 
 const SELECT_VALE =
-  '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre)'
+  '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre), vale_detalle(id)'
 const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad, unidad_edp, tipo_conversion)'
 
 export async function listarVales() {
