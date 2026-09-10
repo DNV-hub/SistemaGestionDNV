@@ -124,6 +124,12 @@ defineProps({
       <line x1="8.5" y1="16.5" x2="12.5" y2="16.5" />
     </template>
 
+    <template v-else-if="nombre === 'developer'">
+      <path d="M8.5 8 4 12.5 8.5 17" />
+      <path d="M15.5 8 20 12.5 15.5 17" />
+      <line x1="13.2" y1="5.5" x2="10.8" y2="19.5" />
+    </template>
+
     <template v-else-if="nombre === 'mas'">
       <circle cx="5.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
       <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />

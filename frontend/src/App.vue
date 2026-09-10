@@ -5,10 +5,28 @@ import { useAuthStore } from './store/auth'
 import { useTemaStore } from './store/tema'
 import IconoNav from './components/IconoNav.vue'
 import { contarValesPendientes, contarAlertasActivas } from './modules/dashboard/services/dashboardService'
+import { suplantandoAOtraCuenta, volverAMiCuenta } from './modules/developer/services/developerService'
 
 const auth = useAuthStore()
 const tema = useTemaStore()
 const router = useRouter()
+
+// Si Developer está "viendo como" otra cuenta, la sesión real cambió del
+// todo (no es una simulación) — lo único que queda de rastro es esta marca
+// en sessionStorage, que es lo que activa el cartel para volver.
+const viendoComoOtraCuenta = ref(suplantandoAOtraCuenta())
+const volviendo = ref(false)
+
+async function volver() {
+  volviendo.value = true
+  try {
+    await volverAMiCuenta()
+    window.location.assign('/')
+  } catch (e) {
+    console.error(e)
+    volviendo.value = false
+  }
+}
 
 // signOut() solo cambia el estado reactivo (deja de haber sesión) — eso
 // hace que este componente muestre la rama sin sidebar, pero el router
@@ -80,6 +98,7 @@ const navPrincipal = [
   { to: '/fotos', label: 'Fotografías', icono: 'camara', permiso: 'rdc.crear' },
   { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios' },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
+  { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
 ]
 
 const navPlaneamiento = computed(() => [
@@ -125,13 +144,18 @@ const inicialesUsuario = computed(() => {
 </script>
 
 <template>
+  <div v-if="viendoComoOtraCuenta" class="banner-suplantacion">
+    <span>Developer: viendo el sistema como <strong>{{ auth.perfil?.nombre }}</strong> ({{ auth.nombreRol }}).</span>
+    <button type="button" :disabled="volviendo" @click="volver">{{ volviendo ? 'Volviendo…' : 'Volver a mi cuenta' }}</button>
+  </div>
+
   <div v-if="auth.cargando" class="cargando">Cargando…</div>
 
   <div v-else-if="!auth.estaAutenticado" class="sin-sesion">
     <router-view />
   </div>
 
-  <div v-else class="shell">
+  <div v-else class="shell" :style="viendoComoOtraCuenta ? { marginTop: '40px', height: 'calc(100vh - 40px)' } : null">
     <aside class="nav">
       <div class="marca">
         <span class="marca-icono">D</span>
@@ -264,6 +288,37 @@ const inicialesUsuario = computed(() => {
 </template>
 
 <style scoped>
+.banner-suplantacion {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  background: var(--color-warning);
+  color: #1a1300;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.banner-suplantacion button {
+  padding: 0.3rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: #1a1300;
+  color: var(--color-warning);
+  font-weight: 700;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.banner-suplantacion button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 .cargando {
   display: grid;
   place-items: center;
