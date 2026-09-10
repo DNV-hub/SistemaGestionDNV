@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref, useAttrs } from 'vue'
+import { computed, onMounted, ref, useAttrs } from 'vue'
+import { listarLotesDisponibles } from '../services/valesService'
 
 const props = defineProps({
   linea: { type: Object, required: true },
@@ -10,11 +11,41 @@ defineEmits(['cerrar'])
 const attrs = useAttrs()
 
 const saldoPendiente = computed(() => props.reserva.cantidad - props.reserva.cantidad_entregada)
+const necesitaLote = computed(() => (props.linea.materiales?.tipo_conversion ?? 'ninguna') !== 'ninguna')
 
 const cantidad = ref(saldoPendiente.value)
 const documento_referencia = ref('')
 const guardando = ref(false)
 const error = ref('')
+
+const lotes = ref([])
+const cargandoLotes = ref(false)
+const ingresoId = ref('')
+
+onMounted(async () => {
+  if (!necesitaLote.value) return
+  cargandoLotes.value = true
+  try {
+    lotes.value = await listarLotesDisponibles(props.linea.material_id, props.reserva.almacen_id)
+    if (lotes.value.length === 1) ingresoId.value = lotes.value[0].id
+  } catch (e) {
+    console.error(e)
+    error.value = 'No se pudieron cargar los lotes disponibles.'
+  } finally {
+    cargandoLotes.value = false
+  }
+})
+
+const loteSeleccionado = computed(() => lotes.value.find((l) => l.id === ingresoId.value))
+const unidadEdp = computed(() => props.linea.materiales?.unidad_edp || (props.linea.materiales?.tipo_conversion === 'area' ? 'm2' : 'ml'))
+const cantidadEdpPreview = computed(() =>
+  loteSeleccionado.value ? Number(cantidad.value || 0) * loteSeleccionado.value.factor_conversion : null
+)
+
+function etiquetaLote(l) {
+  const medida = l.ancho ? `${l.ancho}×${l.largo} m` : `${l.largo} m`
+  return `${l.fecha} — ${medida} — quedan ${l.cantidad_restante} ${props.linea.materiales?.unidad}${l.documento_referencia ? ` (${l.documento_referencia})` : ''}`
+}
 
 async function onSubmit() {
   error.value = ''
@@ -27,10 +58,22 @@ async function onSubmit() {
     error.value = `No puede superar el saldo pendiente (${saldoPendiente.value} ${props.linea.materiales?.unidad}).`
     return
   }
+  if (necesitaLote.value && !ingresoId.value) {
+    error.value = 'Elegí de qué lote (ingreso) sale esta entrega.'
+    return
+  }
+  if (loteSeleccionado.value && valor > loteSeleccionado.value.cantidad_restante) {
+    error.value = `Ese lote solo tiene ${loteSeleccionado.value.cantidad_restante} ${props.linea.materiales?.unidad} — elegí otro lote o partí la entrega.`
+    return
+  }
 
   guardando.value = true
   try {
-    await attrs.onGuardar({ cantidad: valor, documento_referencia: documento_referencia.value.trim() || null })
+    await attrs.onGuardar({
+      cantidad: valor,
+      documento_referencia: documento_referencia.value.trim() || null,
+      ingreso_id: necesitaLote.value ? ingresoId.value : null,
+    })
   } catch (e) {
     console.error(e)
     error.value = `No se pudo registrar la entrega${e?.message ? ': ' + e.message : '.'}`
@@ -57,6 +100,19 @@ async function onSubmit() {
           <span class="unidad-badge">{{ linea.materiales?.unidad }}</span>
         </div>
       </label>
+
+      <template v-if="necesitaLote">
+        <p v-if="cargandoLotes" class="ayuda">Cargando lotes…</p>
+        <label v-else>
+          De qué lote sale
+          <select v-model="ingresoId" required>
+            <option value="" disabled>Selecciona un lote…</option>
+            <option v-for="l in lotes" :key="l.id" :value="l.id">{{ etiquetaLote(l) }}</option>
+          </select>
+          <span v-if="!lotes.length" class="ayuda">No hay lotes con saldo para este material en este almacén.</span>
+        </label>
+        <p v-if="cantidadEdpPreview" class="factor-preview">= {{ cantidadEdpPreview.toFixed(2) }} {{ unidadEdp }} para el EDP</p>
+      </template>
 
       <label>
         Documento de referencia (opcional)
@@ -115,11 +171,23 @@ label {
   font-size: 0.85rem;
   color: var(--color-text);
 }
-input {
+input,
+select {
   padding: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   font: inherit;
+}
+.ayuda {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.factor-preview {
+  margin: -0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 .cantidad-con-unidad {
   display: flex;

@@ -34,6 +34,26 @@ export async function listarSalidasReporte({ frenteId, desde, hasta } = {}) {
   return data
 }
 
+/** filtros: { frenteId, desde, hasta } — salidas que además tienen cantidad
+ * convertida (cantidad_edp): materiales con tipo_conversion ≠ 'ninguna'. */
+export async function listarSalidasEdp({ frenteId, desde, hasta } = {}) {
+  let query = supabase
+    .from('salidas')
+    .select(
+      'fecha, cantidad, cantidad_edp, frentes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, unidad_edp, nombres_edp(nombre))'
+    )
+    .not('cantidad_edp', 'is', null)
+    .order('fecha')
+
+  if (frenteId) query = query.eq('frente_id', frenteId)
+  if (desde) query = query.gte('fecha', desde)
+  if (hasta) query = query.lte('fecha', hasta)
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
 /**
  * procura_vs_consumo de TODOS los frentes (sin filtrar por frente_id) — es
  * una vista, no soporta el embedding de PostgREST, así que frentes y

@@ -138,6 +138,74 @@ function exportarComparacion() {
 
 const hayFilasSalidas = computed(() => filasSalidas.value?.length)
 const hayFilasComparacion = computed(() => filasComparacion.value?.length)
+
+// ---------------------------------------------------------------------------
+// EDP: lo mismo que "Salidas por frente" pero en la unidad del cliente
+// (m2, ml…) en vez de la unidad de Almacén — solo materiales que tienen
+// conversión configurada en el catálogo.
+// ---------------------------------------------------------------------------
+const filtrosEdp = reactive({ frenteId: '', desde: '', hasta: '' })
+const filasEdp = ref(null)
+
+async function generarEdp() {
+  error.value = ''
+  generando.value = true
+  try {
+    const salidas = await reportes.obtenerSalidasEdp({
+      frenteId: filtrosEdp.frenteId || null,
+      desde: filtrosEdp.desde || null,
+      hasta: filtrosEdp.hasta || null,
+    })
+
+    const porGrupo = new Map()
+    for (const s of salidas) {
+      const clave = `${s.frentes?.id}:${s.materiales?.id}`
+      if (!porGrupo.has(clave)) {
+        porGrupo.set(clave, {
+          frenteCodigo: s.frentes?.codigo ?? '—',
+          frenteNombre: s.frentes?.nombre ?? '—',
+          codigo: s.materiales?.codigo ?? '—',
+          descripcion: s.materiales?.descripcion ?? '—',
+          descripcionEdp: s.materiales?.nombres_edp?.nombre ?? '—',
+          unidadEdp: s.materiales?.unidad_edp || '—',
+          unidadAlmacen: s.materiales?.unidad ?? '',
+          cantidadAlmacen: 0,
+          cantidadEdp: 0,
+        })
+      }
+      const grupo = porGrupo.get(clave)
+      grupo.cantidadAlmacen += Number(s.cantidad)
+      grupo.cantidadEdp += Number(s.cantidad_edp)
+    }
+    filasEdp.value = [...porGrupo.values()].sort(
+      (a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.codigo.localeCompare(b.codigo)
+    )
+  } catch (e) {
+    console.error(e)
+    error.value = 'No se pudo generar el reporte.'
+  } finally {
+    generando.value = false
+  }
+}
+
+function exportarEdp() {
+  descargarExcel(`edp_${filtrosEdp.desde || 'inicio'}_${filtrosEdp.hasta || 'hoy'}.xlsx`, [
+    {
+      nombre: 'EDP',
+      filas: filasEdp.value.map((f) => ({
+        Frente: `${f.frenteCodigo} — ${f.frenteNombre}`,
+        Código: f.codigo,
+        Material: f.descripcion,
+        'Descripción EDP': f.descripcionEdp,
+        [`Cantidad (${f.unidadAlmacen})`]: f.cantidadAlmacen,
+        'Cantidad EDP': Number(f.cantidadEdp.toFixed(2)),
+        'Unidad EDP': f.unidadEdp,
+      })),
+    },
+  ])
+}
+
+const hayFilasEdp = computed(() => filasEdp.value?.length)
 </script>
 
 <template>
@@ -149,6 +217,7 @@ const hayFilasComparacion = computed(() => filasComparacion.value?.length)
     <nav class="tabs">
       <button :class="{ activo: tab === 'salidas' }" @click="tab = 'salidas'">Salidas por frente</button>
       <button :class="{ activo: tab === 'procura' }" @click="tab = 'procura'">Procura vs. consumo</button>
+      <button :class="{ activo: tab === 'edp' }" @click="tab = 'edp'">EDP</button>
     </nav>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -197,7 +266,7 @@ const hayFilasComparacion = computed(() => filasComparacion.value?.length)
       </div>
     </section>
 
-    <section v-else>
+    <section v-else-if="tab === 'procura'">
       <p class="ayuda">
         Comparación Procura vs. consumo de todos los frentes a la vez — "Excedido" marca lo que ya superó el 100% de
         lo previsto.
@@ -246,6 +315,53 @@ const hayFilasComparacion = computed(() => filasComparacion.value?.length)
             </tr>
             <tr v-if="!filasComparacion.length">
               <td colspan="11" class="vacio">No hay datos de Procura todavía.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section v-else>
+      <p class="ayuda">
+        Cuánto salió realmente, ya convertido a la unidad del cliente (m2, ml…) — solo materiales con conversión
+        configurada en el catálogo.
+      </p>
+      <div class="filtros">
+        <select v-model="filtrosEdp.frenteId">
+          <option value="">Todos los frentes</option>
+          <option v-for="f in reportes.frentes" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
+        </select>
+        <input v-model="filtrosEdp.desde" type="date" title="Desde" />
+        <input v-model="filtrosEdp.hasta" type="date" title="Hasta" />
+        <button type="button" :disabled="generando" @click="generarEdp">
+          {{ generando ? 'Generando…' : 'Generar reporte' }}
+        </button>
+        <button v-if="hayFilasEdp" type="button" class="secundario" @click="exportarEdp">Exportar Excel</button>
+      </div>
+
+      <div v-if="filasEdp" class="marco-tabla">
+        <table>
+          <thead>
+            <tr>
+              <th>Frente</th>
+              <th>Código</th>
+              <th>Material</th>
+              <th>Descripción EDP</th>
+              <th>Cantidad Almacén</th>
+              <th>Cantidad EDP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(f, i) in filasEdp" :key="i">
+              <td>{{ f.frenteCodigo }} — {{ f.frenteNombre }}</td>
+              <td>{{ f.codigo }}</td>
+              <td class="col-descripcion">{{ f.descripcion }}</td>
+              <td>{{ f.descripcionEdp }}</td>
+              <td>{{ f.cantidadAlmacen }} {{ f.unidadAlmacen }}</td>
+              <td>{{ f.cantidadEdp.toFixed(2) }} {{ f.unidadEdp }}</td>
+            </tr>
+            <tr v-if="!filasEdp.length">
+              <td colspan="6" class="vacio">No hay salidas con conversión de unidades para estos filtros.</td>
             </tr>
           </tbody>
         </table>

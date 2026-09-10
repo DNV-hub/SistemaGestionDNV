@@ -19,6 +19,8 @@ const form = reactive({
   contrato_id: props.contratos[0]?.id ?? '',
   material_id: '',
   cantidad: '',
+  ancho: '',
+  largo: '',
   documento_referencia: '',
   proveedor: '',
   observacion: '',
@@ -27,6 +29,22 @@ const guardando = ref(false)
 const error = ref('')
 
 const materialSeleccionado = computed(() => props.materiales.find((m) => m.id === form.material_id))
+const tipoConversion = computed(() => materialSeleccionado.value?.tipo_conversion ?? 'ninguna')
+
+// Vista previa del factor, para que el almacenero vea el m2/ml antes de
+// guardar y pueda notar si se equivocó de medida.
+const factorPreview = computed(() => {
+  if (tipoConversion.value === 'area') {
+    const a = Number(form.ancho)
+    const l = Number(form.largo)
+    return a > 0 && l > 0 ? a * l : null
+  }
+  if (tipoConversion.value === 'longitud') {
+    const l = Number(form.largo)
+    return l > 0 ? l : null
+  }
+  return null
+})
 
 async function onSubmit() {
   error.value = ''
@@ -38,6 +56,14 @@ async function onSubmit() {
     error.value = 'La cantidad debe ser mayor a cero.'
     return
   }
+  if (tipoConversion.value === 'area' && (!Number(form.ancho) || !Number(form.largo))) {
+    error.value = 'Este material necesita ancho y largo del rollo.'
+    return
+  }
+  if (tipoConversion.value === 'longitud' && !Number(form.largo)) {
+    error.value = 'Este material necesita la longitud de la pieza.'
+    return
+  }
 
   guardando.value = true
   try {
@@ -46,6 +72,8 @@ async function onSubmit() {
       contrato_id: form.contrato_id,
       material_id: form.material_id,
       cantidad: Number(form.cantidad),
+      ancho: tipoConversion.value === 'area' ? Number(form.ancho) : null,
+      largo: tipoConversion.value !== 'ninguna' ? Number(form.largo) : null,
       documento_referencia: form.documento_referencia.trim() || null,
       proveedor: form.proveedor.trim() || null,
       observacion: form.observacion.trim() || null,
@@ -89,6 +117,30 @@ async function onSubmit() {
           <input v-model="form.cantidad" type="number" step="0.001" min="0.001" required />
           <span v-if="materialSeleccionado" class="unidad-badge">{{ materialSeleccionado.unidad }}</span>
         </div>
+      </label>
+
+      <template v-if="tipoConversion === 'area'">
+        <div class="fila-medidas">
+          <label>
+            Ancho del rollo (m)
+            <input v-model="form.ancho" type="number" step="0.01" min="0.01" required />
+          </label>
+          <label>
+            Largo del rollo (m)
+            <input v-model="form.largo" type="number" step="0.01" min="0.01" required />
+          </label>
+        </div>
+        <p v-if="factorPreview" class="factor-preview">
+          = {{ factorPreview.toFixed(2) }} m2 por {{ materialSeleccionado?.unidad ?? 'unidad' }} ({{ Number(form.cantidad || 0) * factorPreview }} m2 en total)
+        </p>
+      </template>
+
+      <label v-else-if="tipoConversion === 'longitud'">
+        Longitud de la pieza (m)
+        <input v-model="form.largo" type="number" step="0.01" min="0.01" required />
+        <p v-if="factorPreview" class="factor-preview">
+          = {{ Number(form.cantidad || 0) * factorPreview }} ml en total
+        </p>
       </label>
 
       <label>
@@ -163,6 +215,18 @@ textarea {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+.fila-medidas {
+  display: flex;
+  gap: 0.5rem;
+}
+.fila-medidas label {
+  flex: 1;
+}
+.factor-preview {
+  margin: -0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }
 .cantidad-con-unidad input {
   flex: 1;

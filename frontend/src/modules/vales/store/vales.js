@@ -233,12 +233,13 @@ export const useValesStore = defineStore('vales', {
      * físico, escribe en kardex y avanza la reserva/línea/vale
      * automáticamente — acá solo insertamos la fila y refrescamos.
      */
-    async registrarEntrega({ linea, reserva, cantidad, documento_referencia, usuario_id }) {
+    async registrarEntrega({ linea, reserva, cantidad, documento_referencia, ingreso_id, usuario_id }) {
       await registrarSalida({
         material_id: linea.material_id,
         almacen_id: reserva.almacen_id,
         cantidad,
         documento_referencia,
+        ingreso_id: ingreso_id ?? null,
         frente_id: this.valeActual.frente_id,
         vale_detalle_id: linea.id,
         reserva_id: reserva.id,

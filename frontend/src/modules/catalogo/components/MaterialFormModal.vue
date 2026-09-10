@@ -21,6 +21,7 @@ function estadoInicial() {
     unidad: props.material?.unidad ?? '',
     descripcion_edp_id: props.material?.descripcion_edp_id ?? '',
     unidad_edp: props.material?.unidad_edp ?? '',
+    tipo_conversion: props.material?.tipo_conversion ?? 'ninguna',
     categoria_id: props.material?.categoria_id ?? '',
     estado: props.material?.estado ?? 'activo',
     stock_minimo_default: props.material?.stock_minimo_default ?? '',
@@ -52,6 +53,7 @@ async function onSubmit() {
       unidad: form.unidad.trim(),
       descripcion_edp_id: form.descripcion_edp_id || null,
       unidad_edp: form.unidad_edp.trim() || null,
+      tipo_conversion: form.tipo_conversion,
       categoria_id: form.categoria_id || null,
       estado: form.estado,
       stock_minimo_default: form.stock_minimo_default === '' ? null : Number(form.stock_minimo_default),
@@ -98,6 +100,19 @@ async function onSubmit() {
       <label>
         Unidad EDP
         <input v-model="form.unidad_edp" type="text" placeholder="m3, kg, und…" />
+      </label>
+
+      <label>
+        Conversión al ingresar
+        <select v-model="form.tipo_conversion">
+          <option value="ninguna">Ninguna — mismas unidades</option>
+          <option value="area">Área (ancho × largo del rollo → m2)</option>
+          <option value="longitud">Longitud (largo de la pieza → ml)</option>
+        </select>
+        <span class="ayuda">
+          Si no es "Ninguna", cada ingreso de este material va a pedir esas medidas para calcular el EDP — pueden
+          variar de un ingreso a otro (ej. rollos de distinto tamaño).
+        </span>
       </label>
 
       <label>
@@ -181,6 +196,11 @@ textarea {
 }
 input:disabled {
   background: var(--color-neutral-soft);
+  color: var(--color-text-muted);
+}
+.ayuda {
+  font-size: 0.75rem;
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 .acciones {

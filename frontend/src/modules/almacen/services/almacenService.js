@@ -26,9 +26,24 @@ export async function eliminarAlmacen(id) {
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')
-    .select('id, codigo, descripcion, unidad')
+    .select('id, codigo, descripcion, unidad, unidad_edp, tipo_conversion')
     .eq('estado', 'activo')
     .order('codigo')
+  if (error) throw error
+  return data
+}
+
+/** Lotes (ingresos) de este material en este almacén que todavía tienen
+ * saldo por entregar — para elegir de cuál sale una entrega cuando el
+ * material necesita conversión de unidades (el factor varía por lote). */
+export async function listarLotesDisponibles(materialId, almacenId) {
+  const { data, error } = await supabase
+    .from('ingresos')
+    .select('id, fecha, cantidad, cantidad_restante, ancho, largo, factor_conversion, documento_referencia')
+    .eq('material_id', materialId)
+    .eq('almacen_id', almacenId)
+    .gt('cantidad_restante', 0)
+    .order('fecha')
   if (error) throw error
   return data
 }

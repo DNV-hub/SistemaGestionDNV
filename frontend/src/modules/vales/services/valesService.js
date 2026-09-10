@@ -2,7 +2,7 @@ import { supabase } from '../../../services/supabaseClient'
 
 const SELECT_VALE =
   '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre)'
-const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad)'
+const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad, unidad_edp, tipo_conversion)'
 
 export async function listarVales() {
   const { data, error } = await supabase
@@ -124,6 +124,21 @@ export async function obtenerReservaActivaDeLinea(valeDetalleId) {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+/** Lotes (ingresos) con saldo, para elegir de cuál sale una entrega cuando
+ * el material necesita conversión de unidades (el factor varía por lote:
+ * un rollo de malla puede venir de otro tamaño en cada ingreso). */
+export async function listarLotesDisponibles(materialId, almacenId) {
+  const { data, error } = await supabase
+    .from('ingresos')
+    .select('id, fecha, cantidad, cantidad_restante, ancho, largo, factor_conversion, documento_referencia')
+    .eq('material_id', materialId)
+    .eq('almacen_id', almacenId)
+    .gt('cantidad_restante', 0)
+    .order('fecha')
   if (error) throw error
   return data
 }
