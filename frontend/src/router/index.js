@@ -14,6 +14,7 @@ import { alertasRoutes } from '../modules/alertas/routes'
 import { reportesRoutes } from '../modules/reportes/routes'
 import { rdcRoutes } from '../modules/rdc/routes'
 import { fotosRoutes } from '../modules/fotos/routes'
+import { sketchesRoutes } from '../modules/sketches/routes'
 
 // `permiso` es el código que la matriz de docs/MODELO_DATOS_Y_FLUJOS.md §2
 // exige para ver el módulo — la app lo revisa aquí (experiencia de usuario)
@@ -23,6 +24,7 @@ const routes = [
   ...dashboardRoutes,
   ...rdcRoutes,
   ...fotosRoutes,
+  ...sketchesRoutes,
   ...catalogoRoutes,
   ...frentesRoutes,
   ...almacenRoutes,

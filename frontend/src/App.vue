@@ -78,6 +78,7 @@ const navPrincipal = [
   { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios' },
   { to: '/fotos', label: 'Fotografías', icono: 'camara', permiso: 'rdc.crear' },
+  { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios' },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
 ]
 

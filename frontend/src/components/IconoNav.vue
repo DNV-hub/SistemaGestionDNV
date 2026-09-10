@@ -83,6 +83,12 @@ defineProps({
       <circle cx="12" cy="13" r="3.3" />
     </template>
 
+    <template v-else-if="nombre === 'sketch'">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1.5" />
+      <path d="M6.5 15.5 10 10.5l2.3 2.7L15 9.5l2.5 6" />
+      <circle cx="9" cy="7.8" r="1.1" fill="currentColor" stroke="none" />
+    </template>
+
     <template v-else-if="nombre === 'usuarios'">
       <circle cx="12" cy="8.3" r="3.3" />
       <path d="M5 20c0-3.6 3.1-6.3 7-6.3s7 2.7 7 6.3" />
