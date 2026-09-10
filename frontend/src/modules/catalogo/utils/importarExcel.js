@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { normalizarNumero } from '../../../utils/normalizarNumero'
 
 // Alias de encabezados aceptados (normalizados: mayúsculas, sin tildes, un
 // solo espacio) hacia los campos internos que usa el importador.
@@ -143,7 +144,7 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
       }
     }
 
-    const stockMinimo = f.stockMinimo ? Number(f.stockMinimo) : null
+    const stockMinimo = f.stockMinimo ? normalizarNumero(f.stockMinimo) : null
     const tipoConversion = normalizarConversion(f.conversion)
 
     return {

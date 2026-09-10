@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { normalizarNumero } from '../../../utils/normalizarNumero'
 
 // Mismo criterio que catalogo/utils/importarExcel.js: encabezados alias
 // normalizados (mayúsculas, sin tildes, un solo espacio).
@@ -73,8 +74,8 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       return
     }
 
-    const cantidad = Number(f.cantidad)
-    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+    const cantidad = normalizarNumero(f.cantidad)
+    if (!cantidad || cantidad <= 0) {
       filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Cantidad inválida.' })
       return
     }
@@ -86,8 +87,8 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     }
 
     const tipoConversion = material.tipo_conversion ?? 'ninguna'
-    const ancho = f.ancho ? Number(f.ancho) : null
-    const largo = f.largo ? Number(f.largo) : null
+    const ancho = f.ancho ? normalizarNumero(f.ancho) : null
+    const largo = f.largo ? normalizarNumero(f.largo) : null
     if (tipoConversion === 'area' && (!ancho || !largo)) {
       filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Este material necesita ANCHO y LARGO del rollo.' })
       return

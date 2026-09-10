@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import { normalizarNumero } from '../../../utils/normalizarNumero'
 
 // Mismo criterio que los otros importadores del Sistema: alias de
 // encabezados normalizados.
@@ -58,8 +59,8 @@ export function procesarFilasMedidas(filasCrudas, filasOriginales) {
     }
 
     const tipo = fuente.materiales?.tipo_conversion
-    const ancho = f.ancho ? Number(f.ancho) : null
-    const largo = f.largo ? Number(f.largo) : null
+    const ancho = f.ancho ? normalizarNumero(f.ancho) : null
+    const largo = f.largo ? normalizarNumero(f.largo) : null
 
     if (tipo === 'area' && (!ancho || !largo)) {
       filas.push({ fila: f._fila, id: f.id, codigo: fuente.materiales?.codigo, estado: 'error', motivo: 'Este material necesita ancho y largo.' })
