@@ -5,13 +5,20 @@ import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
 const props = defineProps({
   frentesActivos: { type: Array, default: () => [] },
   materialesActivos: { type: Array, default: () => [] },
+  // Solo quien puede crear vales a nombre de otro (Almacén cargando algo
+  // que llegó por WhatsApp) ve este selector; un supervisor que crea su
+  // propio vale no lo necesita, el dueño ya es él mismo.
+  supervisoresActivos: { type: Array, default: null },
 })
 
 defineEmits(['cerrar'])
 const attrs = useAttrs()
 
+const mostrarSelectorSupervisor = computed(() => props.supervisoresActivos !== null)
+
 const form = reactive({
   frente_id: props.frentesActivos[0]?.id ?? '',
+  supervisor_id: '',
   observaciones: '',
 })
 const lineas = ref([{ material_id: '', cantidad_solicitada: '' }])
@@ -40,6 +47,10 @@ async function onSubmit() {
     error.value = 'Selecciona un frente.'
     return
   }
+  if (mostrarSelectorSupervisor.value && !form.supervisor_id) {
+    error.value = 'Selecciona a nombre de qué supervisor es este vale.'
+    return
+  }
   if (!lineasValidas.value.length) {
     error.value = 'Agrega al menos un material con cantidad mayor a cero.'
     return
@@ -49,6 +60,7 @@ async function onSubmit() {
   try {
     await attrs.onGuardar({
       frente_id: form.frente_id,
+      supervisor_id: mostrarSelectorSupervisor.value ? form.supervisor_id : undefined,
       observaciones: form.observaciones.trim() || null,
       lineas: lineasValidas.value.map((l) => ({
         material_id: l.material_id,
@@ -75,6 +87,15 @@ async function onSubmit() {
           <option value="" disabled>Selecciona un frente…</option>
           <option v-for="f in frentesActivos" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
         </select>
+      </label>
+
+      <label v-if="mostrarSelectorSupervisor">
+        Supervisor (a nombre de quién es este vale)
+        <select v-model="form.supervisor_id" required>
+          <option value="" disabled>Selecciona un supervisor…</option>
+          <option v-for="s in supervisoresActivos" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+        </select>
+        <span class="ayuda">Para cargar un vale que llegó por WhatsApp u otro medio, a nombre del supervisor que lo pidió.</span>
       </label>
 
       <div class="lineas">
@@ -145,6 +166,11 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   font: inherit;
+}
+.ayuda {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 .lineas {
   display: flex;

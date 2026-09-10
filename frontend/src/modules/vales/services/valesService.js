@@ -1,14 +1,8 @@
 import { supabase } from '../../../services/supabaseClient'
 
-const SELECT_VALE = '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre)'
+const SELECT_VALE =
+  '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre)'
 const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad)'
-
-export function generarNumeroVale() {
-  const ahora = new Date()
-  const yyyymmdd = ahora.toISOString().slice(0, 10).replace(/-/g, '')
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase()
-  return `V-${yyyymmdd}-${rand}`
-}
 
 export async function listarVales() {
   const { data, error } = await supabase
@@ -29,13 +23,13 @@ export async function obtenerVale(id) {
   return { ...vale, lineas }
 }
 
-export async function crearVale({ frente_id, supervisor_id, observaciones, lineas }) {
+export async function crearVale({ frente_id, supervisor_id, creado_por, observaciones, lineas }) {
   const { data: vale, error: errorVale } = await supabase
     .from('vales')
     .insert({
-      numero: generarNumeroVale(),
       frente_id,
       supervisor_id,
+      creado_por: creado_por ?? null,
       observaciones,
     })
     .select(SELECT_VALE)
@@ -136,6 +130,13 @@ export async function obtenerReservaActivaDeLinea(valeDetalleId) {
 
 export async function registrarSalida(payload) {
   const { data, error } = await supabase.from('salidas').insert(payload).select().single()
+  if (error) throw error
+  return data
+}
+
+/** Para el selector "¿a nombre de quién es este vale?" al cargarlo manualmente. */
+export async function listarSupervisores() {
+  const { data, error } = await supabase.rpc('fn_listar_supervisores')
   if (error) throw error
   return data
 }

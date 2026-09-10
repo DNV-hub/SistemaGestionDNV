@@ -108,6 +108,12 @@ async function registrarEntrega(payload) {
  * aprueba/revisa sin que tenga que ir a mirar otras pantallas (Almacén,
  * Procura). Ver vales.store._cargarAlertas.
  */
+function fechaHoraEnvio(v) {
+  const iso = v.fecha_envio ?? v.created_at
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 function situacion(linea) {
   const disponible = vales.alertasStockPorMaterial.get(linea.material_id) ?? 0
   const procura = vales.alertasProcuraPorMaterial.get(linea.material_id) ?? null
@@ -149,7 +155,10 @@ function situacion(linea) {
         <div>
           <h1>{{ vale.numero }}</h1>
           <p class="subtitulo">
-            {{ vale.frentes?.codigo ? vale.frentes.codigo + ' — ' : '' }}{{ vale.frentes?.nombre }} · Supervisor: {{ vale.usuarios?.nombre }} · {{ vale.fecha }}
+            {{ vale.frentes?.codigo ? vale.frentes.codigo + ' — ' : '' }}{{ vale.frentes?.nombre }} · Supervisor: {{ vale.usuarios?.nombre }} · {{ fechaHoraEnvio(vale) }}
+          </p>
+          <p v-if="vale.creado_por" class="subtitulo cargado-por">
+            Cargado manualmente{{ vale.creador?.nombre ? ' por ' + vale.creador.nombre : '' }}
           </p>
         </div>
         <span class="badge" :class="vale.estado.toLowerCase().replace(/\s+/g, '-')">{{ vale.estado }}</span>
@@ -274,6 +283,9 @@ h1 {
   margin: 0.2rem 0 0;
   font-size: 0.85rem;
   color: var(--color-text-muted);
+}
+.cargado-por {
+  font-style: italic;
 }
 .observaciones {
   font-size: 0.85rem;

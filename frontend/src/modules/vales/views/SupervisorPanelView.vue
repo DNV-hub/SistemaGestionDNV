@@ -91,6 +91,12 @@ async function enviarSolicitud() {
 
 const misVales = computed(() => [...vales.vales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)))
 
+function fechaHoraEnvio(v) {
+  const iso = v.fecha_envio ?? v.created_at
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 function abrirVale(vale) {
   router.push(`/vales/${vale.id}`)
 }
@@ -206,7 +212,7 @@ async function solicitarDevolucion() {
         <li v-for="v in misVales" :key="v.id" class="vale-card" @click="abrirVale(v)">
           <div>
             <strong>{{ v.numero }}</strong>
-            <span class="fecha">{{ v.fecha }}</span>
+            <span class="fecha">{{ fechaHoraEnvio(v) }}</span>
           </div>
           <span class="badge" :class="v.estado.toLowerCase().replace(/\s+/g, '-')">{{ v.estado }}</span>
         </li>

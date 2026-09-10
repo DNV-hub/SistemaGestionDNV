@@ -17,6 +17,7 @@ import {
   listarMaterialesActivos,
   listarAlmacenesActivos,
   listarStockDisponible,
+  listarSupervisores,
   obtenerAlertasVale,
 } from '../services/valesService'
 
@@ -27,6 +28,7 @@ export const useValesStore = defineStore('vales', {
     frentesActivos: [],
     materialesActivos: [],
     almacenesActivos: [],
+    supervisoresActivos: [],
     stockDisponible: [],
     alertasStockPorMaterial: new Map(),
     alertasProcuraPorMaterial: new Map(),
@@ -129,6 +131,11 @@ export const useValesStore = defineStore('vales', {
       this.stockDisponible = await listarStockDisponible()
     },
 
+    /** Solo para quien puede crear vales a nombre de otro (vales.crear_para_otro). */
+    async cargarSupervisores() {
+      this.supervisoresActivos = await listarSupervisores()
+    },
+
     async enviar(id) {
       const vale = await actualizarVale(id, { estado: 'Enviado', fecha_envio: new Date().toISOString() })
       this._actualizarEnLista(vale)
@@ -164,16 +171,28 @@ export const useValesStore = defineStore('vales', {
       await this._actualizarEstadoValeSiCorresponde()
     },
 
-    /** Si ya no quedan líneas pendientes, refleja que la revisión terminó. */
+    /**
+     * Mientras quede alguna línea Pendiente, el vale se queda en estado de
+     * espera (Enviado / En revisión) — nadie decidió nada todavía. Recién
+     * cuando ya no queda ninguna se refleja lo que Almacén decidió de
+     * verdad: si rechazó todas las líneas, el vale queda Rechazado; si
+     * aprobó al menos una, queda Aprobado. Antes esto siempre ponía
+     * "Aprobado" apenas no quedaban líneas pendientes, así que rechazar la
+     * única línea de un vale lo dejaba marcado como aprobado.
+     */
     async _actualizarEstadoValeSiCorresponde() {
       const vale = this.valeActual
       if (!vale || !['Enviado', 'En revision'].includes(vale.estado)) return
       const quedaPendiente = vale.lineas.some((l) => l.estado === 'Pendiente')
-      if (!quedaPendiente) {
-        const actualizado = await actualizarVale(vale.id, { estado: 'Aprobado' })
-        this.valeActual = { ...this.valeActual, ...actualizado }
-        this._actualizarEnLista(actualizado)
-      }
+      if (quedaPendiente) return
+
+      const lineasRelevantes = vale.lineas.filter((l) => l.estado !== 'Cancelado')
+      const estadoFinal =
+        lineasRelevantes.length && lineasRelevantes.every((l) => l.estado === 'Rechazado') ? 'Rechazado' : 'Aprobado'
+
+      const actualizado = await actualizarVale(vale.id, { estado: estadoFinal })
+      this.valeActual = { ...this.valeActual, ...actualizado }
+      this._actualizarEnLista(actualizado)
     },
 
     /**

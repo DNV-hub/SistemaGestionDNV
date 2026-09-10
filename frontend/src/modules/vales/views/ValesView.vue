@@ -14,6 +14,10 @@ const aviso = ref('')
 
 const puedeCrear = computed(() => auth.tienePermiso('vales.crear'))
 const puedeVerTodos = computed(() => auth.tienePermiso('vales.ver_todos'))
+// Solo Almacén/Administrador cargan vales a nombre de otro (lo que llega por
+// WhatsApp mientras no todos los supervisores usan la app); un supervisor
+// que crea su propio vale nunca ve el selector de "a nombre de quién".
+const puedeCrearParaOtro = computed(() => auth.tienePermiso('vales.crear_para_otro'))
 
 // Bandeja de entrada: los vales que todavía necesitan una decisión suben
 // arriba, ordenados por hora de envío (el más antiguo esperando primero,
@@ -39,11 +43,31 @@ function tiempoDesde(fechaIso) {
   return `hace ${Math.floor(horas / 24)} d`
 }
 
-onMounted(() => vales.cargarLista())
+function fechaHoraEnvio(vale) {
+  const iso = vale.fecha_envio ?? vale.created_at
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+onMounted(async () => {
+  await vales.cargarLista()
+  if (puedeCrearParaOtro.value) await vales.cargarSupervisores()
+})
+
+const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
 
 async function crear(payload) {
   aviso.value = ''
-  const vale = await vales.crear({ ...payload, supervisor_id: auth.session.user.id })
+  // Un supervisor crea su propio vale (queda en Borrador, lo envía él
+  // cuando quiera); Almacén cargando algo que llegó por WhatsApp lo manda
+  // directo a la cola de revisión — nadie más podría "enviarlo" después,
+  // porque no es el dueño del vale.
+  const datos = {
+    ...payload,
+    supervisor_id: esSupervisor.value ? auth.session.user.id : payload.supervisor_id,
+    creado_por: esSupervisor.value ? null : auth.session.user.id,
+  }
+  const vale = esSupervisor.value ? await vales.crear(datos) : await vales.crearYEnviar(datos)
   mostrarModal.value = false
   router.push(`/vales/${vale.id}`)
 }
@@ -71,7 +95,7 @@ function abrir(vale) {
       <thead>
         <tr>
           <th>Número</th>
-          <th>Fecha</th>
+          <th>Enviado</th>
           <th>Frente</th>
           <th v-if="puedeVerTodos">Supervisor</th>
           <th>Estado</th>
@@ -87,7 +111,7 @@ function abrir(vale) {
           @click="abrir(v)"
         >
           <td>{{ v.numero }}</td>
-          <td>{{ v.fecha }}</td>
+          <td>{{ fechaHoraEnvio(v) }}</td>
           <td>{{ v.frentes?.codigo ? v.frentes.codigo + ' — ' : '' }}{{ v.frentes?.nombre }}</td>
           <td v-if="puedeVerTodos">{{ v.usuarios?.nombre ?? '—' }}</td>
           <td>
@@ -107,6 +131,7 @@ function abrir(vale) {
       v-if="mostrarModal"
       :frentes-activos="vales.frentesActivos"
       :materiales-activos="vales.materialesActivos"
+      :supervisores-activos="puedeCrearParaOtro ? vales.supervisoresActivos : null"
       @guardar="crear"
       @cerrar="mostrarModal = false"
     />
