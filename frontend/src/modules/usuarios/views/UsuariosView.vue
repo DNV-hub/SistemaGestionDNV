@@ -21,6 +21,7 @@ const errorAccion = ref('')
 
 const puedeCrear = computed(() => auth.tienePermiso('usuarios.crear'))
 const puedeEliminar = computed(() => auth.tienePermiso('usuarios.desactivar'))
+const puedeForzarBorrado = computed(() => auth.tienePermiso('sistema.borrar_pruebas'))
 const puedeRestablecerPassword = computed(() => auth.tienePermiso('usuarios.editar'))
 const puedeEditar = computed(() => auth.tienePermiso('usuarios.editar') || puedeEliminar.value)
 
@@ -79,9 +80,30 @@ async function eliminar(usuario) {
   errorAccion.value = ''
   try {
     const resultado = await usuarios.eliminar(usuario.id)
-    aviso.value = resultado.eliminado
-      ? 'Usuario eliminado.'
-      : 'Este usuario ya generó movimientos (ingresos, vales, etc.), así que no se puede eliminar: se desactivó en su lugar.'
+    if (resultado.eliminado) {
+      aviso.value = 'Usuario eliminado.'
+      return
+    }
+
+    // El bloqueo más común para un usuario de prueba es su vínculo con el
+    // catálogo de supervisores del RDC (rdc_supervisores.usuario_id no
+    // tiene cascada) — no historial real. Developer puede romper ese
+    // vínculo puntual y reintentar.
+    if (puedeForzarBorrado.value) {
+      const forzar = confirm(
+        'No se pudo eliminar directamente — puede estar vinculado al catálogo de supervisores del RDC, o tener vales/reportes propios.\n\n' +
+          '¿Intentar forzar el borrado? (falla si ya tiene reportes del RDC reales; si tiene vales o reportes de prueba, borralos primero desde Developer).'
+      )
+      if (forzar) {
+        const resultadoForzado = await usuarios.forzarEliminacion(usuario.id)
+        aviso.value = resultadoForzado.eliminado
+          ? 'Usuario eliminado.'
+          : 'Se rompió el vínculo con el catálogo de supervisores, pero el usuario sigue teniendo otro historial (vales, reportes, etc.) y se desactivó en su lugar.'
+        return
+      }
+    }
+
+    aviso.value = 'Este usuario ya generó movimientos (ingresos, vales, etc.), así que no se puede eliminar: se desactivó en su lugar.'
   } catch (e) {
     console.error(e)
     errorAccion.value = e.message || 'No se pudo eliminar el usuario.'

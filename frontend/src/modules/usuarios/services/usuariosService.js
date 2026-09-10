@@ -52,6 +52,15 @@ export async function restablecerPassword(id, password) {
   return data
 }
 
+/** Solo Developer (sistema.borrar_pruebas): rompe el vínculo de un usuario
+ * de prueba con el catálogo de supervisores del RDC, que es lo que suele
+ * bloquear su eliminación (rdc_supervisores.usuario_id no tiene cascada).
+ * Se niega si ese supervisor ya tiene reportes reales guardados. */
+export async function desvincularSupervisorPrueba(id) {
+  const { error } = await supabase.rpc('fn_desvincular_supervisor_prueba', { p_usuario_id: id })
+  if (error) throw error
+}
+
 /** Llama a la Edge Function eliminar-usuario: borra la cuenta de acceso si
  * no tiene historial asociado, o la desactiva si sí lo tiene. Devuelve
  * { eliminado, desactivado }. */

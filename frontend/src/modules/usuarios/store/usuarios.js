@@ -6,6 +6,7 @@ import {
   crearUsuario,
   actualizarUsuario,
   eliminarUsuario,
+  desvincularSupervisorPrueba,
   restablecerPassword,
 } from '../services/usuariosService'
 
@@ -62,6 +63,14 @@ export const useUsuariosStore = defineStore('usuarios', {
         if (idx !== -1) this.usuarios[idx] = { ...this.usuarios[idx], estado: 'inactivo' }
       }
       return resultado
+    },
+
+    /** Solo Developer: cuando eliminar() cae a "desactivar" porque el
+     * usuario está vinculado al catálogo de supervisores del RDC, esto
+     * rompe ese vínculo puntual y reintenta el borrado real. */
+    async forzarEliminacion(id) {
+      await desvincularSupervisorPrueba(id)
+      return this.eliminar(id)
     },
   },
 })
