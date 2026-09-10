@@ -114,7 +114,7 @@
 .rdc-app .hito-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,112px);gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);overflow:hidden}
 .rdc-app .hito-row:last-of-type{border-bottom:none}
 .rdc-app .hito-label{font-size:13px;font-weight:500}
-.rdc-app .hito-row input[type="number"]{border-radius:var(--r-md);border:1px solid var(--border-md);padding:8px 10px;background:var(--surface);font-family:inherit;font-size:14px;width:100%;box-sizing:border-box}
+.rdc-app .hito-row input[type="number"]{border-radius:var(--r-md);border:1px solid var(--border-md);padding:8px 10px;background:var(--surface);font-family:inherit;font-size:16px;width:100%;box-sizing:border-box}
 .rdc-app .hito-row input[type="number"]:focus{border-color:var(--blue);outline:none}
 /* TOGGLE */
 .rdc-app .toggle-row{display:flex;align-items:flex-start;gap:10px;font-size:14px;font-weight:500;padding:12px;background:var(--surface2);border-radius:var(--r-md);border:1.5px solid var(--border);cursor:pointer;user-select:none}
@@ -195,7 +195,7 @@
 .rdc-app .stepper{display:flex;align-items:center;gap:2px;background:var(--surface2);border-radius:999px;padding:3px}
 .rdc-app .stepper-btn{width:26px;height:26px;border:none;background:var(--surface);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;line-height:1;color:var(--text2);cursor:pointer;box-shadow:var(--shadow);flex-shrink:0;font-family:inherit}
 .rdc-app .stepper-btn:active{transform:scale(.92)}
-.rdc-app .stepper-input{width:52px;text-align:center;border:none;background:transparent;font-size:14.5px;font-weight:700;color:var(--text);font-family:inherit;-moz-appearance:textfield}
+.rdc-app .stepper-input{width:52px;text-align:center;border:none;background:transparent;font-size:16px;font-weight:700;color:var(--text);font-family:inherit;-moz-appearance:textfield}
 .rdc-app .stepper-input::-webkit-outer-spin-button,.rdc-app .stepper-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .rdc-app .stepper-input:focus{outline:none}
 .rdc-app .blq-row-horarios{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
@@ -206,7 +206,7 @@
 /* RECUADRO DE HORA — mismo estilo en todo input/select de hora de la app */
 .rdc-app input[type="time"],.rdc-app select.time-field{
   background:var(--surface2);border:1.5px solid transparent;border-radius:var(--r-md);
-  font-family:inherit;font-weight:700;font-size:14.5px;color:var(--text);
+  font-family:inherit;font-weight:700;font-size:16px;color:var(--text);
   padding:8px 10px;width:100%;max-width:100%;min-width:0;box-sizing:border-box;cursor:pointer;
 }
 .rdc-app input[type="time"]:focus,.rdc-app select.time-field:focus{

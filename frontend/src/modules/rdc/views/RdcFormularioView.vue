@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { ESTADO } from '../services/rdcDb'
-import { nombreDe } from '../services/rdcCalculos'
 import PasoDatos from '../components/PasoDatos.vue'
 import PasoJornada from '../components/PasoJornada.vue'
 import PasoMetrados from '../components/PasoMetrados.vue'
@@ -42,7 +41,6 @@ onMounted(async () => {
 })
 
 const componenteActual = computed(() => PASOS[paso.value].componente)
-const supervisor = computed(() => nombreDe(rdc.catalogos, 'supervisores', rdc.actual?.supervisorId) || '—')
 const esUltimoPaso = computed(() => paso.value === PASOS.length - 1)
 
 function ir(indice) {
@@ -51,6 +49,17 @@ function ir(indice) {
 }
 
 function cerrar() {
+  router.push({ name: 'rdc' })
+}
+
+// La lista (docs/mockups/02-rdc-lista.html) ya no tiene un botón de borrar
+// en cada tarjeta — el mockup no lo muestra ahí. Este es su lugar nuevo:
+// solo tiene sentido borrar mientras el reporte sigue siendo un borrador
+// (uno ya finalizado es registro histórico, no se borra).
+async function borrar() {
+  if (!rdc.actual) return
+  if (!confirm('¿Borrar este borrador? No se puede deshacer.')) return
+  await rdc.eliminarBorrador(rdc.actual.id)
   router.push({ name: 'rdc' })
 }
 
@@ -85,6 +94,15 @@ function alSoltar(e) {
         <span class="save-dot"></span>
         <span>Guardado</span>
       </div>
+      <button
+        v-if="rdc.actual?.estado === ESTADO.BORRADOR"
+        type="button"
+        class="icon-btn"
+        aria-label="Borrar este borrador"
+        @click="borrar"
+      >
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4.5a1 1 0 011-1h2a1 1 0 011 1V6m2 0-.7 10.5a1.5 1.5 0 01-1.5 1.4H7.2a1.5 1.5 0 01-1.5-1.4L5 6"/></svg>
+      </button>
     </header>
 
     <div class="progress">
@@ -98,15 +116,16 @@ function alSoltar(e) {
     </div>
 
     <main class="content" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
-      <p class="supline">Supervisor · <b>{{ supervisor }}</b></p>
-
       <p v-if="!listo" class="empty-msg">Cargando…</p>
       <component :is="componenteActual" v-else-if="rdc.actual" />
     </main>
 
-    <div v-if="!esUltimoPaso" class="actionbar">
+    <!-- Anterior sigue disponible hasta enviar, incluso en el último paso
+         (Resumen) — ahí no hay "Siguiente" porque ese paso ya tiene su
+         propio botón "Terminado y Enviar" adentro. -->
+    <div class="actionbar">
       <button type="button" class="btn btn-sec" :disabled="paso === 0" @click="ir(paso - 1)">Anterior</button>
-      <button type="button" class="btn btn-pri" @click="ir(paso + 1)">
+      <button v-if="!esUltimoPaso" type="button" class="btn btn-pri" @click="ir(paso + 1)">
         Siguiente
         <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5h10M9.5 4.5l4 4-4 4"/></svg>
       </button>
@@ -239,15 +258,6 @@ function alSoltar(e) {
   flex: 1;
   overflow-y: auto;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
-}
-.supline {
-  font-size: 12px;
-  color: var(--text-2);
-  margin-bottom: 16px;
-}
-.supline b {
-  font-weight: 600;
-  color: var(--text);
 }
 
 .actionbar {
