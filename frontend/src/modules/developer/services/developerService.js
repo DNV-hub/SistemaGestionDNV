@@ -41,7 +41,11 @@ export async function borrarReporteRdc(id) {
 export async function reiniciarIngresos() {
   const { data, error } = await supabase.rpc('fn_reiniciar_ingresos')
   if (error) throw error
-  return { ingresosBorrados: data?.ingresos_borrados ?? 0, kardexBorrado: data?.kardex_borrado ?? 0 }
+  return {
+    ingresosBorrados: data?.ingresos_borrados ?? 0,
+    kardexBorrado: data?.kardex_borrado ?? 0,
+    stockBorrado: data?.stock_borrado ?? 0,
+  }
 }
 
 // ---------------------------------------------------------------------------

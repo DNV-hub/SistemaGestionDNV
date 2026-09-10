@@ -85,8 +85,8 @@ async function reiniciarTodosLosIngresos() {
   error.value = ''
   aviso.value = ''
   try {
-    const { ingresosBorrados, kardexBorrado } = await reiniciarIngresos()
-    aviso.value = `Se borraron ${ingresosBorrados} ingresos y ${kardexBorrado} filas de kardex. El stock físico quedó en 0, listo para reingresar.`
+    const { ingresosBorrados, kardexBorrado, stockBorrado } = await reiniciarIngresos()
+    aviso.value = `Se borraron ${ingresosBorrados} ingresos, ${kardexBorrado} filas de kardex y ${stockBorrado} filas de stock. Queda como recién empezado, listo para reingresar.`
   } catch (e) {
     console.error(e)
     error.value = `No se pudo reiniciar: ${e.message ?? e}`
@@ -175,9 +175,10 @@ async function borrarReportesSeleccionados() {
       <section class="tarjeta peligro-total">
         <h2>Reiniciar todos los ingresos</h2>
         <p class="ayuda">
-          Borra TODOS los ingresos de TODOS los materiales y almacenes (y su kardex), y repone el stock físico a 0 —
-          para cuando el ingreso inicial se cargó mal y hay que reingresar todo de cero con la plantilla. Se niega en
-          el servidor si ya hay entregas (salidas) o stock reservado de por medio.
+          Borra TODOS los ingresos de TODOS los materiales y almacenes (y su kardex), y borra también las filas de
+          stock — no quedan en 0, desaparecen del todo y se vuelven a crear solas con el próximo ingreso. Para cuando
+          el ingreso inicial se cargó mal y hay que reingresar todo de cero con la plantilla. Se niega en el servidor
+          si ya hay entregas (salidas) o stock reservado de por medio.
         </p>
         <button class="peligro" :disabled="reiniciandoIngresos" @click="reiniciarTodosLosIngresos">
           {{ reiniciandoIngresos ? 'Reiniciando…' : 'Borrar todos los ingresos' }}
