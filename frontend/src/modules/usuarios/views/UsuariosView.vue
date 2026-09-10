@@ -2,15 +2,50 @@
 import { computed, onMounted, ref } from 'vue'
 import { useUsuariosStore } from '../store/usuarios'
 import { useAuthStore } from '../../../store/auth'
+import { diagnosticarBloqueoUsuario } from '../services/usuariosService'
 import UsuarioFormModal from '../components/UsuarioFormModal.vue'
 import PasswordTemporalModal from '../components/PasswordTemporalModal.vue'
 import RestablecerPasswordModal from '../components/RestablecerPasswordModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
 
+// Todo lo que puede seguir atado a una cuenta (ver
+// fn_diagnosticar_bloqueo_usuario): lo "limpiable" son restos de prueba que
+// Developer puede borrar (vales, reportes del RDC, el vínculo con el
+// catálogo de supervisores); lo "permanente" es historial real — auditoría,
+// kardex, movimientos de Almacén, devoluciones, procura — que nunca debe
+// borrarse aunque la cuenta se haya creado solo para probar.
+const CATEGORIAS_LIMPIABLES = {
+  vales: 'vale(s)',
+  rdc_reportes: 'reporte(s) del RDC',
+  rdc_supervisores_vinculado: 'vínculo con el catálogo de supervisores del RDC',
+}
+const CATEGORIAS_PERMANENTES = {
+  auditoria: 'fila(s) de auditoría',
+  reservas: 'reserva(s) de stock',
+  ingresos: 'ingreso(s) de Almacén',
+  ajustes: 'ajuste(s) de Almacén',
+  salidas: 'entrega(s) física(s)',
+  kardex: 'movimiento(s) de kardex',
+  metrados_procura: 'metrado(s) de Procura',
+  alertas_resueltas: 'alerta(s) resuelta(s)',
+  devoluciones: 'devolución(es)',
+  configuracion: 'cambio(s) de configuración',
+}
+
+function detalleDiagnostico(diagnostico, categorias) {
+  return Object.entries(categorias)
+    .filter(([clave]) => diagnostico[clave])
+    .map(([clave, etiqueta]) => (typeof diagnostico[clave] === 'number' ? `${diagnostico[clave]} ${etiqueta}` : etiqueta))
+}
+
 const usuarios = useUsuariosStore()
 const auth = useAuthStore()
 
 const busqueda = ref('')
+// Muchas cuentas de prueba se quedan "inactivo" para siempre a propósito
+// (tienen historial real — auditoría, kardex, etc. — que nunca se borra),
+// así que ocultarlas por defecto evita que llenen la lista.
+const mostrarInactivos = ref(false)
 const mostrarModal = ref(false)
 const usuarioEnEdicion = ref(null)
 const usuarioCreado = ref(null) // { usuario, passwordTemporal }
@@ -27,10 +62,11 @@ const puedeEditar = computed(() => auth.tienePermiso('usuarios.editar') || puede
 
 const usuariosFiltrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
-  if (!q) return usuarios.usuarios
-  return usuarios.usuarios.filter(
-    (u) => u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
-  )
+  return usuarios.usuarios.filter((u) => {
+    if (!mostrarInactivos.value && u.estado === 'inactivo') return false
+    if (!q) return true
+    return u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+  })
 })
 
 onMounted(() => usuarios.cargar())
@@ -85,32 +121,38 @@ async function eliminar(usuario) {
       return
     }
 
-    // El bloqueo más común para un usuario de prueba es su propio historial
-    // de prueba: vales, reportes del RDC, o el vínculo con el catálogo de
-    // supervisores. Developer puede borrar todo eso en cadena y reintentar.
-    if (puedeForzarBorrado.value) {
-      const forzar = confirm(
-        `No se pudo eliminar directamente${resultado.motivo ? ` (motivo: ${resultado.motivo})` : ''}.\n\n` +
-          '¿Forzar el borrado? Esto borra sus vales y reportes del RDC de prueba y el vínculo con el catálogo de supervisores, y reintenta. ' +
-          'Lo que ya tuvo una entrega física real no se toca.'
-      )
-      if (forzar) {
-        const resultadoForzado = await usuarios.forzarEliminacion(usuario.id)
-        if (resultadoForzado.eliminado) {
-          aviso.value = 'Usuario eliminado.'
-        } else {
-          const detalleOmitidos = resultadoForzado.valesOmitidos
-            ? ` (${resultadoForzado.valesOmitidos} vale(s) con entregas reales no se tocaron)`
-            : ''
-          aviso.value = `Se limpió lo que se pudo${detalleOmitidos}, pero sigue bloqueado${
-            resultadoForzado.motivo ? `: ${resultadoForzado.motivo}` : '.'
-          } Se desactivó en su lugar.`
-        }
-        return
-      }
+    if (!puedeForzarBorrado.value) {
+      aviso.value = 'Este usuario ya generó movimientos (ingresos, vales, etc.), así que no se puede eliminar: se desactivó en su lugar.'
+      return
     }
 
-    aviso.value = 'Este usuario ya generó movimientos (ingresos, vales, etc.), así que no se puede eliminar: se desactivó en su lugar.'
+    // En vez de adivinar con el mensaje genérico de Postgres, se pregunta
+    // tabla por tabla qué sigue atado a esta cuenta, para saber si lo que
+    // falta es limpiable (vales/reportes de prueba) o es historial real
+    // que nunca debe borrarse (auditoría, kardex, movimientos de Almacén…).
+    const diagnostico = await diagnosticarBloqueoUsuario(usuario.id)
+    const permanentes = detalleDiagnostico(diagnostico, CATEGORIAS_PERMANENTES)
+    const limpiables = detalleDiagnostico(diagnostico, CATEGORIAS_LIMPIABLES)
+
+    if (permanentes.length) {
+      aviso.value =
+        `No se puede eliminar del todo — tiene historial real que nunca se borra: ${permanentes.join(', ')}. ` +
+        'Quedó desactivado, que es el estado correcto para esta cuenta (ya no puede iniciar sesión).'
+      return
+    }
+
+    if (!limpiables.length) {
+      aviso.value = `No se pudo eliminar por un motivo no identificado${resultado.motivo ? `: ${resultado.motivo}` : '.'}`
+      return
+    }
+
+    const forzar = confirm(`Se puede limpiar y borrar del todo: ${limpiables.join(', ')}. ¿Forzar el borrado?`)
+    if (!forzar) return
+
+    const resultadoForzado = await usuarios.forzarEliminacion(usuario.id)
+    aviso.value = resultadoForzado.eliminado
+      ? 'Usuario eliminado.'
+      : `No se pudo terminar de eliminar${resultadoForzado.motivo ? `: ${resultadoForzado.motivo}` : '.'} Quedó desactivado.`
   } catch (e) {
     console.error(e)
     errorAccion.value = e.message || 'No se pudo eliminar el usuario.'
@@ -127,6 +169,10 @@ async function eliminar(usuario) {
 
     <div class="filtros">
       <input v-model="busqueda" type="search" placeholder="Buscar por nombre o correo…" />
+      <label class="check-inactivos">
+        <input v-model="mostrarInactivos" type="checkbox" />
+        Mostrar inactivos
+      </label>
     </div>
 
     <p v-if="aviso" class="aviso">{{ aviso }}</p>
@@ -227,13 +273,28 @@ h1 {
 }
 .filtros {
   margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
-.filtros input {
+.filtros input[type='search'] {
   width: 320px;
   max-width: 100%;
   padding: 0.5rem 0.65rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
+}
+.check-inactivos {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.check-inactivos input {
+  width: auto;
 }
 button {
   padding: 0.55rem 1rem;

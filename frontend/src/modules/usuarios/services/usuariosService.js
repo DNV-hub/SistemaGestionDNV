@@ -61,6 +61,17 @@ export async function desvincularSupervisorPrueba(id) {
   if (error) throw error
 }
 
+/** Solo Developer: cuenta, tabla por tabla, qué sigue atado a esta cuenta.
+ * No borra nada — es diagnóstico, para saber si lo que falta es limpiable
+ * (vales, reportes del RDC, el vínculo de catálogo) o es historial real
+ * que nunca debería borrarse (auditoría, kardex, movimientos de Almacén,
+ * devoluciones, procura), aunque la cuenta se haya creado para probar. */
+export async function diagnosticarBloqueoUsuario(id) {
+  const { data, error } = await supabase.rpc('fn_diagnosticar_bloqueo_usuario', { p_usuario_id: id })
+  if (error) throw error
+  return data
+}
+
 /** Solo Developer: borra en cadena todo lo que puede estar bloqueando el
  * borrado de una cuenta de prueba — sus vales, sus reportes del RDC y el
  * vínculo con el catálogo de supervisores — antes de reintentar eliminar
