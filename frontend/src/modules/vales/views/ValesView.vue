@@ -3,10 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useValesStore } from '../store/vales'
 import { useAuthStore } from '../../../store/auth'
+import { useValeNuevoStore } from '../store/valeNuevo'
 import ValeFormModal from '../components/ValeFormModal.vue'
 
 const vales = useValesStore()
 const auth = useAuthStore()
+const valeNuevo = useValeNuevoStore()
 const router = useRouter()
 
 const mostrarModal = ref(false)
@@ -18,6 +20,7 @@ const puedeVerTodos = computed(() => auth.tienePermiso('vales.ver_todos'))
 // WhatsApp mientras no todos los supervisores usan la app); un supervisor
 // que crea su propio vale nunca ve el selector de "a nombre de quién".
 const puedeCrearParaOtro = computed(() => auth.tienePermiso('vales.crear_para_otro'))
+const puedeDevolver = computed(() => auth.tienePermiso('devoluciones.crear'))
 
 // Bandeja de entrada: los vales que todavía necesitan una decisión suben
 // arriba, ordenados por hora de envío (el más antiguo esperando primero,
@@ -110,6 +113,13 @@ async function crear(payload) {
 function abrir(vale) {
   router.push(`/vales/${vale.id}`)
 }
+
+// Celular: hoja a pantalla completa (docs/mockups/04-vale-nuevo.html), no el
+// modal centrado — ese sigue siendo solo para escritorio.
+function nuevoMovil() {
+  valeNuevo.reiniciar()
+  router.push('/vales/nuevo')
+}
 </script>
 
 <template>
@@ -167,11 +177,22 @@ function abrir(vale) {
     <div class="solo-movil movil-vales">
       <header class="appbar">
         <h1>Vales</h1>
-        <button v-if="puedeCrear" type="button" class="new-btn" @click="mostrarModal = true">
+        <button v-if="puedeCrear" type="button" class="new-btn" @click="nuevoMovil">
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M7.5 3.5v8M3.5 7.5h8"/></svg>
           Nuevo
         </button>
       </header>
+
+      <div class="accesos-rapidos">
+        <button type="button" class="chip" @click="router.push('/vales/stock')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4.2 7 1.5l5.5 2.7L7 6.9 1.5 4.2Z"/><path d="M1.5 4.2v5.6L7 12.5l5.5-2.7V4.2M7 6.9v5.6"/></svg>
+          Stock en vivo
+        </button>
+        <button v-if="puedeDevolver" type="button" class="chip" @click="router.push('/vales/devolucion')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5 1.5 7l3 2.5M1.5 7h7a3 3 0 0 1 0 6h-1"/></svg>
+          Devolver material
+        </button>
+      </div>
 
       <main class="content">
         <p v-if="aviso" class="aviso">{{ aviso }}</p>
@@ -391,6 +412,30 @@ button {
   font-weight: 600;
   color: #1a1206;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.accesos-rapidos {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+  overflow-x: auto;
+}
+.chip {
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border-lista);
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
