@@ -6,7 +6,7 @@ import {
   crearUsuario,
   actualizarUsuario,
   eliminarUsuario,
-  desvincularSupervisorPrueba,
+  borrarUsuarioPrueba,
   restablecerPassword,
 } from '../services/usuariosService'
 
@@ -65,12 +65,15 @@ export const useUsuariosStore = defineStore('usuarios', {
       return resultado
     },
 
-    /** Solo Developer: cuando eliminar() cae a "desactivar" porque el
-     * usuario está vinculado al catálogo de supervisores del RDC, esto
-     * rompe ese vínculo puntual y reintenta el borrado real. */
+    /** Solo Developer: cuando eliminar() cae a "desactivar", esto borra en
+     * cadena todo lo que suele bloquear una cuenta de prueba (sus vales,
+     * sus reportes del RDC, el vínculo con el catálogo de supervisores) y
+     * reintenta el borrado real. Devuelve el resultado del reintento más
+     * cuántos vales se saltearon por tener entregas físicas reales. */
     async forzarEliminacion(id) {
-      await desvincularSupervisorPrueba(id)
-      return this.eliminar(id)
+      const { valesOmitidos } = await borrarUsuarioPrueba(id)
+      const resultado = await this.eliminar(id)
+      return { ...resultado, valesOmitidos }
     },
   },
 })

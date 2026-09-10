@@ -66,5 +66,9 @@ Deno.serve(async (req) => {
   const { error: errorDesactivar } = await clienteAdmin.from('usuarios').update({ estado: 'inactivo' }).eq('id', id)
   if (errorDesactivar) return respuesta({ error: `No se pudo eliminar ni desactivar: ${errorDesactivar.message}` }, 400)
 
-  return respuesta({ eliminado: false, desactivado: true })
+  // El motivo real (qué tabla lo referencia) va en el mensaje de Postgres.
+  // Antes se descartaba y el mensaje genérico ("ya generó movimientos") no
+  // decía cuál era el bloqueo real — Developer lo necesita para saber qué
+  // borrar primero.
+  return respuesta({ eliminado: false, desactivado: true, motivo: errorBorrado.message })
 })

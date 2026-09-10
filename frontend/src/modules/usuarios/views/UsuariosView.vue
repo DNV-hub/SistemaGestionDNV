@@ -85,20 +85,27 @@ async function eliminar(usuario) {
       return
     }
 
-    // El bloqueo más común para un usuario de prueba es su vínculo con el
-    // catálogo de supervisores del RDC (rdc_supervisores.usuario_id no
-    // tiene cascada) — no historial real. Developer puede romper ese
-    // vínculo puntual y reintentar.
+    // El bloqueo más común para un usuario de prueba es su propio historial
+    // de prueba: vales, reportes del RDC, o el vínculo con el catálogo de
+    // supervisores. Developer puede borrar todo eso en cadena y reintentar.
     if (puedeForzarBorrado.value) {
       const forzar = confirm(
-        'No se pudo eliminar directamente — puede estar vinculado al catálogo de supervisores del RDC, o tener vales/reportes propios.\n\n' +
-          '¿Intentar forzar el borrado? (falla si ya tiene reportes del RDC reales; si tiene vales o reportes de prueba, borralos primero desde Developer).'
+        `No se pudo eliminar directamente${resultado.motivo ? ` (motivo: ${resultado.motivo})` : ''}.\n\n` +
+          '¿Forzar el borrado? Esto borra sus vales y reportes del RDC de prueba y el vínculo con el catálogo de supervisores, y reintenta. ' +
+          'Lo que ya tuvo una entrega física real no se toca.'
       )
       if (forzar) {
         const resultadoForzado = await usuarios.forzarEliminacion(usuario.id)
-        aviso.value = resultadoForzado.eliminado
-          ? 'Usuario eliminado.'
-          : 'Se rompió el vínculo con el catálogo de supervisores, pero el usuario sigue teniendo otro historial (vales, reportes, etc.) y se desactivó en su lugar.'
+        if (resultadoForzado.eliminado) {
+          aviso.value = 'Usuario eliminado.'
+        } else {
+          const detalleOmitidos = resultadoForzado.valesOmitidos
+            ? ` (${resultadoForzado.valesOmitidos} vale(s) con entregas reales no se tocaron)`
+            : ''
+          aviso.value = `Se limpió lo que se pudo${detalleOmitidos}, pero sigue bloqueado${
+            resultadoForzado.motivo ? `: ${resultadoForzado.motivo}` : '.'
+          } Se desactivó en su lugar.`
+        }
         return
       }
     }

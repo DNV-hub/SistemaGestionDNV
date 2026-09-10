@@ -61,6 +61,18 @@ export async function desvincularSupervisorPrueba(id) {
   if (error) throw error
 }
 
+/** Solo Developer: borra en cadena todo lo que puede estar bloqueando el
+ * borrado de una cuenta de prueba — sus vales, sus reportes del RDC y el
+ * vínculo con el catálogo de supervisores — antes de reintentar eliminar
+ * la cuenta en sí. Devuelve cuántos vales se saltearon (los que ya
+ * tuvieron una entrega física real: esos no son prueba, quedan como
+ * estaban). */
+export async function borrarUsuarioPrueba(id) {
+  const { data, error } = await supabase.rpc('fn_borrar_usuario_prueba', { p_usuario_id: id })
+  if (error) throw error
+  return { valesOmitidos: data?.vales_omitidos ?? 0 }
+}
+
 /** Llama a la Edge Function eliminar-usuario: borra la cuenta de acceso si
  * no tiene historial asociado, o la desactiva si sí lo tiene. Devuelve
  * { eliminado, desactivado }. */
