@@ -82,7 +82,9 @@
 /* FIELDS */
 .rdc-app .field{display:flex;flex-direction:column;gap:4px}
 .rdc-app .field label{font-size:12px;font-weight:600;color:var(--text2)}
-.rdc-app .field input,.rdc-app .field select,.rdc-app .field textarea{width:100%;font-family:'Plus Jakarta Sans',inherit;font-size:14px;font-weight:400;color:var(--text);background:var(--surface);border:1.5px solid var(--border-md);border-radius:var(--r-md);padding:9px 11px;transition:border-color .12s,box-shadow .12s;-webkit-appearance:none}
+/* font-size 16px a propósito (no 14px): por debajo de 16px, Safari en
+   iPhone hace zoom automático al enfocar el campo — con 16px no lo hace. */
+.rdc-app .field input,.rdc-app .field select,.rdc-app .field textarea{width:100%;font-family:'Plus Jakarta Sans',inherit;font-size:16px;font-weight:400;color:var(--text);background:var(--surface);border:1.5px solid var(--border-md);border-radius:var(--r-md);padding:9px 11px;transition:border-color .12s,box-shadow .12s;-webkit-appearance:none}
 .rdc-app .field select{cursor:pointer}
 .rdc-app .field textarea{resize:vertical;min-height:72px}
 .rdc-app .field input:focus,.rdc-app .field select:focus,.rdc-app .field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,41,59,.12)}

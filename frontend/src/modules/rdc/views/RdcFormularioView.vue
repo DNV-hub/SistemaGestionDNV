@@ -43,10 +43,15 @@ onMounted(async () => {
 
 const componenteActual = computed(() => PASOS[paso.value].componente)
 const supervisor = computed(() => nombreDe(rdc.catalogos, 'supervisores', rdc.actual?.supervisorId) || '—')
+const esUltimoPaso = computed(() => paso.value === PASOS.length - 1)
 
 function ir(indice) {
   paso.value = indice
   window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function cerrar() {
+  router.push({ name: 'rdc' })
 }
 
 // El deslizamiento lateral entre pestañas es parte de cómo se usa hoy en el
@@ -67,132 +72,217 @@ function alSoltar(e) {
 </script>
 
 <template>
-  <div class="rdc-app" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
-    <div class="app">
-      <header class="app-header">
-        <div class="app-logo"><i class="ti ti-clipboard-list" /><h1>Reporte Diario de Campo</h1></div>
-        <p>Sostenimiento y mantenimiento de talud</p>
-      </header>
-
-      <div class="barra-superior">
-        <button class="volver" aria-label="Volver a mis reportes" @click="router.push({ name: 'rdc' })">
-          <i class="ti ti-arrow-left" />
-        </button>
+  <div class="rdc-app formulario">
+    <header class="appbar">
+      <button type="button" class="icon-btn" aria-label="Cerrar y volver a mis reportes" @click="cerrar">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5.5 5.5l11 11M16.5 5.5l-11 11"/></svg>
+      </button>
+      <div class="appbar-title">
+        Reporte diario
         <span v-if="rdc.actual?.esCorreccion" class="marca-correccion">Corrección</span>
       </div>
-
-      <div class="supervisor-banner">
-        <div class="sup-avatar"><i class="ti ti-user-shield sup-icon" /></div>
-        <div class="sup-datos">
-          <div class="sup-tipo-lbl">Reporte de Supervisor</div>
-          <div class="sup-nombre">{{ supervisor }}</div>
-        </div>
+      <div class="save-state">
+        <span class="save-dot"></span>
+        <span>Guardado</span>
       </div>
+    </header>
 
-      <div class="contenido">
-        <p v-if="!listo" class="empty-msg">Cargando…</p>
-        <component :is="componenteActual" v-else-if="rdc.actual" />
+    <div class="progress">
+      <div class="seg-row">
+        <div v-for="(p, i) in PASOS" :key="p.clave" class="seg" :class="{ done: i < paso, now: i === paso }"></div>
       </div>
+      <div class="prog-labels">
+        <span class="step">{{ PASOS[paso].titulo }}</span>
+        <span class="of">Paso {{ paso + 1 }} de {{ PASOS.length }}</span>
+      </div>
+    </div>
 
-      <nav class="bottom-nav">
-        <button
-          v-for="(p, i) in PASOS"
-          :key="p.clave"
-          class="bnav-item"
-          :class="{ active: i === paso }"
-          :id="p.clave === 'resumen' ? 'bnav-resumen' : null"
-          @click="ir(i)"
-        >
-          <i class="ti" :class="p.icono" /><span>{{ p.titulo }}</span>
-        </button>
-      </nav>
+    <main class="content" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
+      <p class="supline">Supervisor · <b>{{ supervisor }}</b></p>
+
+      <p v-if="!listo" class="empty-msg">Cargando…</p>
+      <component :is="componenteActual" v-else-if="rdc.actual" />
+    </main>
+
+    <div v-if="!esUltimoPaso" class="actionbar">
+      <button type="button" class="btn btn-sec" :disabled="paso === 0" @click="ir(paso - 1)">Anterior</button>
+      <button type="button" class="btn btn-pri" @click="ir(paso + 1)">
+        Siguiente
+        <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5h10M9.5 4.5l4 4-4 4"/></svg>
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* La maqueta del RDC deja la barra inferior fija; hay que dejarle sitio para
-   que el último bloque del formulario no quede debajo de ella. */
-.app {
-  padding: 0 12px env(safe-area-inset-bottom, 0px);
+/* Mismos nombres/valores que RdcListaView (docs/mockups/01-rdc-formulario.html):
+   paleta propia, con guión para no chocar con las variables sin guión de
+   rdc-tema.css. El formulario es un flujo de tarea: sin la píldora
+   "Reporte Diario de Campo", sin barra de pestañas abajo (ya la oculta
+   routes.js con ocultarTabbar), cabecera propia con una X que cierra el
+   flujo entero (no es "paso atrás", eso lo hacen Anterior/Siguiente). */
+.rdc-app.formulario {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border-lista: #e4e7ec;
+  --text-2: #667085;
+  --text-3: #98a2b3;
+  --ok: #059669;
   display: flex;
   flex-direction: column;
-  /* Para que la barra de pasos pueda quedarse pegada al fondo aunque el
-     formulario sea corto. */
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg);
 }
-.barra-superior {
+
+.appbar {
+  height: 56px;
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-lista);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
+  padding: 0 8px 0 4px;
+  gap: 4px;
 }
-.volver {
-  width: 38px;
-  height: 38px;
-  display: inline-flex;
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--blue);
-  color: #fff;
+  color: var(--text);
+  flex-shrink: 0;
+  background: none;
   border: none;
-  border-radius: 50%;
-  font-size: 18px;
   cursor: pointer;
-  box-shadow: var(--shadow);
 }
-.contenido {
+.appbar-title {
   flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .marca-correccion {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: #fff;
-  background: var(--amber);
+  background: #f5a800;
   padding: 3px 9px;
   border-radius: 5px;
+  flex-shrink: 0;
 }
-.supervisor-banner {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  border-radius: var(--r-lg);
-  padding: 14px 16px;
-  margin-bottom: 12px;
+.save-state {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 5px;
+  padding-right: 8px;
+  flex-shrink: 0;
 }
-.sup-avatar {
-  width: 40px;
-  height: 40px;
-  background: rgb(255 255 255 / 0.18);
+.save-dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  background: var(--ok);
+}
+.save-state span:last-child {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ok);
+}
+
+.progress {
+  flex-shrink: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--border-lista);
+  padding: 11px 16px 12px;
+}
+.seg-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+.seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #e4e7ec;
+}
+.seg.done,
+.seg.now {
+  background: #f5a800;
+}
+.prog-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.prog-labels .step {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.prog-labels .of {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+}
+.supline {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+}
+.supline b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.actionbar {
+  flex-shrink: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border-lista);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 10px;
+}
+.btn {
+  height: 52px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-.sup-icon {
-  color: #fff;
-  font-size: 21px;
-}
-.sup-datos {
-  flex: 1;
-  min-width: 0;
-}
-.sup-tipo-lbl {
-  font-size: 10px;
-  font-weight: 600;
-  color: rgb(255 255 255 / 0.65);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
-.sup-nombre {
+  gap: 7px;
   font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  flex: 1;
+  border: none;
+  cursor: pointer;
+}
+.btn-sec {
+  background: var(--card);
+  border: 1.5px solid var(--border-lista);
+  color: var(--text-3);
+}
+.btn-sec:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-pri {
+  background: #f5a800;
+  color: #1a1206;
 }
 </style>
