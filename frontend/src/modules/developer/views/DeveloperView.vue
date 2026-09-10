@@ -7,6 +7,7 @@ import {
   listarReportesRdcParaBorrar,
   borrarReporteRdc,
   suplantarUsuario,
+  reiniciarIngresos,
 } from '../services/developerService'
 
 const cargando = ref(true)
@@ -21,6 +22,7 @@ const valesSeleccionados = ref(new Set())
 const reportesSeleccionados = ref(new Set())
 const borrando = ref(false)
 const suplantando = ref(false)
+const reiniciandoIngresos = ref(false)
 
 onMounted(async () => {
   cargando.value = true
@@ -64,6 +66,32 @@ async function verComo(usuario) {
     console.error(e)
     error.value = `No se pudo cambiar de cuenta: ${e.message ?? e}`
     suplantando.value = false
+  }
+}
+
+async function reiniciarTodosLosIngresos() {
+  const primeraConfirmacion = confirm(
+    'Esto borra TODOS los ingresos de TODOS los materiales y almacenes, su kardex, y repone el stock físico a 0. ' +
+      'Se niega solo si ya hay entregas (salidas) o stock reservado. No se puede deshacer.\n\n¿Seguro?'
+  )
+  if (!primeraConfirmacion) return
+  const segundaConfirmacion = prompt('Para confirmar, escribí BORRAR TODO (en mayúsculas):')
+  if (segundaConfirmacion !== 'BORRAR TODO') {
+    aviso.value = ''
+    return
+  }
+
+  reiniciandoIngresos.value = true
+  error.value = ''
+  aviso.value = ''
+  try {
+    const { ingresosBorrados, kardexBorrado } = await reiniciarIngresos()
+    aviso.value = `Se borraron ${ingresosBorrados} ingresos y ${kardexBorrado} filas de kardex. El stock físico quedó en 0, listo para reingresar.`
+  } catch (e) {
+    console.error(e)
+    error.value = `No se pudo reiniciar: ${e.message ?? e}`
+  } finally {
+    reiniciandoIngresos.value = false
   }
 }
 
@@ -142,6 +170,18 @@ async function borrarReportesSeleccionados() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section class="tarjeta peligro-total">
+        <h2>Reiniciar todos los ingresos</h2>
+        <p class="ayuda">
+          Borra TODOS los ingresos de TODOS los materiales y almacenes (y su kardex), y repone el stock físico a 0 —
+          para cuando el ingreso inicial se cargó mal y hay que reingresar todo de cero con la plantilla. Se niega en
+          el servidor si ya hay entregas (salidas) o stock reservado de por medio.
+        </p>
+        <button class="peligro" :disabled="reiniciandoIngresos" @click="reiniciarTodosLosIngresos">
+          {{ reiniciandoIngresos ? 'Reiniciando…' : 'Borrar todos los ingresos' }}
+        </button>
       </section>
 
       <section class="tarjeta">
@@ -232,6 +272,10 @@ h1 {
   border-radius: var(--radius-card);
   padding: 1rem 1.25rem;
   margin-bottom: 1.25rem;
+}
+.tarjeta.peligro-total {
+  border-color: var(--color-danger);
+  border-width: 2px;
 }
 h2 {
   margin: 0 0 0.4rem;

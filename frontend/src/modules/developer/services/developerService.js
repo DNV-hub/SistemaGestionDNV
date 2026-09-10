@@ -35,6 +35,15 @@ export async function borrarReporteRdc(id) {
   if (error) throw error
 }
 
+/** Borra TODOS los ingresos (y su kardex) y repone el stock físico a 0 —
+ * para cuando el ingreso inicial se cargó mal y hay que reingresar todo de
+ * cero. Se niega en el servidor si ya hay salidas o stock reservado. */
+export async function reiniciarIngresos() {
+  const { data, error } = await supabase.rpc('fn_reiniciar_ingresos')
+  if (error) throw error
+  return { ingresosBorrados: data?.ingresos_borrados ?? 0, kardexBorrado: data?.kardex_borrado ?? 0 }
+}
+
 // ---------------------------------------------------------------------------
 // Ver como otra cuenta: sesión real, no una simulación de interfaz. Se
 // guarda la sesión propia ANTES de cambiar (en sessionStorage, que se borra
