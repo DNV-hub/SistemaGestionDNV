@@ -155,7 +155,13 @@ export const useRdcStore = defineStore('rdc', {
     async adoptarRemoto(id) {
       const completo = await obtenerReporteCompleto(id)
       if (!completo) return null
-      this.actual = await repo.guardar(completo)
+      // adoptar(), no guardar(): actualizadoEn tiene que seguir siendo
+      // cuándo se editó de verdad el contenido (lo que ya trae calculado
+      // obtenerReporteCompleto desde el servidor), no el instante en que
+      // este dispositivo lo adoptó — si no, el sincronizador de fondo
+      // pensaría que este dispositivo lo editó recién y lo volvería a
+      // subir sin necesidad en el próximo ciclo.
+      this.actual = await repo.adoptar(completo)
       await this.listar()
       return this.actual
     },

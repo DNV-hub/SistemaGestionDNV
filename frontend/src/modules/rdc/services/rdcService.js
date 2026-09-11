@@ -182,6 +182,17 @@ export async function marcarEnvioSharepoint(reporteId, { estado, nombreArchivo, 
 // Consulta del histórico
 // ---------------------------------------------------------------------------
 
+/** Solo la marca de tiempo del servidor, sin traer el reporte entero — para
+ * que el sincronizador de borradores pueda decidir barato, en cada ciclo, si
+ * la copia local sigue siendo la más nueva o si otro dispositivo la superó
+ * mientras tanto (ver rdcSync.js). `null` si el borrador todavía nunca llegó
+ * al servidor. */
+export async function obtenerActualizadoEnRemoto(id) {
+  const { data, error } = await supabase.from('rdc_reportes').select('updated_at').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data?.updated_at ?? null
+}
+
 /** Trae un reporte del servidor con todo su detalle, en la misma forma que usa
  * el repositorio local. Lo necesitan Planeamiento y Consulta, que ven reportes
  * que nunca pasaron por su dispositivo. */

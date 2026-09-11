@@ -1,6 +1,6 @@
 import { ENVIO, ESTADO } from './rdcDb'
-import { guardar, pendientes } from './rdcRepository'
-import { subirReporte, marcarEnvioSharepoint } from './rdcService'
+import { guardar, pendientes, adoptar, marcarSyncBorrador } from './rdcRepository'
+import { subirReporte, marcarEnvioSharepoint, obtenerActualizadoEnRemoto, obtenerReporteCompleto } from './rdcService'
 import { construirWorkbook, workbookABase64, nombreArchivo } from './rdcExcel'
 
 // Servicio de sincronización: recorre la cola de reportes cerrados y los envía
@@ -47,26 +47,35 @@ export async function sincronizar({ catalogos } = {}) {
       // Un borrador solo viaja a Supabase, nunca a SharePoint — ese envío es
       // el entregable final (el Excel que ya usa la obra), no algo que
       // generar de nuevo cada pocos minutos mientras el supervisor todavía
-      // está escribiendo. Subir el borrador tal cual está, en cada ciclo, es
-      // lo que permite empezar un reporte en el celular y seguir en otro
-      // dispositivo: el que se abra después lo encuentra en el histórico
-      // remoto y sigue editando desde ahí (ver adoptarRemoto en store/rdc.js).
+      // está escribiendo. Esto es lo que permite empezar un reporte en el
+      // celular y seguir en otro dispositivo.
+      //
+      // Antes de subir, hay que comparar: si el reporte ya viajó una vez y
+      // OTRO dispositivo lo editó después (por ejemplo, se adoptó en la
+      // laptop y se le siguió escribiendo ahí), la copia local de ESTE
+      // dispositivo quedó vieja — subirla de todos modos pisaría el trabajo
+      // más nuevo de la laptop con una versión atrasada. En ese caso hay que
+      // bajar la versión del servidor en vez de subir la de acá.
       if (reporte.estado === ESTADO.BORRADOR) {
-        const actual = { ...reporte }
         try {
-          await subirReporte(actual)
-          actual.errorSupabase = null
+          const actualizadoEnRemoto = await obtenerActualizadoEnRemoto(reporte.id)
+          if (actualizadoEnRemoto && new Date(actualizadoEnRemoto) > new Date(reporte.actualizadoEn)) {
+            const completo = await obtenerReporteCompleto(reporte.id)
+            if (completo) await adoptar(completo)
+          } else {
+            await subirReporte(reporte)
+            await marcarSyncBorrador(reporte.id, { errorSupabase: null })
+          }
           resumen.enviados++
         } catch (e) {
           // Se guarda el motivo real en el propio reporte (no solo en la
           // consola, que en un celular nadie puede revisar) para que la
           // lista lo muestre y se pueda diagnosticar sin herramientas de
           // desarrollador.
-          actual.errorSupabase = e.message ?? String(e)
           console.error('No se pudo sincronizar un borrador de RDC', e)
+          await marcarSyncBorrador(reporte.id, { errorSupabase: e.message ?? String(e) }).catch(() => {})
           resumen.fallidos++
         }
-        await guardar(actual)
         continue
       }
 

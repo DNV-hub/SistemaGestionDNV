@@ -112,6 +112,28 @@ export async function guardar(reporte) {
   return conMarca
 }
 
+/** Escribe el reporte tal cual llega, SIN pisar `actualizadoEn` con la hora
+ * actual como sí hace `guardar()`. Existe para adoptar la versión de OTRO
+ * dispositivo: `actualizadoEn` tiene que seguir diciendo cuándo se editó de
+ * verdad el contenido (lo que ya trae calculado `obtenerReporteCompleto`,
+ * tomado del `updated_at` del servidor), no el instante en que este
+ * dispositivo lo bajó — si no, la próxima comparación de "quién tiene la
+ * versión más nueva" saldría mal y este dispositivo terminaría resubiendo
+ * de vuelta lo que acaba de bajar, como si lo hubiera editado él. */
+export async function adoptar(reporte) {
+  const plano = JSON.parse(JSON.stringify(reporte))
+  await db.reportes.put(plano)
+  return plano
+}
+
+/** Anota el resultado de un intento de sincronización de borrador en
+ * segundo plano sin tocar `actualizadoEn`, por la misma razón que `adoptar`:
+ * que la app haya intentado subirlo no significa que el supervisor haya
+ * editado el contenido recién. */
+export async function marcarSyncBorrador(id, { errorSupabase }) {
+  await db.reportes.update(id, { errorSupabase })
+}
+
 export const obtener = (id) => db.reportes.get(id)
 
 /** Historial local, del más reciente al más antiguo. */
