@@ -64,7 +64,7 @@ async function onSubmit() {
   background: rgba(17, 24, 39, 0.45);
   display: grid;
   place-items: center;
-  z-index: 20;
+  z-index: 40;
 }
 .modal {
   display: flex;
