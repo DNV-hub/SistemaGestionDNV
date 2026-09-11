@@ -63,16 +63,14 @@ async function confirmarImportacion() {
   importando.value = true
   try {
     // Los materiales nuevos se crean primero: sus filas pendientes necesitan
-    // el id real para poder mandarse como ingreso.
+    // el id real para poder mandarse como ingreso. Se resuelven por NOMBRE
+    // (la clave real del material), no por código.
     if (resultado.value.materialesACrear.length) {
       const creados = await attrs.onCrearMateriales(resultado.value.materialesACrear)
-      const idPorCodigo = new Map(creados.map((m) => [m.codigo.toLowerCase(), m.id]))
+      const idPorNombre = new Map(creados.map((m) => [m.descripcion.toUpperCase(), m.id]))
       for (const fila of resultado.value.aImportar) {
-        if (fila.materialNuevoCodigo) fila.material_id = idPorCodigo.get(fila.materialNuevoCodigo)
+        if (fila.materialPendienteClave) fila.material_id = idPorNombre.get(fila.materialPendienteClave)
       }
-    }
-    if (resultado.value.aActualizarDescripcion.length) {
-      await attrs.onActualizarDescripcion(resultado.value.aActualizarDescripcion)
     }
     await attrs.onImportar({
       almacen_id: almacenId.value,
@@ -94,17 +92,16 @@ async function confirmarImportacion() {
       <h2>Importar ingreso masivo</h2>
       <p class="ayuda">
         Para cargar de una vez el stock actual desde Excel (¿no sabes qué columnas van? "Descargar plantilla" te da
-        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong> y
-        <strong>CANTIDAD</strong>. Documento, proveedor y observación son opcionales. Si el material tiene
-        conversión configurada en el catálogo, también hacen falta <strong>ANCHO</strong> y <strong>LARGO</strong>
-        (o solo LARGO si es de tipo longitud). <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla
-        materiales de los dos contratos, agrega esa columna con el nombre o código del contrato de cada fila; si no
-        la traes, todas las filas usan el contrato por defecto que elijas abajo. Si además traes
-        <strong>DESCRIPCION ALMACEN</strong> o <strong>UNIDAD ALMACEN</strong> y no coinciden con lo que ya tenía el
-        material en el catálogo, se corrigen de una vez con esta misma importación. Si un código todavía no existe
-        en el catálogo, se crea automáticamente (necesita traer descripción y unidad esa fila) — si el código es
-        una variante de otro ya existente (ej. "M80.4-B" de "M80.4"), agrega <strong>CONVERSION</strong> para
-        heredar el tipo de conversión y el nombre EDP del código base.
+        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong>,
+        <strong>DESCRIPCION ALMACEN</strong>, <strong>UNIDAD ALMACEN</strong> y <strong>CANTIDAD</strong>. Cada fila
+        se identifica por su descripción, no por el código — dos filas con el mismo código pero nombres distintos
+        (ej. "Cable 15mm rojo" y "Cable 15mm verde", ambos código CA.15) son materiales distintos, cada uno con su
+        propio stock. Si el nombre no existe todavía en el catálogo, se crea automáticamente. Documento, proveedor
+        y observación son opcionales. Si el material lleva conversión (agrega la columna <strong>CONVERSION</strong>
+        con "area" o "longitud"), también hacen falta <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO
+        si es de tipo longitud). <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de
+        los dos contratos, agrega esa columna con el nombre o código del contrato de cada fila; si no la traes,
+        todas las filas usan el contrato por defecto que elijas abajo.
       </p>
 
       <div class="fila-selects">
@@ -135,12 +132,6 @@ async function confirmarImportacion() {
           <span v-if="resultado.materialesACrear.length">
             Se dieron de alta {{ resultado.materialesACrear.length }} materiales nuevos.
           </span>
-          <span v-if="resultado.aActualizarDescripcion.length">
-            Se corrigió la descripción/unidad de {{ resultado.aActualizarDescripcion.length }} materiales.
-          </span>
-          <span v-if="resultado.descripcionAmbigua.length">
-            {{ resultado.descripcionAmbigua.length }} quedaron sin tocar por tener nombre distinto en cada fila.
-          </span>
         </p>
         <button type="button" @click="$emit('cerrar')">Cerrar</button>
       </template>
@@ -152,12 +143,6 @@ async function confirmarImportacion() {
           <div v-if="resultado.materialesACrear.length" class="ok">
             <strong>{{ resultado.materialesACrear.length }}</strong> materiales nuevos se darán de alta
           </div>
-          <div v-if="resultado.aActualizarDescripcion.length" class="ok">
-            <strong>{{ resultado.aActualizarDescripcion.length }}</strong> materiales corrigen su descripción/unidad
-          </div>
-          <div v-if="resultado.descripcionAmbigua.length" class="advertencia">
-            <strong>{{ resultado.descripcionAmbigua.length }}</strong> con nombre distinto en cada fila, no se tocan
-          </div>
           <div v-if="resultado.conError.length" class="advertencia">
             <strong>{{ resultado.conError.length }}</strong> omitidas por error
           </div>
@@ -166,13 +151,6 @@ async function confirmarImportacion() {
         <p v-if="resultado.materialesACrear.length" class="ayuda">
           Materiales nuevos que se van a crear:
           <strong>{{ resultado.materialesACrear.map((m) => `${m.codigo} — ${m.descripcion}`).join(', ') }}</strong>
-        </p>
-
-        <p v-if="resultado.descripcionAmbigua.length" class="ayuda advertencia-texto">
-          Estos códigos traen una descripción distinta en cada fila del archivo (por ejemplo, un largo distinto por
-          fila) — el catálogo solo tiene un nombre por material, así que no se tocó ninguno para no pisar uno con
-          otro al azar. Si quieres que el catálogo muestre otra cosa, corrígelo a mano en Catálogo:
-          <strong>{{ resultado.descripcionAmbigua.map((d) => d.codigo).join(', ') }}</strong>.
         </p>
 
         <div class="tabla-wrap">
@@ -288,12 +266,6 @@ h2 {
 }
 .advertencia {
   color: var(--color-warning);
-}
-.advertencia-texto {
-  color: var(--color-warning);
-  background: var(--color-warning-soft, transparent);
-  padding: 0.5rem 0.65rem;
-  border-radius: var(--radius-control);
 }
 .tabla-wrap {
   max-height: 320px;

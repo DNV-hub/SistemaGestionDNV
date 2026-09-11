@@ -158,21 +158,21 @@ async function generarEdp() {
       hasta: filtrosEdp.hasta || null,
     })
 
-    // Se agrupa por nombre EDP, no por material: varios materiales del
-    // almacén (una variante de largo distinto cada uno, ej. M80.4-A,
-    // M80.4-B) pueden compartir el mismo nombre_edp y tienen que salir
-    // consolidados en una sola línea del EDP. Un material sin nombre EDP
-    // configurado cae solo (nunca se mezcla con otro por accidente).
+    // El código de catálogo es SOLO una clasificación para este reporte:
+    // varios materiales del almacén (ej. "Cable 15mm rojo" y "Cable 15mm
+    // verde", cada uno su propia fila de stock) pueden compartir código
+    // (CA.15) y acá sí van consolidados en una sola línea — pero eso nunca
+    // toca ni fusiona las filas reales de stock, que siguen siendo
+    // independientes por material.
     const porGrupo = new Map()
     for (const s of salidas) {
-      const clave = `${s.frentes?.id}:${s.materiales?.nombres_edp?.id ?? s.materiales?.id}`
+      const clave = `${s.frentes?.id}:${s.materiales?.codigo ?? '—'}`
       if (!porGrupo.has(clave)) {
         porGrupo.set(clave, {
           frenteCodigo: s.frentes?.codigo ?? '—',
           frenteNombre: s.frentes?.nombre ?? '—',
-          codigos: new Set(),
-          descripciones: new Set(),
-          descripcionEdp: s.materiales?.nombres_edp?.nombre ?? '—',
+          codigo: s.materiales?.codigo ?? '—',
+          descripcionEdp: null, // se resuelve abajo: nombre EDP configurado si hay, si no el código
           unidadEdp: s.materiales?.unidad_edp || '—',
           unidadAlmacen: s.materiales?.unidad ?? '',
           cantidadAlmacen: 0,
@@ -180,18 +180,13 @@ async function generarEdp() {
         })
       }
       const grupo = porGrupo.get(clave)
-      grupo.codigos.add(s.materiales?.codigo ?? '—')
-      grupo.descripciones.add(s.materiales?.descripcion ?? '—')
+      if (!grupo.descripcionEdp && s.materiales?.nombres_edp?.nombre) grupo.descripcionEdp = s.materiales.nombres_edp.nombre
       grupo.cantidadAlmacen += Number(s.cantidad)
       grupo.cantidadEdp += Number(s.cantidad_edp)
     }
     for (const grupo of porGrupo.values()) {
-      const codigos = [...grupo.codigos]
-      const descripciones = [...grupo.descripciones]
-      grupo.codigo = codigos.join(' + ')
-      grupo.descripcion = descripciones.length > 1 ? `${descripciones.length} variantes` : descripciones[0]
-      delete grupo.codigos
-      delete grupo.descripciones
+      grupo.descripcion = grupo.descripcionEdp ?? grupo.codigo
+      grupo.descripcionEdp = grupo.descripcionEdp ?? '—'
     }
     filasEdp.value = [...porGrupo.values()].sort(
       (a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.codigo.localeCompare(b.codigo)

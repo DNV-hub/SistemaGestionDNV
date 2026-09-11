@@ -16,7 +16,7 @@ import {
   actualizarMedidasIngreso,
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
-import { actualizarDescripcionEnLote, crearMaterialesEnLote } from '../../catalogo/services/catalogoService'
+import { crearMaterialesEnLote } from '../../catalogo/services/catalogoService'
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
@@ -111,24 +111,10 @@ export const useAlmacenStore = defineStore('almacen', {
       return creados
     },
 
-    /** aActualizarDescripcion de procesarFilasIngreso: [{id, codigo, descripcion?, unidad?}].
-     * Corrige el catálogo con los nombres completos que trae la planilla de
-     * stock, y refleja el cambio en los materiales ya cargados en memoria
-     * para no depender de un recargo completo. */
-    async actualizarDescripcionMaterialesEnLote(aActualizarDescripcion) {
-      if (!aActualizarDescripcion.length) return
-      await actualizarDescripcionEnLote(aActualizarDescripcion)
-      const porId = new Map(aActualizarDescripcion.map((a) => [a.id, a]))
-      this.materialesActivos = this.materialesActivos.map((m) => {
-        const cambio = porId.get(m.id)
-        return cambio ? { ...m, descripcion: cambio.descripcion ?? m.descripcion, unidad: cambio.unidad ?? m.unidad } : m
-      })
-    },
-
     /** materialesACrear de procesarFilasIngreso: [{codigo, descripcion, unidad,
-     * tipo_conversion, descripcion_edp_id, unidad_edp}]. Da de alta cada
-     * variante nueva ANTES de registrar los ingresos, para tener sus id
-     * reales y poder resolver material_id en cada fila pendiente. */
+     * tipo_conversion}]. Da de alta cada material nuevo ANTES de registrar
+     * los ingresos, para tener su id real y poder resolver material_id en
+     * cada fila pendiente. */
     async crearMaterialesFaltantes(materialesACrear) {
       if (!materialesACrear.length) return []
       const creados = await crearMaterialesEnLote(
@@ -137,8 +123,6 @@ export const useAlmacenStore = defineStore('almacen', {
           descripcion: m.descripcion,
           unidad: m.unidad,
           tipo_conversion: m.tipo_conversion,
-          descripcion_edp_id: m.descripcion_edp_id,
-          unidad_edp: m.unidad_edp,
         }))
       )
       this.materialesActivos.push(...creados)

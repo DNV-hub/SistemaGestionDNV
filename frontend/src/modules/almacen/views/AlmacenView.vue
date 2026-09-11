@@ -117,15 +117,8 @@ async function importarIngresosMasivo({ almacen_id, filas }) {
   aviso.value = `Se registraron ${payload.length} ingresos.`
 }
 
-/** aActualizarDescripcion de procesarFilasIngreso: [{id, codigo, descripcion?, unidad?}].
- * Se aplica ANTES de registrar los ingresos, para que el catálogo quede al
- * día con los nombres completos que trae la planilla de stock. */
-async function actualizarDescripcionMasivo(aActualizarDescripcion) {
-  await almacen.actualizarDescripcionMaterialesEnLote(aActualizarDescripcion)
-}
-
-/** materialesACrear de procesarFilasIngreso: variantes de código que todavía
- * no existían en el catálogo. Devuelve los materiales creados (con su id
+/** materialesACrear de procesarFilasIngreso: nombres que todavía no
+ * existían en el catálogo. Devuelve los materiales creados (con su id
  * real) para que el modal pueda resolver material_id en las filas
  * pendientes antes de registrar los ingresos. */
 async function crearMaterialesMasivo(materialesACrear) {
@@ -570,7 +563,6 @@ function abrirCorregirAjuste(a) {
       :contratos="almacen.contratos"
       :materiales="almacen.materialesActivos"
       @importar="importarIngresosMasivo"
-      @actualizar-descripcion="actualizarDescripcionMasivo"
       @crear-materiales="crearMaterialesMasivo"
       @cerrar="mostrarModalImportar = false"
     />
