@@ -211,6 +211,16 @@ function detalleEnvio(e) {
 .app {
   padding: 0 12px 24px;
 }
+/* Esta regla scoped (.app[data-v-hash]) empataba en especificidad con la
+   global .rdc-app .app de rdc-tema.css que intentaba reservar espacio para
+   la barra de pestañas flotante — y como ganaba el orden de aparición en
+   el CSS final, "Enviar fotos" seguía quedando tapado. Puesto acá, en la
+   propia regla del componente, no hay ambigüedad posible. */
+@media (max-width: 1024px) {
+  .app {
+    padding-bottom: 132px;
+  }
+}
 .volver-circular {
   position: absolute;
   left: 0;

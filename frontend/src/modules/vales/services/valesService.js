@@ -212,12 +212,17 @@ export async function obtenerAlertasVale({ frenteId, contratoId, materialIds }) 
   }
 }
 
-/** Stock en tiempo real por almacén, para que el supervisor vea qué hay disponible antes de pedir. */
+/** Stock en tiempo real por almacén, para que el supervisor vea qué hay disponible antes de pedir.
+ * Antes esto descartaba cualquier fila donde `materiales.estado` no fuera
+ * exactamente 'activo' — pero si hay stock físico ya cargado (un ingreso
+ * hecho), tiene sentido seguir mostrándolo aunque el material se haya
+ * marcado inactivo después (eso solo debería impedir pedirlo de nuevo, no
+ * esconder lo que ya existe en el almacén). */
 export async function listarStockDisponible() {
   const { data, error } = await supabase
     .from('stock')
     .select('cantidad_disponible, almacenes(codigo, nombre), materiales(codigo, descripcion, unidad, estado)')
     .order('material_id')
   if (error) throw error
-  return data.filter((s) => s.materiales?.estado === 'activo')
+  return data
 }

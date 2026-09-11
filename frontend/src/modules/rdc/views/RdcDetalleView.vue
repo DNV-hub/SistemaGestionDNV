@@ -143,6 +143,15 @@ async function corregir() {
 .app {
   padding: 0 12px 24px;
 }
+/* Ver el mismo comentario en FotosView.vue: esta regla scoped empataba en
+   especificidad con la global .rdc-app .app de rdc-tema.css que reservaba
+   espacio para la barra de pestañas flotante, y ganaba por orden de
+   aparición — tapando lo último del contenido. */
+@media (max-width: 1024px) {
+  .app {
+    padding-bottom: 132px;
+  }
+}
 .barra-superior {
   padding: 12px 0 4px;
 }
