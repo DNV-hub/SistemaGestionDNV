@@ -2,12 +2,29 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useValesStore } from '../store/vales'
+import { useAuthStore } from '../../../store/auth'
+import { supabase } from '../../../services/supabaseClient'
 
 const vales = useValesStore()
+const auth = useAuthStore()
 const router = useRouter()
 
 const busqueda = ref('')
 const cargando = ref(false)
+
+// Diagnóstico temporal: la lista viene vacía en producción sin ningún error
+// de Supabase, algo que solo pasa si RLS está descartando filas en
+// silencio. Esto muestra si `stock.ver` realmente se está resolviendo en
+// true para esta sesión — se saca en cuanto se confirme la causa.
+const permisoStock = ref(null)
+onMounted(async () => {
+  try {
+    const { data } = await supabase.rpc('has_permission', { p_codigo: 'stock.ver' })
+    permisoStock.value = data
+  } catch {
+    permisoStock.value = 'error'
+  }
+})
 
 onMounted(async () => {
   cargando.value = true
@@ -59,6 +76,9 @@ const filtrado = computed(() => {
           </div>
         </div>
         <p v-if="!filtrado.length" class="vacio">{{ vales.stockDisponible.length ? 'Sin resultados.' : 'No hay stock registrado todavía.' }}</p>
+        <p v-if="!vales.stockDisponible.length" class="vacio diagnostico">
+          Diagnóstico — rol: {{ auth.nombreRol ?? '—' }} · permiso stock.ver: {{ permisoStock === null ? 'consultando…' : permisoStock }}
+        </p>
       </template>
     </div>
   </div>
@@ -199,5 +219,10 @@ const filtrado = computed(() => {
 }
 .vacio.error {
   color: #dc2626;
+}
+.vacio.diagnostico {
+  font-size: 11px;
+  color: var(--text-3);
+  padding-top: 4px;
 }
 </style>
