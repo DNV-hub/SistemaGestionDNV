@@ -2,7 +2,7 @@ import { supabase } from '../../../services/supabaseClient'
 
 const SELECT_KARDEX =
   '*, materiales(id, codigo, descripcion, unidad), almacenes(id, codigo, nombre), usuarios(id, nombre), ' +
-  'vales(id, numero, frentes(id, codigo, nombre), usuarios!supervisor_id(id, nombre))'
+  'vales(id, numero, frentes(id, codigo, nombre, area, estado, fecha_inicio, fecha_cierre), usuarios!supervisor_id(id, nombre))'
 
 /** filtros: { materialId, almacenId, tipoMovimiento, desde, hasta } */
 export async function listarKardex(filtros = {}) {

@@ -11,6 +11,7 @@ import BotonIcono from '../../../components/BotonIcono.vue'
 import { useDevolucionesStore } from '../../devoluciones/store/devoluciones'
 import RecibirDevolucionModal from '../../devoluciones/components/RecibirDevolucionModal.vue'
 import { descargarExcel } from '../../../utils/exportarExcel'
+import { descargarTexto } from '../../../utils/exportarTexto'
 import { formatearNumero } from '../../../utils/formatearNumero'
 
 const almacen = useAlmacenStore()
@@ -298,37 +299,17 @@ function textoStockParaCompartir(filas) {
   return `*STOCK — ${fecha}*\n\n${bloques.join('\n\n')}`
 }
 
-const compartiendoStock = ref(false)
-
-/** En celular usa la hoja nativa de compartir (el supervisor elige
- * WhatsApp ahí mismo); en escritorio, donde esa API casi nunca existe,
- * copia el texto al portapapeles para pegarlo directo en el chat. */
-async function exportarStockWhatsapp() {
+/** Baja un .txt plano en vez de intentar compartir o copiar directo: así
+ * funciona igual en cualquier dispositivo y Almacén lo abre, copia lo que
+ * necesite y lo pega a mano en WhatsApp o donde haga falta mandarlo. */
+function exportarStockWhatsapp() {
   aviso.value = ''
   if (!stockFiltrado.value.length) {
     aviso.value = 'No hay stock para exportar con el filtro actual.'
     return
   }
   const texto = textoStockParaCompartir(stockFiltrado.value)
-  compartiendoStock.value = true
-  try {
-    if (navigator.share) {
-      try {
-        await navigator.share({ text: texto })
-        return
-      } catch (e) {
-        if (e?.name === 'AbortError') return
-        // Si el share nativo falla por otra razón, cae al copiado.
-      }
-    }
-    await navigator.clipboard.writeText(texto)
-    aviso.value = 'Se copió el stock al portapapeles — pégalo en WhatsApp.'
-  } catch (e) {
-    console.error(e)
-    aviso.value = 'No se pudo preparar el texto para compartir.'
-  } finally {
-    compartiendoStock.value = false
-  }
+  descargarTexto(`stock_${new Date().toISOString().slice(0, 10)}.txt`, texto)
 }
 
 function abrirCorregirAjuste(a) {
@@ -415,14 +396,8 @@ function abrirCorregirAjuste(a) {
     <template v-else>
       <div class="fila-buscador">
         <input v-model="busqueda" type="search" class="buscador" placeholder="Buscar por nombre o código…" />
-        <button
-          v-if="tab === 'stock'"
-          type="button"
-          class="secundario"
-          :disabled="compartiendoStock"
-          @click="exportarStockWhatsapp"
-        >
-          {{ compartiendoStock ? 'Preparando…' : 'Exportar stock (WhatsApp)' }}
+        <button v-if="tab === 'stock'" type="button" class="secundario" @click="exportarStockWhatsapp">
+          Exportar stock (.txt)
         </button>
         <span class="contador">
           {{ filtradoPestaña }}{{ busqueda.trim() ? ` de ${totalPestaña}` : '' }} filas
