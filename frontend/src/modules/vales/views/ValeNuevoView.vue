@@ -156,7 +156,7 @@ async function enviar() {
   color: var(--text);
   background: var(--bg);
   height: 100vh;
-  height: 100dvh;
+  height: calc(100dvh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
 }

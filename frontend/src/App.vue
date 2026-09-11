@@ -175,7 +175,15 @@ const inicialesUsuario = computed(() => {
     <router-view />
   </div>
 
-  <div v-else class="shell" :style="viendoComoOtraCuenta ? { marginTop: '40px', height: 'calc(100vh - 40px)' } : null">
+  <div
+    v-else
+    class="shell"
+    :style="
+      viendoComoOtraCuenta
+        ? { marginTop: 'calc(40px + env(safe-area-inset-top))', height: 'calc(100vh - 40px - env(safe-area-inset-top))' }
+        : null
+    "
+  >
     <aside class="nav">
       <div class="marca">
         <span class="marca-icono">D</span>
@@ -320,16 +328,19 @@ const inicialesUsuario = computed(() => {
   left: 0;
   right: 0;
   z-index: 100;
-  height: 40px;
+  height: calc(40px + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  padding: 0 1rem;
+  padding-left: 1rem;
+  padding-right: 1rem;
   background: var(--color-warning);
   color: #1a1300;
   font-size: 0.82rem;
   font-weight: 600;
+  box-sizing: border-box;
 }
 .banner-suplantacion button {
   padding: 0.3rem 0.75rem;
@@ -599,6 +610,12 @@ const inicialesUsuario = computed(() => {
     height: 100vh;
     height: 100dvh;
     overflow-x: hidden;
+    /* En un iPhone con Dynamic Island/notch, el título de cada pantalla
+       quedaba literalmente debajo de esa isla (la pinta el propio iOS,
+       tapando lo que haya ahí) — en Android no pasa porque no tiene esa
+       forma de recorte. env() da 0 en los celulares que no la tienen, así
+       que esto no mueve nada donde no hace falta. */
+    padding-top: env(safe-area-inset-top);
   }
 
   .tabbar {

@@ -126,7 +126,7 @@ function elegir(material) {
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   background: var(--card);
   height: 100vh;
-  height: 100dvh;
+  height: calc(100dvh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
   color: var(--text);
