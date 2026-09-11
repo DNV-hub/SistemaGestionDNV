@@ -33,20 +33,12 @@ async function onSubmit() {
     <section class="hero">
       <div class="hero-resplandor"></div>
       <div class="hero-contenido">
-        <div class="marca">
+        <div class="marca marca-grande">
           <span class="marca-icono">D</span>
           <div>
             <div class="marca-nombre">DNV</div>
             <div class="marca-sub">Sistema de Control</div>
           </div>
-        </div>
-
-        <div>
-          <h1>Control total de tus <em>materiales</em> y almacén</h1>
-          <p class="parrafo">
-            Monitorea stock, registra vales, gestiona reservas y sigue el consumo contra lo previsto — todo desde un
-            solo sistema.
-          </p>
         </div>
       </div>
     </section>
@@ -156,33 +148,23 @@ async function onSubmit() {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.etiqueta {
-  display: inline-block;
-  padding: 0.3rem 0.7rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-primary);
-  color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
+/* El logo quedó solo en el hero (sin título ni párrafo debajo), así que
+   necesita más presencia propia — el tamaño chico pensado para ir junto a
+   un título grande se veía perdido en todo ese espacio vacío. */
+.marca-grande {
+  gap: 1.1rem;
 }
-h1 {
-  margin: 0 0 0.85rem;
-  font-size: 2.1rem;
-  line-height: 1.2;
-  color: var(--color-text);
-  font-weight: 700;
-  text-wrap: balance;
+.marca-grande .marca-icono {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  font-size: 1.6rem;
 }
-h1 em {
-  font-style: normal;
-  color: var(--color-primary);
+.marca-grande .marca-nombre {
+  font-size: 2rem;
 }
-.parrafo {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.95rem;
-  line-height: 1.6;
+.marca-grande .marca-sub {
+  font-size: 0.85rem;
 }
 .panel-form {
   display: grid;
@@ -331,9 +313,6 @@ input:focus {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     padding: 2rem 1.5rem;
-  }
-  h1 {
-    font-size: 1.6rem;
   }
 }
 </style>
