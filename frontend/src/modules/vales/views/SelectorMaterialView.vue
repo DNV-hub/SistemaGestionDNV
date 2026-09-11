@@ -11,9 +11,19 @@ const router = useRouter()
 
 const busqueda = ref('')
 const inputRef = ref(null)
+const cargando = ref(false)
 
+// Ya no se elige del catálogo completo: solo se puede pedir lo que
+// realmente hay en el almacén ahora mismo, así que esta pantalla ES el
+// stock (docs/mockups/05-selector-material.html, pero con la cantidad
+// disponible como tope real de lo que se puede pedir).
 onMounted(async () => {
-  if (!vales.materialesActivos.length) await vales.cargarLista()
+  cargando.value = true
+  try {
+    await vales.cargarStockDisponible()
+  } finally {
+    cargando.value = false
+  }
   inputRef.value?.focus()
 })
 
@@ -21,22 +31,22 @@ const yaAgregados = computed(() => new Set(borrador.lineas.map((l) => l.material
 
 const filtrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
-  const disponibles = vales.materialesActivos.filter((m) => !yaAgregados.value.has(m.id))
+  const disponibles = vales.stockPorMaterial.filter((m) => !yaAgregados.value.has(m.id))
   if (!q) return disponibles
   return disponibles.filter((m) => m.codigo.toLowerCase().includes(q) || m.descripcion.toLowerCase().includes(q))
 })
 
 // Sin búsqueda activa: "usados recientemente" (localStorage) primero, y
-// "todo el catálogo" debajo, como pide el mockup. Con algo buscado, no
+// el resto del stock debajo, como pide el mockup. Con algo buscado, no
 // tiene sentido separar en dos grupos — es una sola lista de resultados.
 const recientes = computed(() => {
   if (busqueda.value.trim()) return []
-  const porId = new Map(vales.materialesActivos.map((m) => [m.id, m]))
+  const porId = new Map(vales.stockPorMaterial.map((m) => [m.id, m]))
   return obtenerRecientes()
     .map((id) => porId.get(id))
     .filter((m) => m && !yaAgregados.value.has(m.id))
 })
-const restoDelCatalogo = computed(() => {
+const restoDelStock = computed(() => {
   if (busqueda.value.trim()) return filtrados.value
   const idsRecientes = new Set(recientes.value.map((m) => m.id))
   return filtrados.value.filter((m) => !idsRecientes.has(m.id))
@@ -62,32 +72,43 @@ function elegir(material) {
     </header>
 
     <div class="list">
-      <template v-if="recientes.length">
+      <p v-if="cargando" class="vacio">Cargando…</p>
+      <template v-else>
+        <template v-if="recientes.length">
+          <div class="grp">
+            <span class="grp-label">USADOS RECIENTEMENTE</span>
+            <span class="grp-rule"></span>
+          </div>
+          <div v-for="m in recientes" :key="m.id" class="row" @click="elegir(m)">
+            <div class="row-main">
+              <div class="row-name">{{ m.descripcion }}</div>
+              <div class="row-code">{{ m.codigo }}</div>
+            </div>
+            <div class="row-stock">
+              <span class="row-numero">{{ m.disponible }}</span>
+              <span class="row-unit">{{ m.unidad }}</span>
+            </div>
+          </div>
+        </template>
+
         <div class="grp">
-          <span class="grp-label">USADOS RECIENTEMENTE</span>
+          <span class="grp-label">{{ busqueda.trim() ? 'RESULTADOS' : 'CON STOCK DISPONIBLE' }}</span>
           <span class="grp-rule"></span>
         </div>
-        <div v-for="m in recientes" :key="m.id" class="row" @click="elegir(m)">
+        <div v-for="m in restoDelStock" :key="m.id" class="row" @click="elegir(m)">
           <div class="row-main">
             <div class="row-name">{{ m.descripcion }}</div>
             <div class="row-code">{{ m.codigo }}</div>
           </div>
-          <span class="row-unit">{{ m.unidad }}</span>
+          <div class="row-stock">
+            <span class="row-numero">{{ m.disponible }}</span>
+            <span class="row-unit">{{ m.unidad }}</span>
+          </div>
         </div>
+        <p v-if="!restoDelStock.length && !recientes.length" class="vacio">
+          No hay materiales con stock disponible{{ busqueda.trim() ? ' para esta búsqueda' : '' }}.
+        </p>
       </template>
-
-      <div class="grp">
-        <span class="grp-label">{{ busqueda.trim() ? 'RESULTADOS' : 'TODO EL CATÁLOGO' }}</span>
-        <span class="grp-rule"></span>
-      </div>
-      <div v-for="m in restoDelCatalogo" :key="m.id" class="row" @click="elegir(m)">
-        <div class="row-main">
-          <div class="row-name">{{ m.descripcion }}</div>
-          <div class="row-code">{{ m.codigo }}</div>
-        </div>
-        <span class="row-unit">{{ m.unidad }}</span>
-      </div>
-      <p v-if="!restoDelCatalogo.length && !recientes.length" class="vacio">Sin resultados.</p>
     </div>
   </div>
 </template>
@@ -212,14 +233,21 @@ function elegir(material) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.row-unit {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
+.row-stock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   flex-shrink: 0;
-  background: var(--gray-bg);
-  padding: 4px 9px;
-  border-radius: 6px;
+}
+.row-numero {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.row-unit {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 600;
 }
 .vacio {
   text-align: center;

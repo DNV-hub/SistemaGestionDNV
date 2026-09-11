@@ -221,7 +221,7 @@ export async function obtenerAlertasVale({ frenteId, contratoId, materialIds }) 
 export async function listarStockDisponible() {
   const { data, error } = await supabase
     .from('stock')
-    .select('cantidad_disponible, almacenes(codigo, nombre), materiales(codigo, descripcion, unidad, estado)')
+    .select('material_id, cantidad_disponible, almacenes(codigo, nombre), materiales(id, codigo, descripcion, unidad, estado)')
     .order('material_id')
   if (error) throw error
   return data

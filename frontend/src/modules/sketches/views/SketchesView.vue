@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useRdcStore } from '../../rdc/store/rdc'
 import { useSketchesStore } from '../store/sketches'
 import { etiquetaDesdeNombre } from '../services/sketchesService'
@@ -10,7 +9,6 @@ import '../../rdc/estilos/complementos.css'
 
 const rdc = useRdcStore()
 const sketches = useSketchesStore()
-const router = useRouter()
 
 onMounted(() => sketches.iniciar())
 
@@ -142,10 +140,8 @@ function descargarActual() {
 <template>
   <div class="rdc-app">
     <div class="app">
-      <header class="app-header" style="position: relative; padding-left: 44px; padding-right: 44px">
-        <button class="volver-circular" aria-label="Volver" @click="router.back()"><i class="ti ti-arrow-left" /></button>
-        <div class="app-logo"><i class="ti ti-photo" /><h1>Sketch's</h1></div>
-        <p>Últimos sketches de avance por frente</p>
+      <header class="appbar-plana">
+        <h1>Sketch's</h1>
       </header>
 
       <div class="card">
@@ -219,23 +215,13 @@ function descargarActual() {
 .app {
   padding: 0 12px 24px;
 }
-.volver-circular {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 38px;
-  height: 38px;
-  border: none;
-  background: var(--blue);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  color: #fff;
-  box-shadow: 0 2px 8px rgb(30 41 59 / 0.35);
-  font-size: 19px;
+/* Ver el mismo comentario en FotosView.vue y RdcDetalleView.vue: esta
+   regla scoped empataba en especificidad con la global .rdc-app .app de
+   rdc-tema.css que reservaba espacio para la barra de pestañas flotante. */
+@media (max-width: 1024px) {
+  .app {
+    padding-bottom: 132px;
+  }
 }
 .cambiar-frente {
   font-size: 11px;

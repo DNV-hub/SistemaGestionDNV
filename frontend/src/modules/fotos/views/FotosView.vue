@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../../store/auth'
 import { useRdcStore } from '../../rdc/store/rdc'
 import { useFotosStore } from '../store/fotos'
@@ -13,7 +12,6 @@ import '../../rdc/estilos/complementos.css'
 const auth = useAuthStore()
 const rdc = useRdcStore()
 const fotos = useFotosStore()
-const router = useRouter()
 
 onMounted(() => fotos.iniciar())
 
@@ -73,10 +71,8 @@ function detalleEnvio(e) {
 <template>
   <div class="rdc-app">
     <div class="app">
-      <header class="app-header" style="position: relative; padding-left: 44px; padding-right: 44px">
-        <button class="volver-circular" aria-label="Volver" @click="router.back()"><i class="ti ti-arrow-left" /></button>
-        <div class="app-logo"><i class="ti ti-camera" /><h1>Registro Fotográfico</h1></div>
-        <p>Evidencia fotográfica de campo</p>
+      <header class="appbar-plana">
+        <h1>Fotos</h1>
       </header>
 
       <div class="supervisor-banner-fotos">
@@ -220,24 +216,6 @@ function detalleEnvio(e) {
   .app {
     padding-bottom: 132px;
   }
-}
-.volver-circular {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 38px;
-  height: 38px;
-  border: none;
-  background: var(--blue);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  color: #fff;
-  box-shadow: 0 2px 8px rgb(30 41 59 / 0.35);
-  font-size: 19px;
 }
 .supervisor-banner-fotos {
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);

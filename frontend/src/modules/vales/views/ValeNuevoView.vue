@@ -19,7 +19,10 @@ onMounted(async () => {
 })
 
 const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
-const puedeEnviar = computed(() => borrador.frenteId && borrador.lineas.length > 0 && !enviando.value)
+const lineasValidas = computed(() =>
+  borrador.lineas.every((l) => Number(l.cantidad) > 0 && Number(l.cantidad) <= l.disponible)
+)
+const puedeEnviar = computed(() => borrador.frenteId && borrador.lineas.length > 0 && lineasValidas.value && !enviando.value)
 
 function irASelector() {
   router.push('/vales/nuevo/material')
@@ -27,6 +30,15 @@ function irASelector() {
 
 function quitar(materialId) {
   borrador.quitarMaterial(materialId)
+}
+
+// No se puede pedir más de lo que hay ni menos de 1 — si escriben algo
+// fuera de rango, se corrige apenas sueltan el campo.
+function limitarCantidad(l) {
+  const n = Number(l.cantidad)
+  if (!Number.isFinite(n) || n < 1) l.cantidad = 1
+  else if (n > l.disponible) l.cantidad = l.disponible
+  else l.cantidad = Math.floor(n)
 }
 
 function cerrar() {
@@ -89,9 +101,17 @@ async function enviar() {
         <div v-for="l in borrador.lineas" :key="l.material_id" class="tarjeta-mat">
           <div class="tarjeta-mat-main">
             <div class="tarjeta-mat-nombre">{{ l.descripcion }}</div>
-            <div class="tarjeta-mat-codigo">{{ l.codigo }}</div>
+            <div class="tarjeta-mat-codigo">{{ l.codigo }} · de {{ l.disponible }} disponibles</div>
           </div>
-          <input v-model.number="l.cantidad" type="number" min="1" step="1" class="cantidad-input" />
+          <input
+            v-model.number="l.cantidad"
+            type="number"
+            min="1"
+            :max="l.disponible"
+            step="1"
+            class="cantidad-input"
+            @change="limitarCantidad(l)"
+          />
           <span class="tarjeta-mat-unidad">{{ l.unidad }}</span>
           <button type="button" class="quitar-btn" aria-label="Quitar material" @click="quitar(l.material_id)">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>

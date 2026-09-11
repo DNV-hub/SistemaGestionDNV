@@ -8,7 +8,7 @@ import { defineStore } from 'pinia'
 export const useValeNuevoStore = defineStore('valeNuevo', {
   state: () => ({
     frenteId: '',
-    lineas: [], // [{ material_id, codigo, descripcion, unidad, cantidad }]
+    lineas: [], // [{ material_id, codigo, descripcion, unidad, cantidad, disponible }]
     observaciones: '',
   }),
 
@@ -19,6 +19,9 @@ export const useValeNuevoStore = defineStore('valeNuevo', {
       this.observaciones = ''
     },
 
+    /** `material` viene de `vales.stockPorMaterial` — solo se puede agregar
+     * lo que realmente hay, y `disponible` es el tope que va a respetar el
+     * campo de cantidad en la pantalla del vale. */
     agregarMaterial(material) {
       if (this.lineas.some((l) => l.material_id === material.id)) return
       this.lineas.push({
@@ -27,6 +30,7 @@ export const useValeNuevoStore = defineStore('valeNuevo', {
         descripcion: material.descripcion,
         unidad: material.unidad,
         cantidad: 1,
+        disponible: material.disponible,
       })
     },
 

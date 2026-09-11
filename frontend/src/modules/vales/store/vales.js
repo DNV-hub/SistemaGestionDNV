@@ -259,4 +259,30 @@ export const useValesStore = defineStore('vales', {
       if (idx !== -1) this.vales[idx] = { ...this.vales[idx], ...vale }
     },
   },
+
+  getters: {
+    /** Stock real, sumado entre almacenes, uno por material — es lo único
+     * que un supervisor puede pedir en un vale nuevo ahora: si no hay nada
+     * de un material, no aparece para elegirlo (no tiene sentido pedir lo
+     * que no existe). */
+    stockPorMaterial(state) {
+      const mapa = new Map()
+      for (const s of state.stockDisponible) {
+        if (!s.materiales || !s.material_id) continue
+        const previo = mapa.get(s.material_id)
+        const cantidad = Number(s.cantidad_disponible) || 0
+        if (previo) previo.disponible += cantidad
+        else {
+          mapa.set(s.material_id, {
+            id: s.material_id,
+            codigo: s.materiales.codigo,
+            descripcion: s.materiales.descripcion,
+            unidad: s.materiales.unidad,
+            disponible: cantidad,
+          })
+        }
+      }
+      return [...mapa.values()].filter((m) => m.disponible > 0).sort((a, b) => a.descripcion.localeCompare(b.descripcion))
+    },
+  },
 })
