@@ -12,17 +12,21 @@ const router = useRouter()
 const busqueda = ref('')
 const cargando = ref(false)
 
-// Diagnóstico temporal: la lista viene vacía en producción sin ningún error
-// de Supabase, algo que solo pasa si RLS está descartando filas en
-// silencio. Esto muestra si `stock.ver` realmente se está resolviendo en
-// true para esta sesión — se saca en cuanto se confirme la causa.
-const permisoStock = ref(null)
+// Un Supervisor solo ve el stock de SU contrato (política stock_select,
+// ver 20260908120000_contratos.sql): `contrato_id = current_contrato_id()`,
+// donde current_contrato_id() sale de usuarios.frente_id → frentes.contrato_id.
+// Si el supervisor no tiene frente asignado, esa función devuelve null y
+// la comparación nunca es verdadera — la lista queda vacía sin ningún error
+// de Supabase, porque para RLS no es un error, es simplemente "cero filas
+// visibles". Este chequeo distingue ese caso del de "no hay stock todavía".
+const sinFrenteAsignado = ref(false)
 onMounted(async () => {
+  if (auth.nombreRol !== 'Supervisor') return
   try {
-    const { data } = await supabase.rpc('has_permission', { p_codigo: 'stock.ver' })
-    permisoStock.value = data
+    const { data } = await supabase.rpc('current_contrato_id')
+    sinFrenteAsignado.value = !data
   } catch {
-    permisoStock.value = 'error'
+    /* si falla el chequeo, no hay nada más que mostrar de todos modos */
   }
 })
 
@@ -75,10 +79,13 @@ const filtrado = computed(() => {
             <span class="row-unidad">{{ s.materiales?.unidad }}</span>
           </div>
         </div>
-        <p v-if="!filtrado.length" class="vacio">{{ vales.stockDisponible.length ? 'Sin resultados.' : 'No hay stock registrado todavía.' }}</p>
-        <p v-if="!vales.stockDisponible.length" class="vacio diagnostico">
-          Diagnóstico — rol: {{ auth.nombreRol ?? '—' }} · permiso stock.ver: {{ permisoStock === null ? 'consultando…' : permisoStock }}
-        </p>
+        <template v-if="!filtrado.length">
+          <p v-if="sinFrenteAsignado" class="vacio">
+            Tu cuenta todavía no tiene un frente asignado, así que no se puede saber de qué contrato mostrarte el
+            stock. Pedile a un administrador que te asigne uno en «Usuarios».
+          </p>
+          <p v-else class="vacio">{{ vales.stockDisponible.length ? 'Sin resultados.' : 'No hay stock registrado todavía para tu contrato.' }}</p>
+        </template>
       </template>
     </div>
   </div>
@@ -219,10 +226,5 @@ const filtrado = computed(() => {
 }
 .vacio.error {
   color: #dc2626;
-}
-.vacio.diagnostico {
-  font-size: 11px;
-  color: var(--text-3);
-  padding-top: 4px;
 }
 </style>
