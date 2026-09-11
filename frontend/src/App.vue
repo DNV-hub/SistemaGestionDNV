@@ -178,6 +178,7 @@ const inicialesUsuario = computed(() => {
   <div
     v-else
     class="shell"
+    :class="{ 'shell-suplantacion': viendoComoOtraCuenta }"
     :style="
       viendoComoOtraCuenta
         ? { marginTop: 'calc(40px + env(safe-area-inset-top))', height: 'calc(100vh - 40px - env(safe-area-inset-top))' }
@@ -607,8 +608,13 @@ const inicialesUsuario = computed(() => {
     display: none;
   }
   .contenido {
-    height: 100vh;
-    height: 100dvh;
+    /* 100% del alto real de .shell, no 100dvh de la pantalla entera: al
+       "ver como" otra cuenta, .shell se achica (por la barra amarilla de
+       arriba, con su propio margin-top inline) pero esto seguía pidiendo
+       el alto completo del dispositivo — se desbordaba, y como .shell
+       tiene overflow:hidden, la parte de abajo (el "Anterior"/"Siguiente"
+       del RDC, por ejemplo) quedaba recortada sin verse. */
+    height: 100%;
     overflow-x: hidden;
     /* En un iPhone con Dynamic Island/notch, el título de cada pantalla
        quedaba literalmente debajo de esa isla (la pinta el propio iOS,
@@ -616,6 +622,12 @@ const inicialesUsuario = computed(() => {
        forma de recorte. env() da 0 en los celulares que no la tienen, así
        que esto no mueve nada donde no hace falta. */
     padding-top: env(safe-area-inset-top);
+  }
+  /* Con la barra amarilla de "viendo como otra cuenta" ya se dejó ese
+     mismo espacio arriba (su propio alto incluye env(safe-area-inset-top))
+     — sumarlo de nuevo acá empujaba todo más abajo de lo necesario. */
+  .shell-suplantacion .contenido {
+    padding-top: 0;
   }
 
   .tabbar {
