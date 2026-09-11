@@ -1,6 +1,6 @@
 <script setup>
 import { computed, reactive, ref, useAttrs } from 'vue'
-import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
+import MaterialIngresoBuscador from './MaterialIngresoBuscador.vue'
 
 const props = defineProps({
   almacenes: { type: Array, default: () => [] },
@@ -28,6 +28,21 @@ const form = reactive({
 const guardando = ref(false)
 const error = ref('')
 
+// Igual que el importador masivo: la identidad del material es su nombre,
+// no el código — si el almacenero escribe un nombre que no existe todavía,
+// se crea un material nuevo al guardar (nunca se fusiona con uno existente
+// solo porque comparte código).
+const materialNuevo = ref(null) // { descripcion, unidad, codigo } | null
+
+function alSeleccionarExistente(m) {
+  materialNuevo.value = null
+  form.material_id = m.id
+}
+function alConfirmarNuevo(payload) {
+  form.material_id = ''
+  materialNuevo.value = payload
+}
+
 const materialSeleccionado = computed(() => props.materiales.find((m) => m.id === form.material_id))
 const tipoConversion = computed(() => materialSeleccionado.value?.tipo_conversion ?? 'ninguna')
 
@@ -48,7 +63,7 @@ const factorPreview = computed(() => {
 
 async function onSubmit() {
   error.value = ''
-  if (!form.almacen_id || !form.contrato_id || !form.material_id || !form.cantidad) {
+  if (!form.almacen_id || !form.contrato_id || (!form.material_id && !materialNuevo.value) || !form.cantidad) {
     error.value = 'Almacén, contrato, material y cantidad son obligatorios.'
     return
   }
@@ -67,10 +82,15 @@ async function onSubmit() {
 
   guardando.value = true
   try {
+    let materialId = form.material_id
+    if (materialNuevo.value) {
+      const [creado] = await attrs.onCrearMaterial([{ ...materialNuevo.value, tipo_conversion: 'ninguna' }])
+      materialId = creado.id
+    }
     await attrs.onGuardar({
       almacen_id: form.almacen_id,
       contrato_id: form.contrato_id,
-      material_id: form.material_id,
+      material_id: materialId,
       cantidad: Number(form.cantidad),
       ancho: tipoConversion.value === 'area' ? Number(form.ancho) : null,
       largo: tipoConversion.value !== 'ninguna' ? Number(form.largo) : null,
@@ -108,7 +128,11 @@ async function onSubmit() {
 
       <label>
         Material
-        <BuscadorMaterial v-model="form.material_id" :materiales="materiales" />
+        <MaterialIngresoBuscador
+          :materiales="materiales"
+          @seleccionar-existente="alSeleccionarExistente"
+          @confirmar-nuevo="alConfirmarNuevo"
+        />
       </label>
 
       <label>

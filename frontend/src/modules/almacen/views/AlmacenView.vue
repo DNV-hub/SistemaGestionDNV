@@ -544,6 +544,7 @@ function abrirCorregirAjuste(a) {
       :materiales="almacen.materialesActivos"
       :contratos="almacen.contratos"
       @guardar="registrarIngreso"
+      @crear-material="crearMaterialesMasivo"
       @cerrar="mostrarModalIngreso = false"
     />
 
