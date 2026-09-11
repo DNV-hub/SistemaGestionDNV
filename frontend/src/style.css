@@ -18,6 +18,14 @@ body {
   overflow-x: hidden;
   background: var(--color-bg);
   color: var(--color-text);
+  /* El viewport meta (maximum-scale=1, user-scalable=no) ya no alcanza:
+     Chrome y Safari lo ignoran a propósito por accesibilidad desde hace
+     años, así que el pinch-zoom se seguía colando. touch-action sí lo
+     bloquea de verdad a nivel de gestos — pan-x/pan-y mantiene el scroll
+     normal (vertical y el horizontal de emergencia de arriba) pero, al no
+     incluir "pinch-zoom", el navegador deja de interpretar el gesto de
+     pellizco como zoom en toda la página. */
+  touch-action: pan-x pan-y;
 }
 
 #app {

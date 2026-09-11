@@ -128,7 +128,13 @@ export const useValesStore = defineStore('vales', {
     },
 
     async cargarStockDisponible() {
-      this.stockDisponible = await listarStockDisponible()
+      this.error = ''
+      try {
+        this.stockDisponible = await listarStockDisponible()
+      } catch (e) {
+        this.error = 'No se pudo cargar el stock.'
+        console.error(e)
+      }
     },
 
     /** Solo para quien puede crear vales a nombre de otro (vales.crear_para_otro). */

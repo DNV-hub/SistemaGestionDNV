@@ -36,6 +36,15 @@
 }
 
 .rdc-app .app{max-width:720px;margin:0 auto}
+/* RdcDetalleView y FotosView todavía usan este chrome viejo (no son un
+   "flujo de tarea" con ocultarTabbar) y viven dentro de la barra de
+   pestañas flotante del Sistema. Sin este espacio, lo último del
+   contenido (ej. el botón "Enviar fotos") queda tapado detrás de esa
+   barra fija — mismo motivo por el que .movil-vales .content reserva
+   108px en ValesView. */
+@media(max-width:1024px){
+.rdc-app .app{padding-bottom:108px}
+}
 /* HEADER */
 .rdc-app .app-header{text-align:center;padding:18px 0 20px}
 .rdc-app .app-logo{display:inline-flex;align-items:center;gap:10px;background:var(--blue);color:#fff;border-radius:20px;padding:10px 20px 10px 14px;margin-bottom:6px}

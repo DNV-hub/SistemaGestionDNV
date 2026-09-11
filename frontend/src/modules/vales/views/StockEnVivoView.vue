@@ -7,16 +7,22 @@ const vales = useValesStore()
 const router = useRouter()
 
 const busqueda = ref('')
+const cargando = ref(false)
 
 onMounted(async () => {
-  if (!vales.stockDisponible.length) await vales.cargarStockDisponible()
+  cargando.value = true
+  try {
+    await vales.cargarStockDisponible()
+  } finally {
+    cargando.value = false
+  }
 })
 
 const filtrado = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
   if (!q) return vales.stockDisponible
   return vales.stockDisponible.filter(
-    (s) => s.materiales?.codigo.toLowerCase().includes(q) || s.materiales?.descripcion.toLowerCase().includes(q)
+    (s) => s.materiales?.codigo?.toLowerCase().includes(q) || s.materiales?.descripcion?.toLowerCase().includes(q)
   )
 })
 </script>
@@ -39,17 +45,21 @@ const filtrado = computed(() => {
     </div>
 
     <div class="list">
-      <div v-for="(s, i) in filtrado" :key="i" class="row">
-        <div class="row-main">
-          <div class="row-name">{{ s.materiales?.descripcion }}</div>
-          <div class="row-code">{{ s.materiales?.codigo }} · {{ s.almacenes?.nombre }}</div>
+      <p v-if="cargando" class="vacio">Cargando…</p>
+      <p v-else-if="vales.error" class="vacio error">{{ vales.error }}</p>
+      <template v-else>
+        <div v-for="(s, i) in filtrado" :key="i" class="row">
+          <div class="row-main">
+            <div class="row-name">{{ s.materiales?.descripcion }}</div>
+            <div class="row-code">{{ s.materiales?.codigo }} · {{ s.almacenes?.nombre }}</div>
+          </div>
+          <div class="row-cant">
+            <span class="row-numero">{{ s.cantidad_disponible }}</span>
+            <span class="row-unidad">{{ s.materiales?.unidad }}</span>
+          </div>
         </div>
-        <div class="row-cant">
-          <span class="row-numero">{{ s.cantidad_disponible }}</span>
-          <span class="row-unidad">{{ s.materiales?.unidad }}</span>
-        </div>
-      </div>
-      <p v-if="!filtrado.length" class="vacio">Sin resultados.</p>
+        <p v-if="!filtrado.length" class="vacio">{{ vales.stockDisponible.length ? 'Sin resultados.' : 'No hay stock registrado todavía.' }}</p>
+      </template>
     </div>
   </div>
 </template>
@@ -179,5 +189,8 @@ const filtrado = computed(() => {
   color: var(--text-3);
   font-size: 13px;
   padding: 24px 0;
+}
+.vacio.error {
+  color: #dc2626;
 }
 </style>

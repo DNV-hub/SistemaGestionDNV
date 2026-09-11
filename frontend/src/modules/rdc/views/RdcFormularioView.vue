@@ -59,8 +59,13 @@ function cerrar() {
 async function borrar() {
   if (!rdc.actual) return
   if (!confirm('¿Borrar este borrador? No se puede deshacer.')) return
-  await rdc.eliminarBorrador(rdc.actual.id)
-  router.push({ name: 'rdc' })
+  try {
+    await rdc.eliminarBorrador(rdc.actual.id)
+    router.push({ name: 'rdc' })
+  } catch (e) {
+    console.error(e)
+    alert(e?.message ?? 'No se pudo borrar el borrador.')
+  }
 }
 
 // El deslizamiento lateral entre pestañas es parte de cómo se usa hoy en el

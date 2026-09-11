@@ -121,10 +121,13 @@ export async function listar() {
 }
 
 /** Solo se borran borradores: un reporte ya finalizado es registro histórico
- * y puede estar esperando sincronizar. */
+ * y puede estar esperando sincronizar. Antes esto devolvía `false` en
+ * silencio si no se cumplía la condición — el botón de borrar parecía no
+ * hacer nada, sin ninguna pista de por qué. Ahora avisa el motivo. */
 export async function eliminarBorrador(id) {
   const reporte = await db.reportes.get(id)
-  if (!reporte || reporte.estado !== ESTADO.BORRADOR) return false
+  if (!reporte) throw new Error('Este reporte ya no está en el dispositivo.')
+  if (reporte.estado !== ESTADO.BORRADOR) throw new Error('Solo se pueden borrar reportes que todavía son borrador.')
   await db.reportes.delete(id)
   return true
 }

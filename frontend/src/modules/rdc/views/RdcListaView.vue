@@ -118,7 +118,12 @@ function abrirItem(item) {
 
 async function borrar(r) {
   if (!confirm(`¿Borrar el borrador del ${fmtFecha(r.fecha)}? No se puede deshacer.`)) return
-  await rdc.eliminarBorrador(r.id)
+  try {
+    await rdc.eliminarBorrador(r.id)
+  } catch (e) {
+    console.error(e)
+    alert(e?.message ?? 'No se pudo borrar el borrador.')
+  }
 }
 </script>
 
@@ -186,7 +191,16 @@ async function borrar(r) {
                 <span v-else>{{ item.supervisorNombre }}</span>
               </div>
             </div>
-            <svg class="chev" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L12 9l-5.5 5.5"/></svg>
+            <button
+              v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR"
+              type="button"
+              class="card-borrar"
+              aria-label="Borrar este borrador"
+              @click.stop="borrar(item.raw)"
+            >
+              <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h10M6.5 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m1.5 0-.6 8.7a1.3 1.3 0 01-1.3 1.2H6.9a1.3 1.3 0 01-1.3-1.2L5 5"/></svg>
+            </button>
+            <svg v-else class="chev" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L12 9l-5.5 5.5"/></svg>
           </div>
         </template>
 
@@ -396,5 +410,18 @@ async function borrar(r) {
 .chev {
   color: var(--text-3);
   flex-shrink: 0;
+}
+.card-borrar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #dc2626;
+  background: #fef2f2;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
 }
 </style>
