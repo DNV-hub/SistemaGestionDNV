@@ -187,6 +187,7 @@ async function eliminar(usuario) {
           <th>Nombre</th>
           <th>Correo</th>
           <th>Rol</th>
+          <th>Contrato</th>
           <th>Frente</th>
           <th>Estado</th>
           <th v-if="puedeEditar"></th>
@@ -197,6 +198,7 @@ async function eliminar(usuario) {
           <td>{{ u.nombre }}</td>
           <td>{{ u.email }}</td>
           <td>{{ u.roles?.nombre ?? '—' }}</td>
+          <td>{{ u.contratos ? `${u.contratos.codigo} — ${u.contratos.nombre}` : '—' }}</td>
           <td>{{ u.frentes ? `${u.frentes.codigo} — ${u.frentes.nombre}` : '—' }}</td>
           <td>
             <span class="badge" :class="u.estado">{{ u.estado }}</span>
@@ -218,7 +220,7 @@ async function eliminar(usuario) {
           </td>
         </tr>
         <tr v-if="!usuariosFiltrados.length">
-          <td colspan="6" class="vacio">No hay usuarios para mostrar.</td>
+          <td colspan="7" class="vacio">No hay usuarios para mostrar.</td>
         </tr>
       </tbody>
     </table>
@@ -228,6 +230,7 @@ async function eliminar(usuario) {
       :usuario="usuarioEnEdicion"
       :roles="usuarios.roles"
       :frentes="usuarios.frentes"
+      :contratos="usuarios.contratos"
       @guardar="guardar"
       @cerrar="cerrarModal"
     />

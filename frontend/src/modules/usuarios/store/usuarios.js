@@ -3,6 +3,7 @@ import {
   listarUsuarios,
   listarRoles,
   listarFrentes,
+  listarContratos,
   crearUsuario,
   actualizarUsuario,
   eliminarUsuario,
@@ -15,6 +16,7 @@ export const useUsuariosStore = defineStore('usuarios', {
     usuarios: [],
     roles: [],
     frentes: [],
+    contratos: [],
     cargando: false,
     error: '',
   }),
@@ -24,10 +26,16 @@ export const useUsuariosStore = defineStore('usuarios', {
       this.cargando = true
       this.error = ''
       try {
-        const [usuarios, roles, frentes] = await Promise.all([listarUsuarios(), listarRoles(), listarFrentes()])
+        const [usuarios, roles, frentes, contratos] = await Promise.all([
+          listarUsuarios(),
+          listarRoles(),
+          listarFrentes(),
+          listarContratos(),
+        ])
         this.usuarios = usuarios
         this.roles = roles
         this.frentes = frentes
+        this.contratos = contratos
       } catch (e) {
         this.error = 'No se pudo cargar los usuarios.'
         console.error(e)

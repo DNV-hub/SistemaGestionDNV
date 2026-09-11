@@ -1,6 +1,6 @@
 import { supabase } from '../../../services/supabaseClient'
 
-const SELECT_USUARIO = '*, roles(id, nombre), frentes(id, codigo, nombre)'
+const SELECT_USUARIO = '*, roles(id, nombre), frentes(id, codigo, nombre), contratos(id, codigo, nombre)'
 
 export async function listarUsuarios() {
   const { data, error } = await supabase.from('usuarios').select(SELECT_USUARIO).order('nombre')
@@ -16,6 +16,14 @@ export async function listarRoles() {
 
 export async function listarFrentes() {
   const { data, error } = await supabase.from('frentes').select('id, codigo, nombre').order('codigo')
+  if (error) throw error
+  return data
+}
+
+/** El contrato es estable (no rota como el frente): quien pertenece a
+ * Marco no pasa a Sala Eléctrica y viceversa. Se asigna una sola vez. */
+export async function listarContratos() {
+  const { data, error } = await supabase.from('contratos').select('id, codigo, nombre').order('codigo')
   if (error) throw error
   return data
 }

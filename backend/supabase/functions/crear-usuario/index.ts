@@ -47,14 +47,21 @@ Deno.serve(async (req) => {
   if (errorPermiso) return respuesta({ error: 'No se pudo verificar el permiso.' }, 500)
   if (!tienePermiso) return respuesta({ error: 'No tiene permiso para crear usuarios.' }, 403)
 
-  let body: { email?: string; nombre?: string; rol_id?: string; frente_id?: string | null; password?: string }
+  let body: {
+    email?: string
+    nombre?: string
+    rol_id?: string
+    frente_id?: string | null
+    contrato_id?: string | null
+    password?: string
+  }
   try {
     body = await req.json()
   } catch {
     return respuesta({ error: 'Cuerpo de la solicitud inválido.' }, 400)
   }
 
-  const { email, nombre, rol_id, frente_id, password } = body
+  const { email, nombre, rol_id, frente_id, contrato_id, password } = body
   if (!email || !nombre || !rol_id) {
     return respuesta({ error: 'email, nombre y rol_id son obligatorios.' }, 400)
   }
@@ -77,7 +84,7 @@ Deno.serve(async (req) => {
 
   const { data: usuario, error: errorPerfil } = await clienteAdmin
     .from('usuarios')
-    .insert({ id: nuevoAuth.user.id, email, nombre, rol_id, frente_id: frente_id || null })
+    .insert({ id: nuevoAuth.user.id, email, nombre, rol_id, frente_id: frente_id || null, contrato_id: contrato_id || null })
     .select('*, roles(nombre)')
     .single()
 

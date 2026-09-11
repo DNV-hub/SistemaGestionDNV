@@ -5,6 +5,7 @@ const props = defineProps({
   usuario: { type: Object, default: null }, // null = creando, objeto = editando
   roles: { type: Array, default: () => [] },
   frentes: { type: Array, default: () => [] },
+  contratos: { type: Array, default: () => [] },
 })
 
 defineEmits(['cerrar'])
@@ -16,6 +17,7 @@ function estadoInicial() {
     nombre: props.usuario?.nombre ?? '',
     rol_id: props.usuario?.rol_id ?? props.roles[0]?.id ?? '',
     frente_id: props.usuario?.frente_id ?? '',
+    contrato_id: props.usuario?.contrato_id ?? '',
     estado: props.usuario?.estado ?? 'activo',
     password: '',
   }
@@ -52,6 +54,7 @@ async function onSubmit() {
         nombre: form.nombre.trim(),
         rol_id: form.rol_id,
         frente_id: form.frente_id || null,
+        contrato_id: form.contrato_id || null,
         estado: form.estado,
       })
     } else {
@@ -60,6 +63,7 @@ async function onSubmit() {
         nombre: form.nombre.trim(),
         rol_id: form.rol_id,
         frente_id: form.frente_id || null,
+        contrato_id: form.contrato_id || null,
         password: form.password.trim() || undefined,
       })
     }
@@ -100,7 +104,16 @@ async function onSubmit() {
       </label>
 
       <label>
-        Frente asignado (opcional, para Supervisores)
+        Contrato (estable — no cambia aunque rote de frente)
+        <select v-model="form.contrato_id">
+          <option value="">Ninguno</option>
+          <option v-for="c in contratos" :key="c.id" :value="c.id">{{ c.codigo ? c.codigo + ' — ' : '' }}{{ c.nombre }}</option>
+        </select>
+        <span class="ayuda">Determina qué stock puede ver un Supervisor. No lo toques al rotarlo de frente.</span>
+      </label>
+
+      <label>
+        Frente actual (opcional, cambia según dónde esté trabajando)
         <select v-model="form.frente_id">
           <option value="">Ninguno</option>
           <option v-for="f in frentes" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
@@ -199,5 +212,10 @@ button:disabled {
   color: var(--color-danger);
   font-size: 0.85rem;
   margin: 0;
+}
+.ayuda {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 </style>
