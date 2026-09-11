@@ -154,35 +154,32 @@ async function confirmarImportacion() {
         </p>
 
         <div class="tabla-wrap">
-          <table class="tabla">
-            <thead>
-              <tr>
-                <th>Fila</th>
-                <th>Código</th>
-                <th>Descripción</th>
-                <th>Cantidad</th>
-                <th>Ancho</th>
-                <th>Largo</th>
-                <th>Contrato</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="f in resultado.filas" :key="f.fila" :class="{ conflicto: f.estado === 'error' }">
-                <td>{{ f.fila }}</td>
-                <td>{{ f.codigo }}</td>
-                <td>{{ f.descripcion ?? '—' }}</td>
-                <td>{{ f.cantidad ?? '—' }} {{ f.unidad ?? '' }}</td>
-                <td>{{ f.ancho ?? '—' }}</td>
-                <td>{{ f.largo ?? '—' }}</td>
-                <td>{{ f.contrato_nombre ?? '—' }}</td>
-                <td>{{ f.estado === 'ok' ? 'Se importa' : f.motivo }}</td>
-              </tr>
-              <tr v-if="!resultado.filas.length">
-                <td colspan="8" class="vacio">No hay filas para mostrar.</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="fila-cabecera">
+            <span>Fila</span>
+            <span>Código</span>
+            <span>Descripción</span>
+            <span>Cantidad</span>
+            <span>Ancho</span>
+            <span>Largo</span>
+            <span>Contrato</span>
+            <span>Estado</span>
+          </div>
+          <div
+            v-for="f in resultado.filas"
+            :key="f.fila"
+            class="fila-datos"
+            :class="{ conflicto: f.estado === 'error' }"
+          >
+            <span>{{ f.fila }}</span>
+            <span>{{ f.codigo }}</span>
+            <span>{{ f.descripcion ?? '—' }}</span>
+            <span>{{ f.cantidad ?? '—' }} {{ f.unidad ?? '' }}</span>
+            <span>{{ f.ancho ?? '—' }}</span>
+            <span>{{ f.largo ?? '—' }}</span>
+            <span>{{ f.contrato_nombre ?? '—' }}</span>
+            <span>{{ f.estado === 'ok' ? 'Se importa' : f.motivo }}</span>
+          </div>
+          <p v-if="!resultado.filas.length" class="vacio">No hay filas para mostrar.</p>
         </div>
 
         <div class="acciones">
@@ -272,22 +269,31 @@ h2 {
 }
 .tabla-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 400px;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
 }
-.tabla {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-.tabla th,
-.tabla td {
-  text-align: left;
+.fila-cabecera,
+.fila-datos {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 0.5fr) minmax(0, 0.8fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.6fr)
+    minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem;
   padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
   border-bottom: 1px solid var(--color-border);
+}
+.fila-cabecera span,
+.fila-datos span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tabla th {
+.fila-cabecera {
   background: var(--color-surface-2);
   color: var(--color-text-muted);
   font-weight: 600;
@@ -297,13 +303,17 @@ h2 {
   position: sticky;
   top: 0;
 }
-.tabla tr.conflicto {
+.fila-datos {
+  color: var(--color-text);
+}
+.fila-datos.conflicto {
   color: var(--color-danger);
 }
 .vacio {
   text-align: center;
   color: var(--color-text-muted);
   padding: 1rem;
+  margin: 0;
 }
 .acciones {
   display: flex;
