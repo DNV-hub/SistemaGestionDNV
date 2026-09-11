@@ -60,6 +60,18 @@ function bajoMinimo(fila) {
   return minimo !== null && fila.cantidad_disponible < minimo
 }
 
+// Buscador dinámico de la pestaña Stock: por nombre o código, para
+// verificar rápido cuánto hay de un material sin desplazarse por toda la
+// tabla.
+const busquedaStock = ref('')
+const stockFiltrado = computed(() => {
+  const q = busquedaStock.value.trim().toLowerCase()
+  if (!q) return almacen.stock
+  return almacen.stock.filter(
+    (fila) => fila.materiales?.descripcion?.toLowerCase().includes(q) || fila.materiales?.codigo?.toLowerCase().includes(q)
+  )
+})
+
 onMounted(() => {
   almacen.cargar()
   if (puedeVerDevoluciones.value) devoluciones.cargar()
@@ -310,41 +322,51 @@ function abrirCorregirAjuste(a) {
     <p v-if="almacen.cargando">Cargando…</p>
 
     <template v-else>
-      <table v-if="tab === 'stock'" class="tabla">
-        <thead>
-          <tr>
-            <th>Almacén</th>
-            <th>Contrato</th>
-            <th>Código</th>
-            <th>Descripción</th>
-            <th>Unidad</th>
-            <th>Física</th>
-            <th>Reservada</th>
-            <th>Disponible</th>
-            <th>Stock mínimo</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="fila in almacen.stock"
-            :key="`${fila.almacen_id}-${fila.material_id}-${fila.contrato_id}`"
-            :class="{ 'bajo-minimo': bajoMinimo(fila) }"
-          >
-            <td>{{ fila.almacenes?.nombre ?? '—' }}</td>
-            <td>{{ fila.contratos?.nombre ?? '—' }}</td>
-            <td>{{ fila.materiales?.codigo ?? '—' }}</td>
-            <td>{{ fila.materiales?.descripcion ?? '—' }}</td>
-            <td>{{ fila.materiales?.unidad ?? '—' }}</td>
-            <td class="num">{{ formatearNumero(fila.cantidad_fisica) }}</td>
-            <td class="num">{{ formatearNumero(fila.cantidad_reservada) }}</td>
-            <td class="num">{{ formatearNumero(fila.cantidad_disponible) }}</td>
-            <td class="num">{{ formatearNumero(stockMinimoEfectivo(fila)) }}</td>
-          </tr>
-          <tr v-if="!almacen.stock.length">
-            <td colspan="9" class="vacio">Sin movimientos de stock todavía.</td>
-          </tr>
-        </tbody>
-      </table>
+      <template v-if="tab === 'stock'">
+        <input
+          v-model="busquedaStock"
+          type="search"
+          class="buscador-stock"
+          placeholder="Buscar por nombre o código…"
+        />
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Almacén</th>
+              <th>Contrato</th>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Unidad</th>
+              <th>Física</th>
+              <th>Reservada</th>
+              <th>Disponible</th>
+              <th>Stock mínimo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="fila in stockFiltrado"
+              :key="`${fila.almacen_id}-${fila.material_id}-${fila.contrato_id}`"
+              :class="{ 'bajo-minimo': bajoMinimo(fila) }"
+            >
+              <td>{{ fila.almacenes?.nombre ?? '—' }}</td>
+              <td>{{ fila.contratos?.nombre ?? '—' }}</td>
+              <td>{{ fila.materiales?.codigo ?? '—' }}</td>
+              <td>{{ fila.materiales?.descripcion ?? '—' }}</td>
+              <td>{{ fila.materiales?.unidad ?? '—' }}</td>
+              <td class="num">{{ formatearNumero(fila.cantidad_fisica) }}</td>
+              <td class="num">{{ formatearNumero(fila.cantidad_reservada) }}</td>
+              <td class="num">{{ formatearNumero(fila.cantidad_disponible) }}</td>
+              <td class="num">{{ formatearNumero(stockMinimoEfectivo(fila)) }}</td>
+            </tr>
+            <tr v-if="!stockFiltrado.length">
+              <td colspan="9" class="vacio">
+                {{ almacen.stock.length ? 'Ningún material coincide con la búsqueda.' : 'Sin movimientos de stock todavía.' }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
 
       <table v-else-if="tab === 'ingresos'" class="tabla">
         <thead>
@@ -627,6 +649,17 @@ button {
   background: none;
   border: 1px solid var(--color-border);
   color: var(--color-text);
+}
+.buscador-stock {
+  width: 100%;
+  max-width: 360px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
 }
 .tabla {
   width: 100%;
