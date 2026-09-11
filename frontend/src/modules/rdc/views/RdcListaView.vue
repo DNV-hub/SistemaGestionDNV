@@ -62,6 +62,22 @@ function totalPersonal(r) {
   return total > 0 ? total : null
 }
 
+/** El id del supervisor del catálogo RDC vinculado a la cuenta que está
+ * mirando la lista, si tiene uno — la misma cuenta con la que `nuevo()`
+ * decide de qué supervisor sale un reporte nuevo. Sirve para saber si un
+ * borrador remoto (de otro dispositivo, o que esta cuenta nunca adoptó) es
+ * "propio" y por lo tanto se puede ofrecer borrarlo: los locales ya vienen
+ * filtrados a la propia cuenta desde el store, pero los remotos no traen
+ * esa garantía en la interfaz — solo en RLS. */
+const propioSupervisorId = computed(
+  () => rdc.catalogos?.supervisores?.find((s) => s.usuario_id === auth.perfil?.id)?.id ?? null,
+)
+
+function esBorradorPropio(item) {
+  if (item.esLocal) return true
+  return item.raw.creado_por === auth.perfil?.id || item.raw.supervisor_id === propioSupervisorId.value
+}
+
 /** Historial local y remoto combinados en una sola lista cronológica
  * (más reciente primero), agrupada por mes — como pide el mockup. Cada
  * fila se normaliza a la misma forma para que la tarjeta no tenga que
@@ -229,7 +245,7 @@ async function borrar(r) {
               </div>
             </div>
             <button
-              v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR"
+              v-if="item.raw.estado === ESTADO.BORRADOR && esBorradorPropio(item)"
               type="button"
               class="card-borrar"
               aria-label="Borrar este borrador"

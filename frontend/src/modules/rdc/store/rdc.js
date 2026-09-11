@@ -2,7 +2,7 @@ import { acceptHMRUpdate, defineStore } from 'pinia'
 import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import * as repo from '../services/rdcRepository'
-import { descargarCatalogos, listarReportes, obtenerReporteCompleto } from '../services/rdcService'
+import { descargarCatalogos, eliminarReporteRemoto, listarReportes, obtenerReporteCompleto } from '../services/rdcService'
 import { iniciarSincronizacionAutomatica, sincronizar } from '../services/rdcSync'
 import { PERSONAL_INDIRECTO_SALA_ELECTRICA } from '../services/rdcRepository'
 import { SECTOR_SALA_ELECTRICA } from '../services/rdcConstantes'
@@ -239,10 +239,41 @@ export const useRdcStore = defineStore('rdc', {
       await this.guardar()
     },
 
+    /** Borra un borrador tanto de este dispositivo como del servidor.
+     *
+     * Antes solo borraba local, y eso alcanzaba mientras los borradores no
+     * se sincronizaban. Ahora que sí lo hacen (para poder seguir un reporte
+     * en otro dispositivo), borrar solo acá dejaba la copia que ya había
+     * subido a la nube viva para siempre: reaparecía en el historial (de
+     * este dispositivo y de cualquier otro) como un borrador "zombie" que
+     * nadie podía volver a tocar, porque nunca existió un botón para
+     * borrar algo que no fuera local.
+     *
+     * `id` puede ser de un borrador que solo existe local (todavía no
+     * sincronizó), solo remoto (se creó o se adoptó en otro dispositivo y
+     * nunca llegó a este), o ambos — de ahí que cada mitad se intente por
+     * separado y no una dependa de que la otra haya encontrado algo. */
     async eliminarBorrador(id) {
-      await repo.eliminarBorrador(id)
+      const local = await repo.obtener(id)
+      if (local) {
+        if (local.estado !== ESTADO.BORRADOR) throw new Error('Solo se pueden borrar reportes que todavía son borrador.')
+        await repo.eliminarBorrador(id)
+      }
+
+      try {
+        await eliminarReporteRemoto(id)
+      } catch (e) {
+        // Sin conexión no es un error real: no hay nada que este
+        // dispositivo pueda hacer ahora mismo, y no existe (todavía) una
+        // cola de "borrados pendientes" para reintentar solo. Con
+        // conexión sí es un fallo real (por ejemplo, RLS lo rechazó porque
+        // ya no es Borrador) y hay que avisarlo.
+        if (navigator.onLine) throw e
+      }
+
       if (this.actual?.id === id) this.actual = null
       await this.listar()
+      await this.cargarHistorico()
     },
 
     /** Cierra el reporte y lo pone en la cola. El envío en sí lo hace el

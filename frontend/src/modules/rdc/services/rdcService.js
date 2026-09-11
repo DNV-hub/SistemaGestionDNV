@@ -161,6 +161,17 @@ export async function subirReporte(reporte) {
   }
 }
 
+/** Borra un borrador en el servidor. RLS (rdc_reportes_delete) es quien de
+ * verdad decide si se puede: solo estado Borrador y solo el propio autor o
+ * el supervisor responsable — acá no se repite esa condición, que ya vive
+ * en la base y sería una segunda fuente de verdad si se copiara aquí.
+ * Borrar un id que no existe en el servidor (un borrador que nunca llegó a
+ * sincronizar) no es un error: `delete` sobre cero filas no falla. */
+export async function eliminarReporteRemoto(id) {
+  const { error } = await supabase.from('rdc_reportes').delete().eq('id', id)
+  if (error) throw error
+}
+
 /** Marca en el servidor el resultado del envío a SharePoint. Se hace aparte
  * del reporte porque ocurre después: primero llega a Supabase, después se
  * intenta el webhook, y cada uno puede fallar por su cuenta. */
@@ -257,7 +268,11 @@ export async function obtenerReporteCompleto(id) {
 export async function listarReportes({ desde, hasta, frenteId, supervisorId } = {}) {
   let query = supabase
     .from('rdc_reportes')
-    .select('id, fecha, estado, estado_sharepoint, created_at, rdc_frentes(nombre), rdc_sectores(nombre), rdc_supervisores(nombre)')
+    // creado_por y supervisor_id viajan además de sus nombres: la lista los
+    // necesita para decidir si el borrador que está mostrando es del propio
+    // usuario (y por lo tanto se le puede ofrecer borrarlo), sin tener que
+    // volver a preguntarle a la base fila por fila.
+    .select('id, fecha, estado, estado_sharepoint, created_at, creado_por, supervisor_id, rdc_frentes(nombre), rdc_sectores(nombre), rdc_supervisores(nombre)')
     .order('fecha', { ascending: false })
     .limit(300)
 
