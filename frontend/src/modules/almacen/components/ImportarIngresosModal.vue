@@ -124,6 +124,9 @@ async function confirmarImportacion() {
           <span v-if="resultado.aActualizarDescripcion.length">
             Se corrigió la descripción/unidad de {{ resultado.aActualizarDescripcion.length }} materiales.
           </span>
+          <span v-if="resultado.descripcionAmbigua.length">
+            {{ resultado.descripcionAmbigua.length }} quedaron sin tocar por tener nombre distinto en cada fila.
+          </span>
         </p>
         <button type="button" @click="$emit('cerrar')">Cerrar</button>
       </template>
@@ -135,10 +138,20 @@ async function confirmarImportacion() {
           <div v-if="resultado.aActualizarDescripcion.length" class="ok">
             <strong>{{ resultado.aActualizarDescripcion.length }}</strong> materiales corrigen su descripción/unidad
           </div>
+          <div v-if="resultado.descripcionAmbigua.length" class="advertencia">
+            <strong>{{ resultado.descripcionAmbigua.length }}</strong> con nombre distinto en cada fila, no se tocan
+          </div>
           <div v-if="resultado.conError.length" class="advertencia">
             <strong>{{ resultado.conError.length }}</strong> omitidas por error
           </div>
         </div>
+
+        <p v-if="resultado.descripcionAmbigua.length" class="ayuda advertencia-texto">
+          Estos códigos traen una descripción distinta en cada fila del archivo (por ejemplo, un largo distinto por
+          fila) — el catálogo solo tiene un nombre por material, así que no se tocó ninguno para no pisar uno con
+          otro al azar. Si querés que el catálogo muestre otra cosa, corregilo a mano en Catálogo:
+          <strong>{{ resultado.descripcionAmbigua.map((d) => d.codigo).join(', ') }}</strong>.
+        </p>
 
         <div class="tabla-wrap">
           <table class="tabla">
@@ -253,6 +266,12 @@ h2 {
 }
 .advertencia {
   color: var(--color-warning);
+}
+.advertencia-texto {
+  color: var(--color-warning);
+  background: var(--color-warning-soft, transparent);
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-control);
 }
 .tabla-wrap {
   max-height: 320px;

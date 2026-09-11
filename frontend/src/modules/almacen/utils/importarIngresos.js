@@ -73,23 +73,32 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
   // dimensiones incluidas) suele ser más confiable que la descripción que
   // el material tenía en el catálogo desde que se creó — si el Excel trae
   // DESCRIPCION ALMACEN/UNIDAD ALMACEN y no coincide, se corrige el
-  // catálogo de una vez con este mismo import (una fila por material, no
-  // por línea del archivo, aunque el mismo código aparezca varias veces).
-  const actualizacionesDescripcionPorId = new Map()
-  function detectarActualizacionDescripcion(material, f) {
-    const payload = {}
-    // La descripción se guarda en mayúscula (mismo trigger que ya lo hace
-    // para el resto del catálogo); la unidad se deja tal cual la escriben,
-    // que es como se maneja en todo el resto del sistema.
-    if (f.descripcion && f.descripcion.toUpperCase() !== material.descripcion.toUpperCase()) payload.descripcion = f.descripcion.toUpperCase()
-    if (f.unidad && f.unidad.toLowerCase() !== material.unidad.toLowerCase()) payload.unidad = f.unidad
-    if (Object.keys(payload).length && !actualizacionesDescripcionPorId.has(material.id)) {
-      actualizacionesDescripcionPorId.set(material.id, {
-        id: material.id,
-        codigo: material.codigo,
-        descripcionAnterior: material.descripcion,
-        ...payload,
-      })
+  // catálogo de una vez con este mismo import.
+  //
+  // OJO: un mismo código puede aparecer en varias filas con LARGO/ANCHO
+  // distintos (rollos/barras de distinto tamaño) y cada fila trae su propia
+  // descripción con esa medida adentro del texto (ej. "L=03m", "L=04m").
+  // El catálogo solo tiene UN campo descripción por material — no hay forma
+  // de que sea "correcto" quedarse con una sola de esas variantes al azar.
+  // Por eso se corrige el catálogo SOLO cuando todas las filas de un mismo
+  // código coinciden en la misma descripción; si difieren entre sí, se deja
+  // el catálogo como estaba y se avisa aparte (aDescripcionAmbigua) para que
+  // alguien lo revise a mano — se corrigió una vez mal así (PERNO.B25 quedó
+  // con la descripción de su primera fila pisando a las demás).
+  const descripcionesVistasPorId = new Map() // id -> Map(descripcionEnMayus -> texto original)
+  const unidadesVistasPorId = new Map() // id -> Map(unidadEnMinus -> texto original)
+  const materialPorId = new Map()
+  function registrarDescripcionVista(material, f) {
+    materialPorId.set(material.id, material)
+    if (f.descripcion) {
+      const vistas = descripcionesVistasPorId.get(material.id) ?? new Map()
+      vistas.set(f.descripcion.toUpperCase(), f.descripcion.toUpperCase())
+      descripcionesVistasPorId.set(material.id, vistas)
+    }
+    if (f.unidad) {
+      const vistas = unidadesVistasPorId.get(material.id) ?? new Map()
+      vistas.set(f.unidad.toLowerCase(), f.unidad)
+      unidadesVistasPorId.set(material.id, vistas)
     }
   }
 
@@ -113,7 +122,7 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'El código no existe en el catálogo.' })
       return
     }
-    detectarActualizacionDescripcion(material, f)
+    registrarDescripcionVista(material, f)
 
     const tipoConversion = material.tipo_conversion ?? 'ninguna'
     const ancho = f.ancho ? normalizarNumero(f.ancho) : null
@@ -144,12 +153,14 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       contratoNombre = contrato.nombre
     }
 
-    const actualizacion = actualizacionesDescripcionPorId.get(material.id)
     filas.push({
       fila: f._fila,
       codigo: material.codigo,
-      descripcion: actualizacion?.descripcion ?? material.descripcion,
-      unidad: actualizacion?.unidad ?? material.unidad,
+      // Literal: lo que dice ESTA fila del Excel (o el nombre del catálogo
+      // si la fila no trae descripción propia) — nunca una mezcla con lo
+      // que diga otra fila del mismo código.
+      descripcion: f.descripcion || material.descripcion,
+      unidad: f.unidad || material.unidad,
       material_id: material.id,
       cantidad,
       ancho: tipoConversion === 'area' ? ancho : null,
@@ -163,11 +174,37 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     })
   })
 
+  // Recién acá, con todas las filas ya vistas, se sabe si un código trajo
+  // una sola descripción/unidad en todo el archivo (se puede corregir el
+  // catálogo con confianza) o varias distintas (ambiguo, no se toca).
+  const aActualizarDescripcion = []
+  const descripcionAmbigua = []
+  for (const [id, material] of materialPorId) {
+    const descVistas = descripcionesVistasPorId.get(id)
+    const unidVistas = unidadesVistasPorId.get(id)
+    if ((descVistas && descVistas.size > 1) || (unidVistas && unidVistas.size > 1)) {
+      descripcionAmbigua.push({
+        codigo: material.codigo,
+        valores: [...(descVistas?.values() ?? [])],
+      })
+      continue
+    }
+    const payload = {}
+    const descUnica = descVistas ? [...descVistas.values()][0] : null
+    const unidUnica = unidVistas ? [...unidVistas.values()][0] : null
+    if (descUnica && descUnica !== material.descripcion.toUpperCase()) payload.descripcion = descUnica
+    if (unidUnica && unidUnica.toLowerCase() !== material.unidad.toLowerCase()) payload.unidad = unidUnica
+    if (Object.keys(payload).length) {
+      aActualizarDescripcion.push({ id, codigo: material.codigo, descripcionAnterior: material.descripcion, ...payload })
+    }
+  }
+
   return {
     total: filasCrudas.length,
     filas,
     aImportar: filas.filter((f) => f.estado === 'ok'),
     conError: filas.filter((f) => f.estado === 'error'),
-    aActualizarDescripcion: [...actualizacionesDescripcionPorId.values()],
+    aActualizarDescripcion,
+    descripcionAmbigua,
   }
 }
