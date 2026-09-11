@@ -384,6 +384,14 @@ button {
   --gray-bg: #f2f4f7;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   background: var(--bg);
+  /* .vales (el padre) mide min-height:100% del alto real de .contenido en
+     celular — sin esto, esta tarjeta de fondo claro solo ocupa lo que
+     ocupan sus hijos (appbar + 2 tarjetas de vale, por ejemplo) y el resto
+     del alto disponible hasta la barra de pestañas queda mostrando el
+     fondo oscuro de .contenido por debajo. En Android no se nota porque
+     ahí no se estaba viendo el problema; en un iPhone con más alto de
+     pantalla disponible (o pocos vales) la franja vacía es grande. */
+  min-height: 100%;
 }
 /* .solo-escritorio no necesita una regla acá: sin ninguna, cada elemento
    usa el display que ya le da su propia clase (.cabecera es flex, .tabla
@@ -547,6 +555,7 @@ button {
 @media (max-width: 1024px) {
   .vales {
     padding: 0;
+    min-height: 100%;
   }
   .solo-escritorio {
     display: none !important;
