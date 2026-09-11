@@ -52,13 +52,21 @@ export async function sincronizar({ catalogos } = {}) {
       // dispositivo: el que se abra después lo encuentra en el histórico
       // remoto y sigue editando desde ahí (ver adoptarRemoto en store/rdc.js).
       if (reporte.estado === ESTADO.BORRADOR) {
+        const actual = { ...reporte }
         try {
-          await subirReporte(reporte)
+          await subirReporte(actual)
+          actual.errorSupabase = null
           resumen.enviados++
         } catch (e) {
+          // Se guarda el motivo real en el propio reporte (no solo en la
+          // consola, que en un celular nadie puede revisar) para que la
+          // lista lo muestre y se pueda diagnosticar sin herramientas de
+          // desarrollador.
+          actual.errorSupabase = e.message ?? String(e)
           console.error('No se pudo sincronizar un borrador de RDC', e)
           resumen.fallidos++
         }
+        await guardar(actual)
         continue
       }
 

@@ -31,7 +31,9 @@ function estadoDe(r) {
 }
 
 function detalleEnvio(r) {
-  if (r.estado === ESTADO.BORRADOR) return 'Todavía no se ha cerrado.'
+  if (r.estado === ESTADO.BORRADOR) {
+    return r.errorSupabase ? `No se pudo guardar en la nube todavía: ${r.errorSupabase}` : 'Todavía no se ha cerrado.'
+  }
   const parte = (nombre, estado, error) =>
     `${nombre}: ${estado === ENVIO.ENVIADO ? 'enviado' : estado === ENVIO.ERROR ? `error — ${error ?? 'sin detalle'}` : 'pendiente'}`
   return `${parte('Sistema', r.estadoSupabase, r.errorSupabase)}\n${parte('SharePoint', r.estadoSharepoint, r.sharepointError)}`
@@ -221,6 +223,9 @@ async function borrar(r) {
                   <span v-if="item.partidas !== null">{{ item.partidas }} partidas</span>
                 </template>
                 <span v-else>{{ item.supervisorNombre }}</span>
+              </div>
+              <div v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR && item.raw.errorSupabase" class="card-error">
+                {{ item.raw.errorSupabase }}
               </div>
             </div>
             <button
@@ -431,6 +436,12 @@ async function borrar(r) {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.card-error {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: #dc2626;
+  line-height: 1.35;
 }
 .dot-sep {
   width: 3px;
