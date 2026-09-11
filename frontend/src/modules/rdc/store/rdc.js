@@ -73,6 +73,14 @@ export const useRdcStore = defineStore('rdc', {
         // hay señal se sigue trabajando con la copia local.
         this.refrescarCatalogos().catch(() => {})
         this.arrancarSincronizacion()
+        // arrancarSincronizacion() solo dispara un intento inmediato la
+        // PRIMERA vez que se entra al módulo en toda la sesión (después de
+        // eso, solo el intervalo de fondo lo vuelve a intentar). Pero cada
+        // vez que el supervisor vuelve a esta lista es, precisamente,
+        // porque quiere ver si ya llegó lo que se editó en otro
+        // dispositivo — no tiene sentido hacerlo esperar hasta el próximo
+        // tic del intervalo para eso.
+        this.sincronizarAhora().catch(() => {})
       } finally {
         this.cargando = false
       }
@@ -83,7 +91,7 @@ export const useRdcStore = defineStore('rdc', {
      * vez, la primera que se entra al módulo. */
     arrancarSincronizacion() {
       if (detenerSincronizacion) return
-      detenerSincronizacion = iniciarSincronizacionAutomatica(() => this.catalogos)
+      detenerSincronizacion = iniciarSincronizacionAutomatica(() => this.catalogos, { intervaloMinutos: 2 })
     },
 
     async refrescarCatalogos() {
