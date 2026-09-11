@@ -355,6 +355,9 @@ function abrirCorregirAjuste(a) {
             <th>Código</th>
             <th>Descripción</th>
             <th>Cantidad</th>
+            <th>Ancho</th>
+            <th>Largo</th>
+            <th>Restante</th>
             <th>Documento</th>
             <th>Proveedor</th>
             <th>Registrado por</th>
@@ -369,6 +372,9 @@ function abrirCorregirAjuste(a) {
             <td>{{ i.materiales?.codigo ?? '—' }}</td>
             <td>{{ i.materiales?.descripcion ?? '—' }}</td>
             <td class="num">{{ formatearNumero(i.cantidad) }}</td>
+            <td class="num">{{ i.ancho != null ? formatearNumero(i.ancho) : '—' }}</td>
+            <td class="num">{{ i.largo != null ? formatearNumero(i.largo) : '—' }}</td>
+            <td class="num">{{ i.cantidad_restante != null ? formatearNumero(i.cantidad_restante) : '—' }}</td>
             <td>{{ i.documento_referencia ?? '—' }}</td>
             <td>{{ i.proveedor ?? '—' }}</td>
             <td>{{ i.usuarios?.nombre ?? '—' }}</td>
@@ -377,7 +383,7 @@ function abrirCorregirAjuste(a) {
             </td>
           </tr>
           <tr v-if="!almacen.ingresos.length">
-            <td colspan="10" class="vacio">No hay ingresos registrados.</td>
+            <td colspan="13" class="vacio">No hay ingresos registrados.</td>
           </tr>
         </tbody>
       </table>
