@@ -178,6 +178,9 @@ async function confirmarImportacion() {
                 <td>{{ f.contrato_nombre ?? '—' }}</td>
                 <td>{{ f.estado === 'ok' ? 'Se importa' : f.motivo }}</td>
               </tr>
+              <tr v-if="!resultado.filas.length">
+                <td colspan="8" class="vacio">No hay filas para mostrar.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -268,8 +271,7 @@ h2 {
   color: var(--color-warning);
 }
 .tabla-wrap {
-  max-height: 320px;
-  overflow: auto;
+  overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
 }
@@ -297,6 +299,11 @@ h2 {
 }
 .tabla tr.conflicto {
   color: var(--color-danger);
+}
+.vacio {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 1rem;
 }
 .acciones {
   display: flex;
