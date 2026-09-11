@@ -34,7 +34,7 @@ export default defineConfig({
       },
       manifest: {
         name: 'Sistema de Gestión de Materiales — DNV',
-        short_name: 'Gestión DNV',
+        short_name: 'DNV',
         description: 'Almacén, vales, kardex, procura y Reporte Diario de Campo — Grupo Desnivel.',
         start_url: '/',
         scope: '/',
