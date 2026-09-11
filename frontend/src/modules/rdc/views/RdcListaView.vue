@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { useAuthStore } from '../../../store/auth'
@@ -82,10 +82,14 @@ const historialAgrupado = computed(() => {
     frenteNombre: r.rdc_frentes?.nombre ?? '—',
     esLocal: false,
     supervisorNombre: r.rdc_supervisores?.nombre ?? '—',
-    estado: {
-      clave: r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente',
-      texto: r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente',
-    },
+    // Un borrador que llegó de otro dispositivo (ahora también se
+    // sincronizan en segundo plano) tiene que decir "Borrador", no
+    // "Pendiente" — ese texto es para un reporte YA cerrado que todavía no
+    // salió a SharePoint, algo completamente distinto.
+    estado:
+      r.estado === ESTADO.BORRADOR
+        ? { clave: 'borrador', texto: 'Borrador' }
+        : { clave: r.estado_sharepoint === 'enviado' ? 'enviado' : 'pendiente', texto: r.estado_sharepoint === 'enviado' ? 'Enviado' : 'Pendiente' },
     raw: r,
   }))
 
@@ -111,9 +115,32 @@ function abrir(r) {
   else router.push({ name: 'rdc-detalle', params: { id: r.id } })
 }
 
-function abrirItem(item) {
-  if (item.esLocal) abrir(item.raw)
-  else router.push({ name: 'rdc-detalle', params: { id: item.id } })
+const adoptando = ref(false)
+
+/** Un borrador remoto (viene de OTRO dispositivo) no se puede abrir en modo
+ * lectura como un reporte finalizado: hay que traerlo entero y adoptarlo acá
+ * para seguir editándolo. Los ya finalizados sí quedan como antes, en la
+ * vista de solo lectura. */
+async function abrirItem(item) {
+  if (item.esLocal) {
+    abrir(item.raw)
+    return
+  }
+  if (item.raw.estado === ESTADO.BORRADOR) {
+    if (adoptando.value) return
+    adoptando.value = true
+    try {
+      const reporte = await rdc.adoptarRemoto(item.id)
+      if (reporte) router.push({ name: 'rdc-editar', params: { id: reporte.id } })
+    } catch (e) {
+      console.error(e)
+      alert('No se pudo traer ese borrador. Revisa tu conexión e intenta de nuevo.')
+    } finally {
+      adoptando.value = false
+    }
+    return
+  }
+  router.push({ name: 'rdc-detalle', params: { id: item.id } })
 }
 
 async function borrar(r) {
@@ -141,6 +168,11 @@ async function borrar(r) {
     </header>
 
     <main class="content">
+      <div v-if="adoptando" class="alert alert-amber">
+        <i class="ti ti-cloud-download" />
+        <span>Trayendo el borrador desde el otro dispositivo…</span>
+      </div>
+
       <div v-if="rdc.sinCatalogos" class="alert alert-red">
         <i class="ti ti-alert-triangle" />
         <span>Todavía no se descargaron los catálogos. Conéctate una vez a internet para poder llenar reportes sin señal después.</span>

@@ -132,11 +132,18 @@ export async function eliminarBorrador(id) {
   return true
 }
 
-/** Todo lo que ya se cerró pero todavía no llegó a alguno de los dos destinos.
- * Es la cola que recorre el servicio de sincronización. */
+/** Lo que el servicio de sincronización tiene que revisar en cada ciclo:
+ * los reportes ya cerrados que todavía no llegaron a alguno de los dos
+ * destinos, MÁS todos los borradores activos — estos últimos se resuben
+ * completos en cada ciclo (no solo cuando cambian) para que un supervisor
+ * pueda empezar un reporte en el celular y seguir en otro dispositivo esa
+ * misma noche; el propio servicio de sincronización decide qué hacer con
+ * cada tipo (ver rdcSync.js). */
 export async function pendientes() {
-  const todos = await db.reportes.where('estado').equals(ESTADO.FINALIZADO).toArray()
-  return todos.filter((r) => r.estadoSupabase !== ENVIO.ENVIADO || r.estadoSharepoint !== ENVIO.ENVIADO)
+  const finalizados = await db.reportes.where('estado').equals(ESTADO.FINALIZADO).toArray()
+  const finalizadosPendientes = finalizados.filter((r) => r.estadoSupabase !== ENVIO.ENVIADO || r.estadoSharepoint !== ENVIO.ENVIADO)
+  const borradores = await db.reportes.where('estado').equals(ESTADO.BORRADOR).toArray()
+  return [...finalizadosPendientes, ...borradores]
 }
 
 export async function guardarCatalogos(catalogos) {

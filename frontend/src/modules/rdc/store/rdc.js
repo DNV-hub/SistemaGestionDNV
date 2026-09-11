@@ -2,7 +2,7 @@ import { acceptHMRUpdate, defineStore } from 'pinia'
 import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import * as repo from '../services/rdcRepository'
-import { descargarCatalogos, listarReportes } from '../services/rdcService'
+import { descargarCatalogos, listarReportes, obtenerReporteCompleto } from '../services/rdcService'
 import { iniciarSincronizacionAutomatica, sincronizar } from '../services/rdcSync'
 import { PERSONAL_INDIRECTO_SALA_ELECTRICA } from '../services/rdcRepository'
 import { SECTOR_SALA_ELECTRICA } from '../services/rdcConstantes'
@@ -141,6 +141,21 @@ export const useRdcStore = defineStore('rdc', {
       })
 
       this.actual = await repo.guardar(reporte)
+      await this.listar()
+      return this.actual
+    },
+
+    /** Trae un borrador que se quedó a medio llenar en OTRO dispositivo (el
+     * historial remoto lo encuentra porque ahora los borradores también se
+     * sincronizan en segundo plano, ver rdcSync.js) y lo adopta en este
+     * dispositivo como si fuera propio, para poder seguir editándolo acá.
+     * Si el supervisor sigue tocando el original en el otro dispositivo
+     * después de esto, gana el que sincronice último — es el trade-off
+     * aceptado de que esto sea automático y no pida confirmación. */
+    async adoptarRemoto(id) {
+      const completo = await obtenerReporteCompleto(id)
+      if (!completo) return null
+      this.actual = await repo.guardar(completo)
       await this.listar()
       return this.actual
     },

@@ -1,4 +1,4 @@
-import { ENVIO } from './rdcDb'
+import { ENVIO, ESTADO } from './rdcDb'
 import { guardar, pendientes } from './rdcRepository'
 import { subirReporte, marcarEnvioSharepoint } from './rdcService'
 import { construirWorkbook, workbookABase64, nombreArchivo } from './rdcExcel'
@@ -44,6 +44,24 @@ export async function sincronizar({ catalogos } = {}) {
 
   try {
     for (const reporte of await pendientes()) {
+      // Un borrador solo viaja a Supabase, nunca a SharePoint — ese envío es
+      // el entregable final (el Excel que ya usa la obra), no algo que
+      // generar de nuevo cada pocos minutos mientras el supervisor todavía
+      // está escribiendo. Subir el borrador tal cual está, en cada ciclo, es
+      // lo que permite empezar un reporte en el celular y seguir en otro
+      // dispositivo: el que se abra después lo encuentra en el histórico
+      // remoto y sigue editando desde ahí (ver adoptarRemoto en store/rdc.js).
+      if (reporte.estado === ESTADO.BORRADOR) {
+        try {
+          await subirReporte(reporte)
+          resumen.enviados++
+        } catch (e) {
+          console.error('No se pudo sincronizar un borrador de RDC', e)
+          resumen.fallidos++
+        }
+        continue
+      }
+
       if (!toca(reporte.sharepointIntentos ?? 0, reporte.ultimoIntentoEn)) {
         resumen.omitidos++
         continue
