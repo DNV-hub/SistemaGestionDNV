@@ -40,7 +40,7 @@ export async function listarSalidasEdp({ frenteId, desde, hasta } = {}) {
   let query = supabase
     .from('salidas')
     .select(
-      'fecha, cantidad, cantidad_edp, frentes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, unidad_edp, nombres_edp(nombre))'
+      'fecha, cantidad, cantidad_edp, frentes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, unidad_edp, nombres_edp(id, nombre))'
     )
     .not('cantidad_edp', 'is', null)
     .order('fecha')

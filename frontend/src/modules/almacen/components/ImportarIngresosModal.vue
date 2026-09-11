@@ -62,6 +62,15 @@ async function confirmarImportacion() {
   error.value = ''
   importando.value = true
   try {
+    // Los materiales nuevos se crean primero: sus filas pendientes necesitan
+    // el id real para poder mandarse como ingreso.
+    if (resultado.value.materialesACrear.length) {
+      const creados = await attrs.onCrearMateriales(resultado.value.materialesACrear)
+      const idPorCodigo = new Map(creados.map((m) => [m.codigo.toLowerCase(), m.id]))
+      for (const fila of resultado.value.aImportar) {
+        if (fila.materialNuevoCodigo) fila.material_id = idPorCodigo.get(fila.materialNuevoCodigo)
+      }
+    }
     if (resultado.value.aActualizarDescripcion.length) {
       await attrs.onActualizarDescripcion(resultado.value.aActualizarDescripcion)
     }
@@ -84,16 +93,18 @@ async function confirmarImportacion() {
     <div class="modal">
       <h2>Importar ingreso masivo</h2>
       <p class="ayuda">
-        Para cargar de una vez el stock actual desde Excel (¿no sabés qué columnas van? "Descargar plantilla" te da
-        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong> (código
-        de almacén, debe existir ya en el catálogo) y <strong>CANTIDAD</strong>. Documento, proveedor y observación
-        son opcionales. Si el material tiene conversión configurada en el catálogo, también hacen falta
-        <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO si es de tipo longitud).
-        <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de los dos contratos, agrega
-        esa columna con el nombre o código del contrato de cada fila; si no la traes, todas las filas usan el
-        contrato por defecto que elijas abajo. Si además traés <strong>DESCRIPCION ALMACEN</strong> o
-        <strong>UNIDAD ALMACEN</strong> y no coinciden con lo que ya tenía el material en el catálogo, se corrigen
-        de una vez con esta misma importación.
+        Para cargar de una vez el stock actual desde Excel (¿no sabes qué columnas van? "Descargar plantilla" te da
+        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong> y
+        <strong>CANTIDAD</strong>. Documento, proveedor y observación son opcionales. Si el material tiene
+        conversión configurada en el catálogo, también hacen falta <strong>ANCHO</strong> y <strong>LARGO</strong>
+        (o solo LARGO si es de tipo longitud). <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla
+        materiales de los dos contratos, agrega esa columna con el nombre o código del contrato de cada fila; si no
+        la traes, todas las filas usan el contrato por defecto que elijas abajo. Si además traes
+        <strong>DESCRIPCION ALMACEN</strong> o <strong>UNIDAD ALMACEN</strong> y no coinciden con lo que ya tenía el
+        material en el catálogo, se corrigen de una vez con esta misma importación. Si un código todavía no existe
+        en el catálogo, se crea automáticamente (necesita traer descripción y unidad esa fila) — si el código es
+        una variante de otro ya existente (ej. "M80.4-B" de "M80.4"), agrega <strong>CONVERSION</strong> para
+        heredar el tipo de conversión y el nombre EDP del código base.
       </p>
 
       <div class="fila-selects">
@@ -121,6 +132,9 @@ async function confirmarImportacion() {
       <template v-if="hecho">
         <p class="aviso">
           Se registraron {{ resultado.aImportar.length }} ingresos.
+          <span v-if="resultado.materialesACrear.length">
+            Se dieron de alta {{ resultado.materialesACrear.length }} materiales nuevos.
+          </span>
           <span v-if="resultado.aActualizarDescripcion.length">
             Se corrigió la descripción/unidad de {{ resultado.aActualizarDescripcion.length }} materiales.
           </span>
@@ -135,6 +149,9 @@ async function confirmarImportacion() {
         <div class="resumen">
           <div><strong>{{ resultado.total }}</strong> filas leídas</div>
           <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se importarán</div>
+          <div v-if="resultado.materialesACrear.length" class="ok">
+            <strong>{{ resultado.materialesACrear.length }}</strong> materiales nuevos se darán de alta
+          </div>
           <div v-if="resultado.aActualizarDescripcion.length" class="ok">
             <strong>{{ resultado.aActualizarDescripcion.length }}</strong> materiales corrigen su descripción/unidad
           </div>
@@ -146,10 +163,15 @@ async function confirmarImportacion() {
           </div>
         </div>
 
+        <p v-if="resultado.materialesACrear.length" class="ayuda">
+          Materiales nuevos que se van a crear:
+          <strong>{{ resultado.materialesACrear.map((m) => `${m.codigo} — ${m.descripcion}`).join(', ') }}</strong>
+        </p>
+
         <p v-if="resultado.descripcionAmbigua.length" class="ayuda advertencia-texto">
           Estos códigos traen una descripción distinta en cada fila del archivo (por ejemplo, un largo distinto por
           fila) — el catálogo solo tiene un nombre por material, así que no se tocó ninguno para no pisar uno con
-          otro al azar. Si querés que el catálogo muestre otra cosa, corregilo a mano en Catálogo:
+          otro al azar. Si quieres que el catálogo muestre otra cosa, corrígelo a mano en Catálogo:
           <strong>{{ resultado.descripcionAmbigua.map((d) => d.codigo).join(', ') }}</strong>.
         </p>
 

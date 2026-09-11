@@ -124,6 +124,14 @@ async function actualizarDescripcionMasivo(aActualizarDescripcion) {
   await almacen.actualizarDescripcionMaterialesEnLote(aActualizarDescripcion)
 }
 
+/** materialesACrear de procesarFilasIngreso: variantes de código que todavía
+ * no existían en el catálogo. Devuelve los materiales creados (con su id
+ * real) para que el modal pueda resolver material_id en las filas
+ * pendientes antes de registrar los ingresos. */
+async function crearMaterialesMasivo(materialesACrear) {
+  return almacen.crearMaterialesFaltantes(materialesACrear)
+}
+
 /** Plantilla lista para llenar: un renglón por cada material activo, con
  * su código/descripción/conversión ya puestos — solo hay que cargar
  * cantidad (y ancho/largo donde corresponda) y borrar las filas que no
@@ -563,6 +571,7 @@ function abrirCorregirAjuste(a) {
       :materiales="almacen.materialesActivos"
       @importar="importarIngresosMasivo"
       @actualizar-descripcion="actualizarDescripcionMasivo"
+      @crear-materiales="crearMaterialesMasivo"
       @cerrar="mostrarModalImportar = false"
     />
 

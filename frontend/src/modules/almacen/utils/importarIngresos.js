@@ -14,12 +14,16 @@ const ALIAS_CAMPOS = {
   ANCHO: 'ancho',
   LARGO: 'largo',
   CONTRATO: 'contrato',
+  CONVERSION: 'conversion',
+  CONVERSIÓN: 'conversion',
   DOCUMENTO: 'documento_referencia',
   'DOCUMENTO DE REFERENCIA': 'documento_referencia',
   PROVEEDOR: 'proveedor',
   OBSERVACION: 'observacion',
   OBSERVACIONES: 'observacion',
 }
+
+const VALORES_CONVERSION = new Set(['ninguna', 'area', 'longitud'])
 
 function normalizarEncabezado(texto) {
   return String(texto ?? '')
@@ -32,6 +36,13 @@ function normalizarEncabezado(texto) {
 
 function normalizarTexto(valor) {
   return String(valor ?? '').trim()
+}
+
+/** "M80.4-B" -> "M80.4"; "M80.4" (sin guion) -> null: un código sin guion no
+ * tiene de quién heredar, es la base él mismo. */
+function codigoBase(codigo) {
+  const i = codigo.indexOf('-')
+  return i > 0 ? codigo.slice(0, i).trim() : null
 }
 
 /** Lee un archivo .xlsx/.xls/.csv de stock actual: CODIGO, CANTIDAD y columnas opcionales. */
@@ -53,12 +64,21 @@ export async function leerArchivoIngresos(file) {
 }
 
 /**
- * Valida cada fila contra el catálogo ya cargado (el material tiene que
- * existir de antes: esto carga cantidades, no crea materiales) y resuelve
- * material_id para el insert. El contrato es opcional por fila: si el
- * archivo trae columna CONTRATO se usa esa (nombre o código, ej. "Contrato
- * Marco" o "MARCO"); si una fila no la trae, cae al contrato elegido una
- * sola vez en el modal para todo el lote.
+ * Valida cada fila contra el catálogo ya cargado y resuelve material_id
+ * para el insert. El contrato es opcional por fila: si el archivo trae
+ * columna CONTRATO se usa esa (nombre o código, ej. "Contrato Marco" o
+ * "MARCO"); si una fila no la trae, cae al contrato elegido una sola vez en
+ * el modal para todo el lote.
+ *
+ * Cada variante de dimensión (un mismo producto en largos distintos) es un
+ * material propio con su propio código — el Excel de stock ya no colapsa
+ * "M80.4" con cuatro largos distintos en un solo material. Si el código de
+ * una fila no existe todavía en el catálogo, se da de alta ahí mismo
+ * (`materialesACrear`), siempre que la fila traiga descripción y unidad.
+ * Tipo de conversión, nombre EDP y unidad EDP del material nuevo se
+ * heredan del "código base" (la parte antes del primer guion: "M80.4-B"
+ * hereda de "M80.4") si ese código base ya existe en el catálogo — así solo
+ * hace falta configurar el EDP una vez por producto, en el primer código.
  */
 export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratosDisponibles, contratoIdPorDefecto }) {
   const materialesPorCodigo = new Map(materialesActivos.map((m) => [m.codigo.toLowerCase(), m]))
@@ -69,70 +89,115 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     ])
   )
 
-  // La planilla de stock que se mantiene al día (con nombres completos,
-  // dimensiones incluidas) suele ser más confiable que la descripción que
-  // el material tenía en el catálogo desde que se creó — si el Excel trae
-  // DESCRIPCION ALMACEN/UNIDAD ALMACEN y no coincide, se corrige el
-  // catálogo de una vez con este mismo import.
-  //
-  // OJO: un mismo código puede aparecer en varias filas con LARGO/ANCHO
-  // distintos (rollos/barras de distinto tamaño) y cada fila trae su propia
-  // descripción con esa medida adentro del texto (ej. "L=03m", "L=04m").
-  // El catálogo solo tiene UN campo descripción por material — no hay forma
-  // de que sea "correcto" quedarse con una sola de esas variantes al azar.
-  // Por eso se corrige el catálogo SOLO cuando todas las filas de un mismo
-  // código coinciden en la misma descripción; si difieren entre sí, se deja
-  // el catálogo como estaba y se avisa aparte (aDescripcionAmbigua) para que
-  // alguien lo revise a mano — se corrigió una vez mal así (PERNO.B25 quedó
-  // con la descripción de su primera fila pisando a las demás).
-  const descripcionesVistasPorId = new Map() // id -> Map(descripcionEnMayus -> texto original)
-  const unidadesVistasPorId = new Map() // id -> Map(unidadEnMinus -> texto original)
-  const materialPorId = new Map()
-  function registrarDescripcionVista(material, f) {
-    materialPorId.set(material.id, material)
+  // --- Paso 1: separar filas con material ya conocido de las que necesitan
+  // un material nuevo. No se resuelve nada de las pendientes todavía: hace
+  // falta ver TODAS las filas de un código nuevo antes de decidir su
+  // descripción/conversión definitiva. ---
+  const resueltas = [] // { f, material }
+  const pendientes = [] // { f, codigoLower }
+  const erroresPrevios = []
+
+  filasCrudas.forEach((f) => {
+    if (!f.codigo && !f.cantidad) return // fila vacía
+    if (!f.codigo || !f.cantidad) {
+      erroresPrevios.push({ fila: f._fila, codigo: f.codigo || '—', estado: 'error', motivo: 'Falta código o cantidad.' })
+      return
+    }
+    const material = materialesPorCodigo.get(f.codigo.toLowerCase())
+    if (material) {
+      resueltas.push({ f, material })
+      return
+    }
+    if (!f.descripcion || !f.unidad) {
+      erroresPrevios.push({
+        fila: f._fila,
+        codigo: f.codigo,
+        estado: 'error',
+        motivo: 'El código no existe en el catálogo y la fila no trae descripción/unidad para crearlo.',
+      })
+      return
+    }
+    pendientes.push({ f, codigoLower: f.codigo.toLowerCase() })
+  })
+
+  // --- Paso 2: armar un material nuevo por cada código pendiente distinto,
+  // heredando del código base cuando corresponde. ---
+  const materialesACrearPorCodigo = new Map() // codigoLower -> payload
+  for (const { f } of pendientes) {
+    const codigoLower = f.codigo.toLowerCase()
+    if (materialesACrearPorCodigo.has(codigoLower)) continue
+
+    const base = codigoBase(f.codigo)
+    const materialBase = base ? materialesPorCodigo.get(base.toLowerCase()) : null
+    // El código base también puede ser, a su vez, otro código nuevo de este
+    // mismo archivo (se resuelve más abajo, después de este bucle).
+    const baseEsPendiente = !materialBase && base ? pendientes.some((p) => p.codigoLower === base.toLowerCase()) : false
+
+    const conversionDeArchivo = normalizarEncabezado(f.conversion || '').toLowerCase()
+    const tipoConversion = VALORES_CONVERSION.has(conversionDeArchivo)
+      ? conversionDeArchivo
+      : (materialBase?.tipo_conversion ?? null) // null = todavía no se sabe, se resuelve abajo si baseEsPendiente
+
+    materialesACrearPorCodigo.set(codigoLower, {
+      codigo: f.codigo,
+      descripcion: f.descripcion.toUpperCase(),
+      unidad: f.unidad,
+      tipo_conversion: tipoConversion,
+      descripcion_edp_id: materialBase?.descripcion_edp_id ?? null,
+      unidad_edp: materialBase?.unidad_edp ?? null,
+      codigoBaseLower: base?.toLowerCase() ?? null,
+      baseEsPendiente,
+    })
+  }
+  // Resolver los que heredan de OTRO código nuevo del mismo archivo (por si
+  // el código base aparece más abajo en el Excel que su variante).
+  for (const nuevo of materialesACrearPorCodigo.values()) {
+    if (!nuevo.baseEsPendiente) continue
+    const base = materialesACrearPorCodigo.get(nuevo.codigoBaseLower)
+    if (!base) continue
+    if (nuevo.tipo_conversion === null) nuevo.tipo_conversion = base.tipo_conversion
+    if (nuevo.descripcion_edp_id === null) nuevo.descripcion_edp_id = base.descripcion_edp_id
+    if (nuevo.unidad_edp === null) nuevo.unidad_edp = base.unidad_edp
+  }
+  for (const nuevo of materialesACrearPorCodigo.values()) {
+    if (nuevo.tipo_conversion === null) nuevo.tipo_conversion = 'ninguna'
+  }
+
+  // --- Paso 3: con cada material resuelto (existente o recién definido),
+  // procesar cantidad/ancho/largo/contrato de cada fila. ---
+  const descripcionesVistas = new Map() // clave -> Map(descripcionEnMayus -> original)
+  const unidadesVistas = new Map()
+  const infoPorClave = new Map() // clave -> { codigo, esNuevo, descripcionCatalogo, unidadCatalogo }
+
+  function registrarVista(clave, f) {
     if (f.descripcion) {
-      const vistas = descripcionesVistasPorId.get(material.id) ?? new Map()
-      vistas.set(f.descripcion.toUpperCase(), f.descripcion.toUpperCase())
-      descripcionesVistasPorId.set(material.id, vistas)
+      const v = descripcionesVistas.get(clave) ?? new Map()
+      v.set(f.descripcion.toUpperCase(), f.descripcion.toUpperCase())
+      descripcionesVistas.set(clave, v)
     }
     if (f.unidad) {
-      const vistas = unidadesVistasPorId.get(material.id) ?? new Map()
-      vistas.set(f.unidad.toLowerCase(), f.unidad)
-      unidadesVistasPorId.set(material.id, vistas)
+      const v = unidadesVistas.get(clave) ?? new Map()
+      v.set(f.unidad.toLowerCase(), f.unidad)
+      unidadesVistas.set(clave, v)
     }
   }
 
-  const filas = []
-  filasCrudas.forEach((f) => {
-    if (!f.codigo && !f.cantidad) return // fila vacía
+  const filas = [...erroresPrevios]
 
-    if (!f.codigo || !f.cantidad) {
-      filas.push({ fila: f._fila, codigo: f.codigo || '—', estado: 'error', motivo: 'Falta código o cantidad.' })
-      return
+  function procesarFila(f, { clave, codigo, descripcionEfectiva, unidadEfectiva, tipoConversion, materialId, materialNuevoCodigo }) {
+    registrarVista(clave, f)
+    if (!infoPorClave.has(clave)) {
+      infoPorClave.set(clave, { codigo, esNuevo: !materialId, descripcionCatalogo: descripcionEfectiva, unidadCatalogo: unidadEfectiva })
     }
 
-    const cantidad = normalizarNumero(f.cantidad)
-    if (!cantidad || cantidad <= 0) {
-      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Cantidad inválida.' })
-      return
-    }
-
-    const material = materialesPorCodigo.get(f.codigo.toLowerCase())
-    if (!material) {
-      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'El código no existe en el catálogo.' })
-      return
-    }
-    registrarDescripcionVista(material, f)
-
-    const tipoConversion = material.tipo_conversion ?? 'ninguna'
     const ancho = f.ancho ? normalizarNumero(f.ancho) : null
     const largo = f.largo ? normalizarNumero(f.largo) : null
     if (tipoConversion === 'area' && (!ancho || !largo)) {
-      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Este material necesita ANCHO y LARGO del rollo.' })
+      filas.push({ fila: f._fila, codigo, estado: 'error', motivo: 'Este material necesita ANCHO y LARGO del rollo.' })
       return
     }
     if (tipoConversion === 'longitud' && !largo) {
-      filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'Este material necesita LARGO.' })
+      filas.push({ fila: f._fila, codigo, estado: 'error', motivo: 'Este material necesita LARGO.' })
       return
     }
 
@@ -143,7 +208,7 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       if (!contrato) {
         filas.push({
           fila: f._fila,
-          codigo: f.codigo,
+          codigo,
           estado: 'error',
           motivo: `El contrato "${f.contrato}" no existe (usa el nombre o código exacto).`,
         })
@@ -155,14 +220,15 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
 
     filas.push({
       fila: f._fila,
-      codigo: material.codigo,
+      codigo,
       // Literal: lo que dice ESTA fila del Excel (o el nombre del catálogo
       // si la fila no trae descripción propia) — nunca una mezcla con lo
       // que diga otra fila del mismo código.
-      descripcion: f.descripcion || material.descripcion,
-      unidad: f.unidad || material.unidad,
-      material_id: material.id,
-      cantidad,
+      descripcion: f.descripcion || descripcionEfectiva,
+      unidad: f.unidad || unidadEfectiva,
+      material_id: materialId,
+      materialNuevoCodigo: materialNuevoCodigo ?? null,
+      cantidad: normalizarNumero(f.cantidad),
       ancho: tipoConversion === 'area' ? ancho : null,
       largo: tipoConversion !== 'ninguna' ? largo : null,
       contrato_id: contratoId,
@@ -172,30 +238,53 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       observacion: f.observacion || null,
       estado: 'ok',
     })
-  })
+  }
 
-  // Recién acá, con todas las filas ya vistas, se sabe si un código trajo
-  // una sola descripción/unidad en todo el archivo (se puede corregir el
-  // catálogo con confianza) o varias distintas (ambiguo, no se toca).
+  for (const { f, material } of resueltas) {
+    procesarFila(f, {
+      clave: material.id,
+      codigo: material.codigo,
+      descripcionEfectiva: material.descripcion,
+      unidadEfectiva: material.unidad,
+      tipoConversion: material.tipo_conversion ?? 'ninguna',
+      materialId: material.id,
+    })
+  }
+  for (const { f, codigoLower } of pendientes) {
+    const nuevo = materialesACrearPorCodigo.get(codigoLower)
+    procesarFila(f, {
+      clave: `nuevo:${codigoLower}`,
+      codigo: nuevo.codigo,
+      descripcionEfectiva: nuevo.descripcion,
+      unidadEfectiva: nuevo.unidad,
+      tipoConversion: nuevo.tipo_conversion,
+      materialId: null,
+      materialNuevoCodigo: codigoLower,
+    })
+  }
+
+  // Con todas las filas vistas, un código (nuevo o existente) que trajo más
+  // de una descripción/unidad distinta en el archivo queda sin corregir el
+  // catálogo — el catálogo solo tiene un campo descripción por material, no
+  // hay forma de que sea "correcto" quedarse con una variante al azar.
   const aActualizarDescripcion = []
   const descripcionAmbigua = []
-  for (const [id, material] of materialPorId) {
-    const descVistas = descripcionesVistasPorId.get(id)
-    const unidVistas = unidadesVistasPorId.get(id)
-    if ((descVistas && descVistas.size > 1) || (unidVistas && unidVistas.size > 1)) {
-      descripcionAmbigua.push({
-        codigo: material.codigo,
-        valores: [...(descVistas?.values() ?? [])],
-      })
+  for (const [clave, info] of infoPorClave) {
+    const descVistas = descripcionesVistas.get(clave)
+    const unidVistas = unidadesVistas.get(clave)
+    const ambigua = (descVistas && descVistas.size > 1) || (unidVistas && unidVistas.size > 1)
+    if (ambigua) {
+      descripcionAmbigua.push({ codigo: info.codigo, valores: [...(descVistas?.values() ?? [])] })
       continue
     }
+    if (info.esNuevo) continue // ya nace con la descripción correcta, no hay nada que "actualizar"
     const payload = {}
     const descUnica = descVistas ? [...descVistas.values()][0] : null
     const unidUnica = unidVistas ? [...unidVistas.values()][0] : null
-    if (descUnica && descUnica !== material.descripcion.toUpperCase()) payload.descripcion = descUnica
-    if (unidUnica && unidUnica.toLowerCase() !== material.unidad.toLowerCase()) payload.unidad = unidUnica
+    if (descUnica && descUnica !== info.descripcionCatalogo.toUpperCase()) payload.descripcion = descUnica
+    if (unidUnica && unidUnica.toLowerCase() !== info.unidadCatalogo.toLowerCase()) payload.unidad = unidUnica
     if (Object.keys(payload).length) {
-      aActualizarDescripcion.push({ id, codigo: material.codigo, descripcionAnterior: material.descripcion, ...payload })
+      aActualizarDescripcion.push({ id: clave, codigo: info.codigo, descripcionAnterior: info.descripcionCatalogo, ...payload })
     }
   }
 
@@ -206,5 +295,13 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     conError: filas.filter((f) => f.estado === 'error'),
     aActualizarDescripcion,
     descripcionAmbigua,
+    materialesACrear: [...materialesACrearPorCodigo.values()].map((m) => ({
+      codigo: m.codigo,
+      descripcion: m.descripcion,
+      unidad: m.unidad,
+      tipo_conversion: m.tipo_conversion,
+      descripcion_edp_id: m.descripcion_edp_id,
+      unidad_edp: m.unidad_edp,
+    })),
   }
 }

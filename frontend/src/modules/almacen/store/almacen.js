@@ -16,7 +16,7 @@ import {
   actualizarMedidasIngreso,
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
-import { actualizarDescripcionEnLote } from '../../catalogo/services/catalogoService'
+import { actualizarDescripcionEnLote, crearMaterialesEnLote } from '../../catalogo/services/catalogoService'
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
@@ -123,6 +123,26 @@ export const useAlmacenStore = defineStore('almacen', {
         const cambio = porId.get(m.id)
         return cambio ? { ...m, descripcion: cambio.descripcion ?? m.descripcion, unidad: cambio.unidad ?? m.unidad } : m
       })
+    },
+
+    /** materialesACrear de procesarFilasIngreso: [{codigo, descripcion, unidad,
+     * tipo_conversion, descripcion_edp_id, unidad_edp}]. Da de alta cada
+     * variante nueva ANTES de registrar los ingresos, para tener sus id
+     * reales y poder resolver material_id en cada fila pendiente. */
+    async crearMaterialesFaltantes(materialesACrear) {
+      if (!materialesACrear.length) return []
+      const creados = await crearMaterialesEnLote(
+        materialesACrear.map((m) => ({
+          codigo: m.codigo,
+          descripcion: m.descripcion,
+          unidad: m.unidad,
+          tipo_conversion: m.tipo_conversion,
+          descripcion_edp_id: m.descripcion_edp_id,
+          unidad_edp: m.unidad_edp,
+        }))
+      )
+      this.materialesActivos.push(...creados)
+      return creados
     },
 
     async obtenerIngresosSinMedidas() {

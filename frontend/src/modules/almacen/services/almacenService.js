@@ -26,7 +26,7 @@ export async function eliminarAlmacen(id) {
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')
-    .select('id, codigo, descripcion, unidad, unidad_edp, tipo_conversion')
+    .select('id, codigo, descripcion, unidad, unidad_edp, tipo_conversion, descripcion_edp_id')
     .eq('estado', 'activo')
     .order('codigo')
   if (error) throw error
