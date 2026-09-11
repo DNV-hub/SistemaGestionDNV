@@ -93,3 +93,20 @@ export async function actualizarConversionEnLote(actualizaciones) {
   }
   return resultados
 }
+
+/** Misma idea que actualizarConversionEnLote, pero para descripción/unidad de
+ * almacén — viene del importador de ingresos masivos: si el Excel de stock
+ * trae DESCRIPCION ALMACEN/UNIDAD ALMACEN y no coincide con lo que ya tenía
+ * el material, se corrige ahí mismo (esas planillas son las que el usuario
+ * mantiene al día con nombres completos, con dimensiones incluidas). */
+export async function actualizarDescripcionEnLote(actualizaciones) {
+  const resultados = []
+  for (const { id, descripcion, unidad } of actualizaciones) {
+    const payload = {}
+    if (descripcion !== undefined) payload.descripcion = descripcion
+    if (unidad !== undefined) payload.unidad = unidad
+    const { error } = await supabase.from('materiales').update(payload).eq('id', id)
+    resultados.push({ id, ok: !error, error: error?.message ?? null })
+  }
+  return resultados
+}

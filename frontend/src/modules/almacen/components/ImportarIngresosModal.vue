@@ -62,6 +62,9 @@ async function confirmarImportacion() {
   error.value = ''
   importando.value = true
   try {
+    if (resultado.value.aActualizarDescripcion.length) {
+      await attrs.onActualizarDescripcion(resultado.value.aActualizarDescripcion)
+    }
     await attrs.onImportar({
       almacen_id: almacenId.value,
       filas: resultado.value.aImportar,
@@ -88,7 +91,9 @@ async function confirmarImportacion() {
         <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO si es de tipo longitud).
         <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de los dos contratos, agrega
         esa columna con el nombre o código del contrato de cada fila; si no la traes, todas las filas usan el
-        contrato por defecto que elijas abajo.
+        contrato por defecto que elijas abajo. Si además traés <strong>DESCRIPCION ALMACEN</strong> o
+        <strong>UNIDAD ALMACEN</strong> y no coinciden con lo que ya tenía el material en el catálogo, se corrigen
+        de una vez con esta misma importación.
       </p>
 
       <div class="fila-selects">
@@ -114,7 +119,12 @@ async function confirmarImportacion() {
       <p v-if="error" class="error">{{ error }}</p>
 
       <template v-if="hecho">
-        <p class="aviso">Se registraron {{ resultado.aImportar.length }} ingresos.</p>
+        <p class="aviso">
+          Se registraron {{ resultado.aImportar.length }} ingresos.
+          <span v-if="resultado.aActualizarDescripcion.length">
+            Se corrigió la descripción/unidad de {{ resultado.aActualizarDescripcion.length }} materiales.
+          </span>
+        </p>
         <button type="button" @click="$emit('cerrar')">Cerrar</button>
       </template>
 
@@ -122,6 +132,9 @@ async function confirmarImportacion() {
         <div class="resumen">
           <div><strong>{{ resultado.total }}</strong> filas leídas</div>
           <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se importarán</div>
+          <div v-if="resultado.aActualizarDescripcion.length" class="ok">
+            <strong>{{ resultado.aActualizarDescripcion.length }}</strong> materiales corrigen su descripción/unidad
+          </div>
           <div v-if="resultado.conError.length" class="advertencia">
             <strong>{{ resultado.conError.length }}</strong> omitidas por error
           </div>

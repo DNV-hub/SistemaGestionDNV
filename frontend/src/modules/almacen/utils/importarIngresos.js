@@ -6,6 +6,10 @@ import { normalizarNumero } from '../../../utils/normalizarNumero'
 const ALIAS_CAMPOS = {
   CODIGO: 'codigo',
   'CODIGO ALMACEN': 'codigo',
+  'DESCRIPCION ALMACEN': 'descripcion',
+  DESCRIPCION: 'descripcion',
+  'UNIDAD ALMACEN': 'unidad',
+  UNIDAD: 'unidad',
   CANTIDAD: 'cantidad',
   ANCHO: 'ancho',
   LARGO: 'largo',
@@ -65,6 +69,30 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     ])
   )
 
+  // La planilla de stock que se mantiene al día (con nombres completos,
+  // dimensiones incluidas) suele ser más confiable que la descripción que
+  // el material tenía en el catálogo desde que se creó — si el Excel trae
+  // DESCRIPCION ALMACEN/UNIDAD ALMACEN y no coincide, se corrige el
+  // catálogo de una vez con este mismo import (una fila por material, no
+  // por línea del archivo, aunque el mismo código aparezca varias veces).
+  const actualizacionesDescripcionPorId = new Map()
+  function detectarActualizacionDescripcion(material, f) {
+    const payload = {}
+    // La descripción se guarda en mayúscula (mismo trigger que ya lo hace
+    // para el resto del catálogo); la unidad se deja tal cual la escriben,
+    // que es como se maneja en todo el resto del sistema.
+    if (f.descripcion && f.descripcion.toUpperCase() !== material.descripcion.toUpperCase()) payload.descripcion = f.descripcion.toUpperCase()
+    if (f.unidad && f.unidad.toLowerCase() !== material.unidad.toLowerCase()) payload.unidad = f.unidad
+    if (Object.keys(payload).length && !actualizacionesDescripcionPorId.has(material.id)) {
+      actualizacionesDescripcionPorId.set(material.id, {
+        id: material.id,
+        codigo: material.codigo,
+        descripcionAnterior: material.descripcion,
+        ...payload,
+      })
+    }
+  }
+
   const filas = []
   filasCrudas.forEach((f) => {
     if (!f.codigo && !f.cantidad) return // fila vacía
@@ -85,6 +113,7 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       filas.push({ fila: f._fila, codigo: f.codigo, estado: 'error', motivo: 'El código no existe en el catálogo.' })
       return
     }
+    detectarActualizacionDescripcion(material, f)
 
     const tipoConversion = material.tipo_conversion ?? 'ninguna'
     const ancho = f.ancho ? normalizarNumero(f.ancho) : null
@@ -115,11 +144,12 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
       contratoNombre = contrato.nombre
     }
 
+    const actualizacion = actualizacionesDescripcionPorId.get(material.id)
     filas.push({
       fila: f._fila,
       codigo: material.codigo,
-      descripcion: material.descripcion,
-      unidad: material.unidad,
+      descripcion: actualizacion?.descripcion ?? material.descripcion,
+      unidad: actualizacion?.unidad ?? material.unidad,
       material_id: material.id,
       cantidad,
       ancho: tipoConversion === 'area' ? ancho : null,
@@ -138,5 +168,6 @@ export function procesarFilasIngreso(filasCrudas, { materialesActivos, contratos
     filas,
     aImportar: filas.filter((f) => f.estado === 'ok'),
     conError: filas.filter((f) => f.estado === 'error'),
+    aActualizarDescripcion: [...actualizacionesDescripcionPorId.values()],
   }
 }

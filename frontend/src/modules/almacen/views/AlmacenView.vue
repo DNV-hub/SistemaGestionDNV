@@ -105,6 +105,13 @@ async function importarIngresosMasivo({ almacen_id, filas }) {
   aviso.value = `Se registraron ${payload.length} ingresos.`
 }
 
+/** aActualizarDescripcion de procesarFilasIngreso: [{id, codigo, descripcion?, unidad?}].
+ * Se aplica ANTES de registrar los ingresos, para que el catálogo quede al
+ * día con los nombres completos que trae la planilla de stock. */
+async function actualizarDescripcionMasivo(aActualizarDescripcion) {
+  await almacen.actualizarDescripcionMaterialesEnLote(aActualizarDescripcion)
+}
+
 /** Plantilla lista para llenar: un renglón por cada material activo, con
  * su código/descripción/conversión ya puestos — solo hay que cargar
  * cantidad (y ancho/largo donde corresponda) y borrar las filas que no
@@ -521,6 +528,7 @@ function abrirCorregirAjuste(a) {
       :contratos="almacen.contratos"
       :materiales="almacen.materialesActivos"
       @importar="importarIngresosMasivo"
+      @actualizar-descripcion="actualizarDescripcionMasivo"
       @cerrar="mostrarModalImportar = false"
     />
 

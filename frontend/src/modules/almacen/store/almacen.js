@@ -16,6 +16,7 @@ import {
   actualizarMedidasIngreso,
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
+import { actualizarDescripcionEnLote } from '../../catalogo/services/catalogoService'
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
@@ -108,6 +109,20 @@ export const useAlmacenStore = defineStore('almacen', {
       this.ingresos.unshift(...creados)
       await this.refrescarStock()
       return creados
+    },
+
+    /** aActualizarDescripcion de procesarFilasIngreso: [{id, codigo, descripcion?, unidad?}].
+     * Corrige el catálogo con los nombres completos que trae la planilla de
+     * stock, y refleja el cambio en los materiales ya cargados en memoria
+     * para no depender de un recargo completo. */
+    async actualizarDescripcionMaterialesEnLote(aActualizarDescripcion) {
+      if (!aActualizarDescripcion.length) return
+      await actualizarDescripcionEnLote(aActualizarDescripcion)
+      const porId = new Map(aActualizarDescripcion.map((a) => [a.id, a]))
+      this.materialesActivos = this.materialesActivos.map((m) => {
+        const cambio = porId.get(m.id)
+        return cambio ? { ...m, descripcion: cambio.descripcion ?? m.descripcion, unidad: cambio.unidad ?? m.unidad } : m
+      })
     },
 
     async obtenerIngresosSinMedidas() {
