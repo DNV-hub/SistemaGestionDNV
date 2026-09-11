@@ -323,12 +323,18 @@ function abrirCorregirAjuste(a) {
 
     <template v-else>
       <template v-if="tab === 'stock'">
-        <input
-          v-model="busquedaStock"
-          type="search"
-          class="buscador-stock"
-          placeholder="Buscar por nombre o código…"
-        />
+        <div class="fila-buscador">
+          <input
+            v-model="busquedaStock"
+            type="search"
+            class="buscador-stock"
+            placeholder="Buscar por nombre o código…"
+          />
+          <span class="contador-stock">
+            {{ stockFiltrado.length }}{{ busquedaStock.trim() ? ` de ${almacen.stock.length}` : '' }}
+            {{ stockFiltrado.length === 1 ? 'fila' : 'filas' }}
+          </span>
+        </div>
         <table class="tabla">
           <thead>
             <tr>
@@ -650,16 +656,26 @@ button {
   border: 1px solid var(--color-border);
   color: var(--color-text);
 }
+.fila-buscador {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
 .buscador-stock {
   width: 100%;
   max-width: 360px;
   padding: 0.55rem 0.75rem;
-  margin-bottom: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+}
+.contador-stock {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
 }
 .tabla {
   width: 100%;
