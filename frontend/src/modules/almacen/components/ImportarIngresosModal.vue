@@ -148,10 +148,12 @@ async function confirmarImportacion() {
           </div>
         </div>
 
-        <p v-if="resultado.materialesACrear.length" class="ayuda">
-          Materiales nuevos que se van a crear:
-          <strong>{{ resultado.materialesACrear.map((m) => `${m.codigo} — ${m.descripcion}`).join(', ') }}</strong>
-        </p>
+        <details v-if="resultado.materialesACrear.length" class="detalle-nuevos">
+          <summary>Ver los {{ resultado.materialesACrear.length }} materiales nuevos que se van a crear</summary>
+          <p class="ayuda">
+            <strong>{{ resultado.materialesACrear.map((m) => `${m.codigo} — ${m.descripcion}`).join(', ') }}</strong>
+          </p>
+        </details>
 
         <div class="tabla-wrap">
           <div class="fila-cabecera">
@@ -230,6 +232,20 @@ h2 {
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+.detalle-nuevos {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.detalle-nuevos summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.detalle-nuevos .ayuda {
+  margin-top: 0.4rem;
+  max-height: 120px;
+  overflow-y: auto;
+}
 .fila-selects {
   display: flex;
   gap: 0.75rem;
@@ -272,6 +288,7 @@ h2 {
   overflow-y: auto;
   max-height: 400px;
   min-width: 0;
+  transform: translateZ(0);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
 }
