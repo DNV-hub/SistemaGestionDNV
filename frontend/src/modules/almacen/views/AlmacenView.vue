@@ -272,6 +272,65 @@ function abrirCorregirIngreso(i) {
   mostrarModalAjuste.value = true
 }
 
+/** Arma el texto plano del stock actualmente filtrado, agrupado por
+ * almacén, listo para pegar en un chat de WhatsApp — sin tablas ni Excel
+ * de por medio, que es como Almacén termina reportando el stock hoy. */
+function textoStockParaCompartir(filas) {
+  const fecha = new Date().toLocaleDateString('es-PE')
+  const porAlmacen = new Map()
+  filas.forEach((f) => {
+    const clave = f.almacenes?.nombre ?? 'Sin almacén'
+    if (!porAlmacen.has(clave)) porAlmacen.set(clave, [])
+    porAlmacen.get(clave).push(f)
+  })
+
+  const bloques = [...porAlmacen.entries()].map(([nombreAlmacen, items]) => {
+    const lineas = items.map((f) => {
+      const codigo = f.materiales?.codigo ?? '—'
+      const descripcion = f.materiales?.descripcion ?? '—'
+      const cantidad = formatearNumero(f.cantidad_disponible)
+      const unidad = f.materiales?.unidad ?? ''
+      return `- ${codigo} — ${descripcion}: ${cantidad} ${unidad}${bajoMinimo(f) ? ' (bajo el mínimo)' : ''}`
+    })
+    return `*${nombreAlmacen}*\n${lineas.join('\n')}`
+  })
+
+  return `*STOCK — ${fecha}*\n\n${bloques.join('\n\n')}`
+}
+
+const compartiendoStock = ref(false)
+
+/** En celular usa la hoja nativa de compartir (el supervisor elige
+ * WhatsApp ahí mismo); en escritorio, donde esa API casi nunca existe,
+ * copia el texto al portapapeles para pegarlo directo en el chat. */
+async function exportarStockWhatsapp() {
+  aviso.value = ''
+  if (!stockFiltrado.value.length) {
+    aviso.value = 'No hay stock para exportar con el filtro actual.'
+    return
+  }
+  const texto = textoStockParaCompartir(stockFiltrado.value)
+  compartiendoStock.value = true
+  try {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: texto })
+        return
+      } catch (e) {
+        if (e?.name === 'AbortError') return
+        // Si el share nativo falla por otra razón, cae al copiado.
+      }
+    }
+    await navigator.clipboard.writeText(texto)
+    aviso.value = 'Se copió el stock al portapapeles — pégalo en WhatsApp.'
+  } catch (e) {
+    console.error(e)
+    aviso.value = 'No se pudo preparar el texto para compartir.'
+  } finally {
+    compartiendoStock.value = false
+  }
+}
+
 function abrirCorregirAjuste(a) {
   ajustePrellenado.value = {
     almacen_id: a.almacen_id,
@@ -356,6 +415,15 @@ function abrirCorregirAjuste(a) {
     <template v-else>
       <div class="fila-buscador">
         <input v-model="busqueda" type="search" class="buscador" placeholder="Buscar por nombre o código…" />
+        <button
+          v-if="tab === 'stock'"
+          type="button"
+          class="secundario"
+          :disabled="compartiendoStock"
+          @click="exportarStockWhatsapp"
+        >
+          {{ compartiendoStock ? 'Preparando…' : 'Exportar stock (WhatsApp)' }}
+        </button>
         <span class="contador">
           {{ filtradoPestaña }}{{ busqueda.trim() ? ` de ${totalPestaña}` : '' }} filas
         </span>

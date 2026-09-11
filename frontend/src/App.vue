@@ -189,8 +189,8 @@ const inicialesUsuario = computed(() => {
       <div class="marca">
         <span class="marca-icono">D</span>
         <div>
-          <div class="marca-nombre">Grupo Desnivel</div>
-          <div class="marca-sub">Sistema de Almacén</div>
+          <div class="marca-nombre">DNV</div>
+          <div class="marca-sub">Sistema de Control</div>
         </div>
       </div>
 

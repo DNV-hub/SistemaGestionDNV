@@ -79,6 +79,8 @@ async function exportar() {
         Unidad: m.materiales?.unidad ?? '',
         'Saldo resultante': m.saldo_resultante,
         Vale: m.vales?.numero ?? '',
+        Frente: m.vales?.frentes ? `${m.vales.frentes.codigo ? m.vales.frentes.codigo + ' — ' : ''}${m.vales.frentes.nombre}` : '',
+        'Solicitado por': m.vales?.usuarios?.nombre ?? '',
         Usuario: m.usuarios?.nombre ?? '',
         Observación: m.observacion ?? '',
       })),
@@ -132,6 +134,8 @@ async function exportar() {
           <th>Cantidad</th>
           <th>Saldo resultante</th>
           <th>Vale</th>
+          <th>Frente</th>
+          <th>Solicitado por</th>
           <th>Usuario</th>
           <th>Observación</th>
         </tr>
@@ -148,11 +152,14 @@ async function exportar() {
           <td class="num">{{ formatearNumero(m.cantidad) }} {{ m.materiales?.unidad }}</td>
           <td class="num">{{ formatearNumero(m.saldo_resultante) }}</td>
           <td>{{ m.vales?.numero ?? '—' }}</td>
+          <td v-if="m.vales?.frentes">{{ m.vales.frentes.codigo ? m.vales.frentes.codigo + ' — ' : '' }}{{ m.vales.frentes.nombre }}</td>
+          <td v-else>—</td>
+          <td>{{ m.vales?.usuarios?.nombre ?? '—' }}</td>
           <td>{{ m.usuarios?.nombre ?? '—' }}</td>
           <td>{{ m.observacion ?? '—' }}</td>
         </tr>
         <tr v-if="!kardex.movimientos.length">
-          <td colspan="10" class="vacio">No hay movimientos para los filtros seleccionados.</td>
+          <td colspan="12" class="vacio">No hay movimientos para los filtros seleccionados.</td>
         </tr>
       </tbody>
     </table>
