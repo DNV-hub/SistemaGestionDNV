@@ -555,7 +555,11 @@ button {
 @media (max-width: 1024px) {
   .vales {
     padding: 0;
-    min-height: 100%;
+    /* height, no min-height: un min-height no cuenta como "alto explícito"
+       para que .movil-vales pueda resolver su propio min-height:100% contra
+       este elemento — con min-height acá, el de abajo simplemente no hacía
+       nada y por eso el primer intento de este arreglo no cambió nada. */
+    height: 100%;
   }
   .solo-escritorio {
     display: none !important;
