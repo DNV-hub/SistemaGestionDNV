@@ -184,6 +184,13 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
   display: flex;
   flex-direction: column;
 }
+@media (min-width: 1025px) {
+  .devolucion {
+    max-width: 640px;
+    margin: 0 auto;
+    box-shadow: 0 0 0 1px var(--border-lista);
+  }
+}
 .appbar {
   height: 56px;
   flex-shrink: 0;

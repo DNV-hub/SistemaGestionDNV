@@ -132,7 +132,7 @@ export const useValesStore = defineStore('vales', {
       try {
         this.stockDisponible = await listarStockDisponible()
       } catch (e) {
-        this.error = 'No se pudo cargar el stock.'
+        this.error = `No se pudo cargar el stock${e?.message ? ': ' + e.message : '.'}`
         console.error(e)
       }
     },

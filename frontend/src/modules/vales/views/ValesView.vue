@@ -130,7 +130,11 @@ function nuevoMovil() {
         <h1>Vales</h1>
         <p v-if="puedeVerTodos" class="subtitulo">Los que esperan una decisión aparecen primero, del más antiguo al más nuevo.</p>
       </div>
-      <button v-if="puedeCrear" @click="mostrarModal = true">+ Nuevo vale</button>
+      <div class="acciones-header">
+        <button type="button" class="secundario" @click="router.push('/vales/stock')">Stock en vivo</button>
+        <button v-if="puedeDevolver" type="button" class="secundario" @click="router.push('/vales/devolucion')">Devolver material</button>
+        <button v-if="puedeCrear" @click="mostrarModal = true">+ Nuevo vale</button>
+      </div>
     </header>
 
     <p v-if="aviso" class="aviso solo-escritorio">{{ aviso }}</p>
@@ -261,6 +265,16 @@ button {
   color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
+}
+.acciones-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.acciones-header .secundario {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
 }
 .tabla {
   width: 100%;
