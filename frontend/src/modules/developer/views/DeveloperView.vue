@@ -8,6 +8,7 @@ import {
   borrarReporteRdc,
   suplantarUsuario,
   reiniciarIngresos,
+  reiniciarDevoluciones,
 } from '../services/developerService'
 
 const cargando = ref(true)
@@ -23,6 +24,7 @@ const reportesSeleccionados = ref(new Set())
 const borrando = ref(false)
 const suplantando = ref(false)
 const reiniciandoIngresos = ref(false)
+const reiniciandoDevoluciones = ref(false)
 
 onMounted(async () => {
   cargando.value = true
@@ -92,6 +94,32 @@ async function reiniciarTodosLosIngresos() {
     error.value = `No se pudo reiniciar: ${e.message ?? e}`
   } finally {
     reiniciandoIngresos.value = false
+  }
+}
+
+async function reiniciarTodasLasDevoluciones() {
+  const primeraConfirmacion = confirm(
+    'Esto borra TODAS las devoluciones (cualquier estado). Si alguna ya fue recibida y movió stock, conviene ' +
+      '"Reiniciar ingresos" primero para no dejar ese movimiento sin limpiar. No se puede deshacer.\n\n¿Seguro?'
+  )
+  if (!primeraConfirmacion) return
+  const segundaConfirmacion = prompt('Para confirmar, escribí BORRAR TODO (en mayúsculas):')
+  if (segundaConfirmacion !== 'BORRAR TODO') {
+    aviso.value = ''
+    return
+  }
+
+  reiniciandoDevoluciones.value = true
+  error.value = ''
+  aviso.value = ''
+  try {
+    const { devolucionesBorradas } = await reiniciarDevoluciones()
+    aviso.value = `Se borraron ${devolucionesBorradas} devoluciones. Queda como recién empezado.`
+  } catch (e) {
+    console.error(e)
+    error.value = `No se pudo reiniciar: ${e.message ?? e}`
+  } finally {
+    reiniciandoDevoluciones.value = false
   }
 }
 
@@ -182,6 +210,17 @@ async function borrarReportesSeleccionados() {
         </p>
         <button class="peligro" :disabled="reiniciandoIngresos" @click="reiniciarTodosLosIngresos">
           {{ reiniciandoIngresos ? 'Reiniciando…' : 'Borrar todos los ingresos' }}
+        </button>
+      </section>
+
+      <section class="tarjeta peligro-total">
+        <h2>Reiniciar todas las devoluciones</h2>
+        <p class="ayuda">
+          Borra TODAS las devoluciones (sin importar el estado). Si alguna ya fue recibida y movió stock, hacé
+          primero "Borrar todos los ingresos" para no dejar ese movimiento sin limpiar.
+        </p>
+        <button class="peligro" :disabled="reiniciandoDevoluciones" @click="reiniciarTodasLasDevoluciones">
+          {{ reiniciandoDevoluciones ? 'Reiniciando…' : 'Borrar todas las devoluciones' }}
         </button>
       </section>
 

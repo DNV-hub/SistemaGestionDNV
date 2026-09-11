@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useAlmacenStore } from '../store/almacen'
 import { useAuthStore } from '../../../store/auth'
 import AlmacenesModal from '../components/AlmacenesModal.vue'
@@ -60,17 +60,48 @@ function bajoMinimo(fila) {
   return minimo !== null && fila.cantidad_disponible < minimo
 }
 
-// Buscador dinámico de la pestaña Stock: por nombre o código, para
-// verificar rápido cuánto hay de un material sin desplazarse por toda la
-// tabla.
-const busquedaStock = ref('')
-const stockFiltrado = computed(() => {
-  const q = busquedaStock.value.trim().toLowerCase()
-  if (!q) return almacen.stock
-  return almacen.stock.filter(
-    (fila) => fila.materiales?.descripcion?.toLowerCase().includes(q) || fila.materiales?.codigo?.toLowerCase().includes(q)
-  )
-})
+// Buscador dinámico, uno por pestaña: por nombre o código, para verificar
+// rápido algo sin desplazarse por toda la tabla. Se limpia solo al
+// cambiar de pestaña, para no dejar un filtro puesto donde ya no se ve.
+const busqueda = ref('')
+watch(tab, () => (busqueda.value = ''))
+
+function porTexto(lista, campos) {
+  const q = busqueda.value.trim().toLowerCase()
+  if (!q) return lista
+  return lista.filter((fila) => campos.some((obtener) => obtener(fila)?.toLowerCase().includes(q)))
+}
+
+const stockFiltrado = computed(() =>
+  porTexto(almacen.stock, [(f) => f.materiales?.descripcion, (f) => f.materiales?.codigo])
+)
+const ingresosFiltrados = computed(() =>
+  porTexto(almacen.ingresos, [(f) => f.materiales?.descripcion, (f) => f.materiales?.codigo])
+)
+const ajustesFiltrados = computed(() =>
+  porTexto(almacen.ajustes, [(f) => f.materiales?.descripcion, (f) => f.materiales?.codigo])
+)
+const salidasFiltradas = computed(() =>
+  porTexto(almacen.salidas, [(f) => f.materiales?.descripcion, (f) => f.materiales?.codigo])
+)
+const devolucionesFiltradas = computed(() =>
+  porTexto(devoluciones.devoluciones, [(f) => f.materiales?.descripcion, (f) => f.materiales?.codigo])
+)
+
+// Para el contador de la barra de búsqueda: total sin filtrar y total
+// filtrado de la pestaña activa, sin repetir el mismo lookup en el template.
+const totalPestaña = computed(
+  () =>
+    ({ stock: almacen.stock, ingresos: almacen.ingresos, ajustes: almacen.ajustes, salidas: almacen.salidas, devoluciones: devoluciones.devoluciones })[
+      tab.value
+    ].length
+)
+const filtradoPestaña = computed(
+  () =>
+    ({ stock: stockFiltrado, ingresos: ingresosFiltrados, ajustes: ajustesFiltrados, salidas: salidasFiltradas, devoluciones: devolucionesFiltradas })[
+      tab.value
+    ].value.length
+)
 
 onMounted(() => {
   almacen.cargar()
@@ -323,61 +354,57 @@ function abrirCorregirAjuste(a) {
     <p v-if="almacen.cargando">Cargando…</p>
 
     <template v-else>
-      <template v-if="tab === 'stock'">
-        <div class="fila-buscador">
-          <input
-            v-model="busquedaStock"
-            type="search"
-            class="buscador-stock"
-            placeholder="Buscar por nombre o código…"
-          />
-          <span class="contador-stock">
-            {{ stockFiltrado.length }}{{ busquedaStock.trim() ? ` de ${almacen.stock.length}` : '' }}
-            {{ stockFiltrado.length === 1 ? 'fila' : 'filas' }}
-          </span>
-        </div>
-        <table class="tabla">
-          <thead>
-            <tr>
-              <th>Almacén</th>
-              <th>Contrato</th>
-              <th>Código</th>
-              <th>Descripción</th>
-              <th>Unidad</th>
-              <th>Física</th>
-              <th>Reservada</th>
-              <th>Disponible</th>
-              <th>Stock mínimo</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="fila in stockFiltrado"
-              :key="`${fila.almacen_id}-${fila.material_id}-${fila.contrato_id}`"
-              :class="{ 'bajo-minimo': bajoMinimo(fila) }"
-            >
-              <td>{{ fila.almacenes?.nombre ?? '—' }}</td>
-              <td>{{ fila.contratos?.nombre ?? '—' }}</td>
-              <td>{{ fila.materiales?.codigo ?? '—' }}</td>
-              <td>{{ fila.materiales?.descripcion ?? '—' }}</td>
-              <td>{{ fila.materiales?.unidad ?? '—' }}</td>
-              <td class="num">{{ formatearNumero(fila.cantidad_fisica) }}</td>
-              <td class="num">{{ formatearNumero(fila.cantidad_reservada) }}</td>
-              <td class="num">{{ formatearNumero(fila.cantidad_disponible) }}</td>
-              <td class="num">{{ formatearNumero(stockMinimoEfectivo(fila)) }}</td>
-            </tr>
-            <tr v-if="!stockFiltrado.length">
-              <td colspan="9" class="vacio">
-                {{ almacen.stock.length ? 'Ningún material coincide con la búsqueda.' : 'Sin movimientos de stock todavía.' }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </template>
+      <div class="fila-buscador">
+        <input v-model="busqueda" type="search" class="buscador" placeholder="Buscar por nombre o código…" />
+        <span class="contador">
+          {{ filtradoPestaña }}{{ busqueda.trim() ? ` de ${totalPestaña}` : '' }} filas
+        </span>
+      </div>
+
+      <table v-if="tab === 'stock'" class="tabla">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Almacén</th>
+            <th>Contrato</th>
+            <th>Código</th>
+            <th>Descripción</th>
+            <th>Unidad</th>
+            <th>Física</th>
+            <th>Reservada</th>
+            <th>Disponible</th>
+            <th>Stock mínimo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="(fila, idx) in stockFiltrado"
+            :key="`${fila.almacen_id}-${fila.material_id}-${fila.contrato_id}`"
+            :class="{ 'bajo-minimo': bajoMinimo(fila) }"
+          >
+            <td class="num">{{ idx + 1 }}</td>
+            <td>{{ fila.almacenes?.nombre ?? '—' }}</td>
+            <td>{{ fila.contratos?.nombre ?? '—' }}</td>
+            <td>{{ fila.materiales?.codigo ?? '—' }}</td>
+            <td>{{ fila.materiales?.descripcion ?? '—' }}</td>
+            <td>{{ fila.materiales?.unidad ?? '—' }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_fisica) }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_reservada) }}</td>
+            <td class="num">{{ formatearNumero(fila.cantidad_disponible) }}</td>
+            <td class="num">{{ formatearNumero(stockMinimoEfectivo(fila)) }}</td>
+          </tr>
+          <tr v-if="!stockFiltrado.length">
+            <td colspan="10" class="vacio">
+              {{ almacen.stock.length ? 'Ningún material coincide con la búsqueda.' : 'Sin movimientos de stock todavía.' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       <table v-else-if="tab === 'ingresos'" class="tabla">
         <thead>
           <tr>
+            <th>#</th>
             <th>Fecha</th>
             <th>Almacén</th>
             <th>Contrato</th>
@@ -388,13 +415,13 @@ function abrirCorregirAjuste(a) {
             <th>Largo</th>
             <th>Restante</th>
             <th>Documento</th>
-            <th>Proveedor</th>
             <th>Registrado por</th>
             <th v-if="puedeRegistrarAjuste"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="i in almacen.ingresos" :key="i.id">
+          <tr v-for="(i, idx) in ingresosFiltrados" :key="i.id">
+            <td class="num">{{ idx + 1 }}</td>
             <td>{{ i.fecha }}</td>
             <td>{{ i.almacenes?.nombre ?? '—' }}</td>
             <td>{{ i.contratos?.nombre ?? '—' }}</td>
@@ -405,14 +432,15 @@ function abrirCorregirAjuste(a) {
             <td class="num">{{ i.largo != null ? formatearNumero(i.largo) : '—' }}</td>
             <td class="num">{{ i.cantidad_restante != null ? formatearNumero(i.cantidad_restante) : '—' }}</td>
             <td>{{ i.documento_referencia ?? '—' }}</td>
-            <td>{{ i.proveedor ?? '—' }}</td>
             <td>{{ i.usuarios?.nombre ?? '—' }}</td>
             <td v-if="puedeRegistrarAjuste">
               <BotonIcono variante="corregir" titulo="Corregir con un ajuste" @click="abrirCorregirIngreso(i)" />
             </td>
           </tr>
-          <tr v-if="!almacen.ingresos.length">
-            <td colspan="13" class="vacio">No hay ingresos registrados.</td>
+          <tr v-if="!ingresosFiltrados.length">
+            <td colspan="13" class="vacio">
+              {{ almacen.ingresos.length ? 'Ningún ingreso coincide con la búsqueda.' : 'No hay ingresos registrados.' }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -420,6 +448,7 @@ function abrirCorregirAjuste(a) {
       <table v-else-if="tab === 'ajustes'" class="tabla">
         <thead>
           <tr>
+            <th>#</th>
             <th>Fecha</th>
             <th>Almacén</th>
             <th>Contrato</th>
@@ -433,7 +462,8 @@ function abrirCorregirAjuste(a) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="a in almacen.ajustes" :key="a.id">
+          <tr v-for="(a, idx) in ajustesFiltrados" :key="a.id">
+            <td class="num">{{ idx + 1 }}</td>
             <td>{{ a.fecha }}</td>
             <td>{{ a.almacenes?.nombre ?? '—' }}</td>
             <td>{{ a.contratos?.nombre ?? '—' }}</td>
@@ -449,8 +479,10 @@ function abrirCorregirAjuste(a) {
               <BotonIcono variante="corregir" titulo="Corregir con otro ajuste" @click="abrirCorregirAjuste(a)" />
             </td>
           </tr>
-          <tr v-if="!almacen.ajustes.length">
-            <td colspan="10" class="vacio">No hay ajustes registrados.</td>
+          <tr v-if="!ajustesFiltrados.length">
+            <td colspan="11" class="vacio">
+              {{ almacen.ajustes.length ? 'Ningún ajuste coincide con la búsqueda.' : 'No hay ajustes registrados.' }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -458,6 +490,7 @@ function abrirCorregirAjuste(a) {
       <table v-else-if="tab === 'salidas'" class="tabla">
         <thead>
           <tr>
+            <th>#</th>
             <th>Fecha</th>
             <th>Almacén</th>
             <th>Contrato</th>
@@ -470,7 +503,8 @@ function abrirCorregirAjuste(a) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in almacen.salidas" :key="s.id">
+          <tr v-for="(s, idx) in salidasFiltradas" :key="s.id">
+            <td class="num">{{ idx + 1 }}</td>
             <td>{{ s.fecha }}</td>
             <td>{{ s.almacenes?.nombre ?? '—' }}</td>
             <td>{{ s.contratos?.nombre ?? '—' }}</td>
@@ -481,8 +515,10 @@ function abrirCorregirAjuste(a) {
             <td>{{ s.documento_referencia ?? '—' }}</td>
             <td>{{ s.usuarios?.nombre ?? '—' }}</td>
           </tr>
-          <tr v-if="!almacen.salidas.length">
-            <td colspan="9" class="vacio">No hay salidas registradas.</td>
+          <tr v-if="!salidasFiltradas.length">
+            <td colspan="10" class="vacio">
+              {{ almacen.salidas.length ? 'Ninguna salida coincide con la búsqueda.' : 'No hay salidas registradas.' }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -490,6 +526,8 @@ function abrirCorregirAjuste(a) {
       <table v-else class="tabla">
         <thead>
           <tr>
+            <th>#</th>
+            <th>N° Vale</th>
             <th>Fecha</th>
             <th>Frente</th>
             <th>Código</th>
@@ -502,7 +540,9 @@ function abrirCorregirAjuste(a) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="d in devoluciones.devoluciones" :key="d.id">
+          <tr v-for="(d, idx) in devolucionesFiltradas" :key="d.id">
+            <td class="num">{{ idx + 1 }}</td>
+            <td>{{ d.numero ?? '—' }}</td>
             <td>{{ d.fecha }}</td>
             <td>{{ d.frentes?.codigo ? d.frentes.codigo + ' — ' : '' }}{{ d.frentes?.nombre }}</td>
             <td>{{ d.materiales?.codigo ?? '—' }}</td>
@@ -522,8 +562,10 @@ function abrirCorregirAjuste(a) {
               </template>
             </td>
           </tr>
-          <tr v-if="!devoluciones.devoluciones.length">
-            <td colspan="9" class="vacio">No hay devoluciones registradas.</td>
+          <tr v-if="!devolucionesFiltradas.length">
+            <td colspan="11" class="vacio">
+              {{ devoluciones.devoluciones.length ? 'Ninguna devolución coincide con la búsqueda.' : 'No hay devoluciones registradas.' }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -664,7 +706,7 @@ button {
   gap: 0.75rem;
   margin-bottom: 0.75rem;
 }
-.buscador-stock {
+.buscador {
   width: 100%;
   max-width: 360px;
   padding: 0.55rem 0.75rem;
@@ -674,7 +716,7 @@ button {
   color: var(--color-text);
   font: inherit;
 }
-.contador-stock {
+.contador {
   font-size: 0.85rem;
   color: var(--color-text-muted);
   white-space: nowrap;

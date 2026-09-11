@@ -48,6 +48,12 @@ export async function reiniciarIngresos() {
   }
 }
 
+export async function reiniciarDevoluciones() {
+  const { data, error } = await supabase.rpc('fn_reiniciar_devoluciones')
+  if (error) throw error
+  return { devolucionesBorradas: data?.devoluciones_borradas ?? 0 }
+}
+
 // ---------------------------------------------------------------------------
 // Ver como otra cuenta: sesión real, no una simulación de interfaz. Se
 // guarda la sesión propia ANTES de cambiar (en sessionStorage, que se borra
