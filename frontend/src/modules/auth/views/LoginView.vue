@@ -42,7 +42,6 @@ async function onSubmit() {
         </div>
 
         <div>
-          <span class="etiqueta">Gestión inteligente</span>
           <h1>Control total de tus <em>materiales</em> y almacén</h1>
           <p class="parrafo">
             Monitorea stock, registra vales, gestiona reservas y sigue el consumo contra lo previsto — todo desde un
