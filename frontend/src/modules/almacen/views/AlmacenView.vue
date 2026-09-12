@@ -12,6 +12,7 @@ import { useDevolucionesStore } from '../../devoluciones/store/devoluciones'
 import RecibirDevolucionModal from '../../devoluciones/components/RecibirDevolucionModal.vue'
 import { descargarExcel } from '../../../utils/exportarExcel'
 import { descargarTexto } from '../../../utils/exportarTexto'
+import { listarStockParaExportar } from '../services/almacenService'
 import { formatearNumero } from '../../../utils/formatearNumero'
 
 const almacen = useAlmacenStore()
@@ -312,6 +313,51 @@ function exportarStockWhatsapp() {
   descargarTexto(`stock_${new Date().toISOString().slice(0, 10)}.txt`, texto)
 }
 
+const exportandoStockExcel = ref(false)
+
+/** Mismas columnas que la plantilla del usuario (Categoría, Tipo de
+ * material, Control Interno vs. Control Contrato/EDP), un renglón por
+ * material sumado entre almacenes — no filtra por lo que esté buscado en
+ * pantalla, exporta el catálogo completo. Ancho/Largo quedan vacíos para
+ * materiales sin conversión de unidades, igual que en su plantilla
+ * original. GRIFO/CRC, TURNO y OPERADOR de esa plantilla no se incluyen:
+ * no son datos que el Sistema registre por material en el stock. */
+async function exportarStockExcel() {
+  aviso.value = ''
+  exportandoStockExcel.value = true
+  try {
+    const filas = await listarStockParaExportar()
+    descargarExcel(
+      `Resumen_Stock_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      [
+        {
+          nombre: 'Resumen Stock',
+          filas: filas
+            .sort((a, b) => a.categoria.localeCompare(b.categoria) || a.descripcion.localeCompare(b.descripcion))
+            .map((m, i) => ({
+              ITEM: i + 1,
+              CODIGO: m.codigo,
+              CATEGORIA: m.categoria,
+              'TIPO DE MATERIAL': m.tipoMaterial,
+              'MARCA/DESCRIPCION': m.descripcion,
+              ANCHO: m.ancho ?? '',
+              LARGO: m.largo ?? '',
+              'CONTROL INTERNO — UNIDAD': m.unidadInterna,
+              'CONTROL INTERNO — CANTIDAD': m.cantidadInterna,
+              'CONTROL CONTRATO (EDP) — UNIDAD': m.unidadEdp,
+              'CONTROL CONTRATO (EDP) — CANTIDAD': Math.round(m.cantidadEdp * 100) / 100,
+            })),
+        },
+      ]
+    )
+  } catch (e) {
+    console.error(e)
+    aviso.value = `No se pudo exportar el stock a Excel${e?.message ? ': ' + e.message : '.'}`
+  } finally {
+    exportandoStockExcel.value = false
+  }
+}
+
 function abrirCorregirAjuste(a) {
   ajustePrellenado.value = {
     almacen_id: a.almacen_id,
@@ -401,6 +447,9 @@ function abrirCorregirAjuste(a) {
         <input v-model="busqueda" type="search" class="buscador" placeholder="Buscar por nombre o código…" />
         <button v-if="tab === 'stock'" type="button" class="secundario" @click="exportarStockWhatsapp">
           Exportar stock (.txt)
+        </button>
+        <button v-if="tab === 'stock'" type="button" class="secundario" :disabled="exportandoStockExcel" @click="exportarStockExcel">
+          {{ exportandoStockExcel ? 'Exportando…' : 'Exportar stock (Excel)' }}
         </button>
         <span class="contador">
           {{ filtradoPestaña }}{{ busqueda.trim() ? ` de ${totalPestaña}` : '' }} filas

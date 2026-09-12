@@ -51,6 +51,73 @@ export async function listarLotesDisponibles(materialId, almacenId) {
 const SELECT_STOCK =
   '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_default), contratos(id, codigo, nombre)'
 
+/** Stock agregado por material (sumado entre almacenes) con Categoría/Tipo
+ * de material y la cantidad también en la unidad del EDP, para el
+ * exportable "Resumen de stock" que pidió el usuario, con la misma
+ * estructura de su plantilla (Control Interno vs Control Contrato = EDP).
+ *
+ * El total en unidad EDP NO es "cantidad física × un factor fijo del
+ * material": el factor de conversión vive POR LOTE (ingresos.ancho/largo),
+ * porque un rollo de malla puede llegar con medidas distintas de una
+ * compra a otra (ver 20260910160000_conversion_unidades_edp.sql). Por eso
+ * se suma `ingresos.cantidad_restante × su propio factor_conversion` — el
+ * saldo de cada lote convertido a SU medida real — en vez de aplicar una
+ * sola conversión a la cantidad física total. La dimensión que se muestra
+ * como referencia es la del lote más reciente, no un promedio.
+ */
+export async function listarStockParaExportar() {
+  const [{ data: stockRows, error: errorStock }, { data: ingresos, error: errorIngresos }] = await Promise.all([
+    supabase
+      .from('stock')
+      .select(
+        'material_id, cantidad_fisica, materiales(codigo, descripcion, unidad, unidad_edp, tipo_conversion, categorias(nombre, padre:categorias!categoria_padre_id(nombre)))'
+      ),
+    supabase
+      .from('ingresos')
+      .select('material_id, ancho, largo, factor_conversion, cantidad_restante, fecha')
+      .not('factor_conversion', 'is', null)
+      .order('fecha', { ascending: false }),
+  ])
+  if (errorStock) throw errorStock
+  if (errorIngresos) throw errorIngresos
+
+  const porMaterial = new Map()
+  for (const s of stockRows ?? []) {
+    if (!s.materiales) continue
+    if (!porMaterial.has(s.material_id)) porMaterial.set(s.material_id, { ...s.materiales, cantidadFisica: 0 })
+    porMaterial.get(s.material_id).cantidadFisica += Number(s.cantidad_fisica) || 0
+  }
+
+  // Un lote por material para la dimensión de referencia (el más reciente,
+  // por el `order` de arriba — la primera vez que se ve ese material_id en
+  // la lista ya ordenada por fecha descendente); todos los lotes se suman
+  // para el total en la unidad del EDP.
+  const conversionPorMaterial = new Map()
+  for (const ingreso of ingresos ?? []) {
+    if (!conversionPorMaterial.has(ingreso.material_id)) {
+      conversionPorMaterial.set(ingreso.material_id, { totalEdp: 0, ancho: ingreso.ancho, largo: ingreso.largo })
+    }
+    conversionPorMaterial.get(ingreso.material_id).totalEdp += (Number(ingreso.cantidad_restante) || 0) * (Number(ingreso.factor_conversion) || 0)
+  }
+
+  return [...porMaterial.entries()].map(([materialId, m]) => {
+    const necesitaConversion = m.tipo_conversion !== 'ninguna'
+    const conversion = conversionPorMaterial.get(materialId)
+    return {
+      codigo: m.codigo,
+      categoria: m.categorias?.padre?.nombre ?? '',
+      tipoMaterial: m.categorias?.nombre ?? '',
+      descripcion: m.descripcion,
+      ancho: necesitaConversion ? conversion?.ancho ?? null : null,
+      largo: necesitaConversion ? conversion?.largo ?? null : null,
+      unidadInterna: m.unidad,
+      cantidadInterna: m.cantidadFisica,
+      unidadEdp: necesitaConversion ? (m.tipo_conversion === 'area' ? 'M2' : 'ML') : m.unidad_edp || m.unidad,
+      cantidadEdp: necesitaConversion ? conversion?.totalEdp ?? 0 : m.cantidadFisica,
+    }
+  })
+}
+
 export async function listarStock() {
   const { data, error } = await supabase
     .from('stock')
