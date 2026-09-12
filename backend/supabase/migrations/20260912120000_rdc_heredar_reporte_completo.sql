@@ -1,0 +1,15 @@
+-- Permite que, para una cuenta puntual, un reporte nuevo del RDC arranque
+-- clonando el anterior COMPLETO (incluido el trabajo del día: metrados,
+-- elementos de sostenimiento, bitácora, stand by, programación,
+-- observaciones, restricciones, redline) en vez de solo sector/frente/
+-- supervisor/capataz/cuadrilla/equipo, que es lo que ya se arrastra para
+-- todos por defecto (ver crearBorrador() en rdcRepository.js).
+--
+-- Deliberadamente NO es un comportamiento global: el trabajo del día
+-- cambia a diario (cuánto se perforó, qué paró, qué se observó), y
+-- copiarlo solo para todos produciría reportes con los números de ayer si
+-- el supervisor se olvida de actualizar cada campo antes de enviar. Es un
+-- modo explícito, pedido para un usuario cuya rutina diaria sí se repite
+-- casi entera — se activa cuenta por cuenta, a mano, no hay pantalla para
+-- esto todavía porque es un caso puntual, no una preferencia de uso común.
+alter table usuarios add column rdc_heredar_reporte_completo boolean not null default false;

@@ -105,6 +105,60 @@ export function crearBorrador({
   }
 }
 
+/** Clona un reporte anterior COMPLETO como punto de partida de uno nuevo:
+ * además de sector/frente/supervisor/capataz/cuadrilla/equipo (que ya trae
+ * crearBorrador()), copia también el trabajo del día — hitos, metrados,
+ * elementos de sostenimiento, bitácora, stand by, programación,
+ * observaciones, restricciones, redline — tal cual quedó el último.
+ *
+ * NO es el comportamiento por defecto: el trabajo del día cambia a diario
+ * (cuánto se perforó, qué paró, qué se observó) y repetirlo solo produciría
+ * reportes con los números de ayer si el supervisor se olvida de
+ * actualizar cada campo antes de enviar. Es un modo explícito, pedido para
+ * un usuario puntual cuya rutina sí se repite día a día — se activa por
+ * cuenta (usuarios.rdc_heredar_reporte_completo), no globalmente.
+ *
+ * `anterior` puede colgar del estado reactivo de Pinia (el mismo problema
+ * de Proxies que ya resuelve guardar(), ver su comentario) — por eso el
+ * primer paso es siempre un `structuredClone` vía JSON, antes de tocar
+ * nada. Cada fila de las listas anidadas recibe un id nuevo: son filas
+ * nuevas en Supabase, no la misma fila del reporte viejo — reusar el id
+ * chocaría con la fila original al sincronizar. */
+export function crearBorradorDesde(anterior, { creadoPor }) {
+  const ahora = new Date().toISOString()
+  const clon = JSON.parse(JSON.stringify(anterior))
+  const regenerarIds = (lista) => (lista ?? []).map((item) => ({ ...item, id: nuevoId() }))
+
+  return {
+    ...clon,
+    id: nuevoId(),
+    fecha: hoyLocal(),
+    creadoPor,
+    estado: ESTADO.BORRADOR,
+    esCorreccion: false,
+
+    estadoSupabase: ENVIO.PENDIENTE,
+    estadoSharepoint: ENVIO.PENDIENTE,
+    sharepointNombreArchivo: null,
+    sharepointEnviadoAt: null,
+    sharepointIntentos: 0,
+    sharepointError: null,
+    errorSupabase: null,
+
+    creadoEnDispositivo: ahora,
+    actualizadoEn: ahora,
+
+    personal: regenerarIds(clon.personal),
+    maquinaria: regenerarIds(clon.maquinaria),
+    hitos: regenerarIds(clon.hitos),
+    metrados: regenerarIds(clon.metrados),
+    elementos: regenerarIds(clon.elementos),
+    bitacora: regenerarIds(clon.bitacora),
+    standby: regenerarIds(clon.standby),
+    programacion: regenerarIds(clon.programacion),
+  }
+}
+
 export async function guardar(reporte) {
   // `reporte` es (o cuelga de) el estado reactivo de Pinia. Un `{...spread}`
   // superficial no alcanza: Vue envuelve en un Proxy nuevo cada array/objeto

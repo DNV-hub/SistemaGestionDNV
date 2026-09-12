@@ -139,21 +139,31 @@ export const useRdcStore = defineStore('rdc', {
      * supervisor edite en el reporte de hoy (cambia de frente, falta un
      * peón, llega una máquina nueva) es lo que se le va a ofrecer mañana:
      * `ultimo` siempre es el reporte local más reciente, así que el arrastre
-     * se actualiza solo, reporte a reporte. */
+     * se actualiza solo, reporte a reporte.
+     *
+     * Si la cuenta tiene `rdc_heredar_reporte_completo` (pedido puntual de
+     * un usuario cuya rutina diaria se repite casi entera), el arrastre no
+     * se limita a eso: se clona el reporte anterior completo, incluido el
+     * trabajo del día (metrados, elementos, bitácora, stand by,
+     * programación, observaciones...) — ver crearBorradorDesde() para por
+     * qué esto NO es el comportamiento por defecto de todos los demás. */
     async nuevo() {
       const auth = useAuthStore()
       const ultimo = this.reportes[0]
       const supervisorPropio = (this.catalogos?.supervisores ?? []).find((s) => s.usuario_id === auth.perfil?.id)
 
-      const reporte = repo.crearBorrador({
-        creadoPor: auth.perfil?.id,
-        supervisorId: supervisorPropio?.id ?? ultimo?.supervisorId ?? null,
-        sectorId: ultimo?.sectorId ?? null,
-        frenteId: ultimo?.frenteId ?? null,
-        capatazId: ultimo?.capatazId ?? null,
-        personalPrevio: ultimo?.personal,
-        maquinariaPrevia: ultimo?.maquinaria,
-      })
+      const reporte =
+        auth.perfil?.rdc_heredar_reporte_completo && ultimo
+          ? repo.crearBorradorDesde(ultimo, { creadoPor: auth.perfil?.id })
+          : repo.crearBorrador({
+              creadoPor: auth.perfil?.id,
+              supervisorId: supervisorPropio?.id ?? ultimo?.supervisorId ?? null,
+              sectorId: ultimo?.sectorId ?? null,
+              frenteId: ultimo?.frenteId ?? null,
+              capatazId: ultimo?.capatazId ?? null,
+              personalPrevio: ultimo?.personal,
+              maquinariaPrevia: ultimo?.maquinaria,
+            })
 
       this.actual = await repo.guardar(reporte)
       await this.listar()
