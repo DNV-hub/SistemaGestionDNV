@@ -101,6 +101,14 @@ function abrirVale(vale) {
   router.push(`/vales/${vale.id}`)
 }
 
+// Mismo criterio que el badge del sidebar (App.vue/contarValesNovedades):
+// hubo una decisión (aprobado/rechazado/atendido) que el supervisor todavía
+// no vio. Abrir el detalle lo marca como visto (ValeDetalleView.vue).
+const ESTADOS_CON_DECISION = ['Aprobado', 'Rechazado', 'Parcialmente atendido', 'Atendido', 'Cerrado']
+function tieneNovedad(v) {
+  return ESTADOS_CON_DECISION.includes(v.estado) && (!v.visto_supervisor_en || v.visto_supervisor_en < v.updated_at)
+}
+
 // ---------------------------------------------------------------------------
 // Devolver material: espeja el vale al revés — el supervisor solicita,
 // Almacén confirma la recepción antes de que se mueva cualquier stock.
@@ -214,6 +222,7 @@ async function solicitarDevolucion() {
             <strong>{{ v.numero }}</strong>
             <span class="fecha">{{ fechaHoraEnvio(v) }}</span>
           </div>
+          <span v-if="tieneNovedad(v)" class="punto-novedad" title="Tiene una novedad sin ver"></span>
           <span class="badge" :class="v.estado.toLowerCase().replace(/\s+/g, '-')">{{ v.estado }}</span>
         </li>
         <li v-if="!misVales.length" class="vacio">Todavía no enviaste ninguna solicitud.</li>
@@ -481,6 +490,14 @@ textarea {
 .vale-card .fecha {
   font-size: 0.75rem;
   color: var(--color-text-muted);
+}
+.punto-novedad {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  flex-shrink: 0;
+  margin-right: 0.4rem;
 }
 .badge {
   padding: 0.2rem 0.55rem;

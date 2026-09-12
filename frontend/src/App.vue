@@ -5,6 +5,7 @@ import { useAuthStore } from './store/auth'
 import { useTemaStore } from './store/tema'
 import IconoNav from './components/IconoNav.vue'
 import { contarValesPendientes, contarAlertasActivas } from './modules/dashboard/services/dashboardService'
+import { contarValesNovedades } from './modules/vales/services/valesService'
 import { suplantandoAOtraCuenta, volverAMiCuenta } from './modules/developer/services/developerService'
 import { hayActualizacionSW, aplicarActualizacionSW } from './actualizacionSW'
 import { pendientes as rdcPendientes } from './modules/rdc/services/rdcRepository'
@@ -63,8 +64,17 @@ async function cerrarSesionDesdeMas() {
 // sabemos qué puede ver este usuario — si no tiene el permiso, la consulta
 // ni se intenta (evita un error de RLS innecesario).
 function cargarContadores() {
-  if (auth.tienePermiso('vales.ver_propios')) {
+  // Quien aprueba/rechaza necesita saber "cuántos de todos están esperando
+  // una decisión" (eso ya existía). Un supervisor no aprueba nada — lo que
+  // necesita saber es "cuántos de los MÍOS tuvieron una novedad que todavía
+  // no vi" (se aprobó, se rechazó, se atendió). Son preguntas distintas,
+  // por eso el badge cambia de fuente según el permiso, no solo el número.
+  if (auth.tienePermiso('vales.aprobar_rechazar')) {
     contarValesPendientes()
+      .then((v) => (badgeVales.value = v))
+      .catch(() => {})
+  } else if (auth.tienePermiso('vales.ver_propios')) {
+    contarValesNovedades(auth.session?.user?.id)
       .then((v) => (badgeVales.value = v))
       .catch(() => {})
   }

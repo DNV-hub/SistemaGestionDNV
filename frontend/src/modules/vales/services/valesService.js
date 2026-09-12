@@ -143,6 +143,34 @@ export async function listarLotesDisponibles(materialId, almacenId) {
   return data
 }
 
+/** Cuántos de MIS vales tuvieron una novedad (se aprobaron, rechazaron o
+ * atendieron) que todavía no vi. Es una pregunta distinta de "cuántos de
+ * los míos siguen esperando una decisión" (contarValesPendientes,
+ * dashboardService.js) — por eso el filtro de estado es el opuesto: acá
+ * son los que YA tuvieron una decisión, no los que la siguen esperando.
+ * `supervisor_id` se filtra explícito (no alcanza con RLS) porque quien
+ * tiene vales.ver_todos vería todo el ruido de vales ajenos si no. */
+export async function contarValesNovedades(supervisorId) {
+  if (!supervisorId) return 0
+  const { data, error } = await supabase
+    .from('vales')
+    .select('id, updated_at, visto_supervisor_en')
+    .eq('supervisor_id', supervisorId)
+    .in('estado', ['Aprobado', 'Rechazado', 'Parcialmente atendido', 'Atendido', 'Cerrado'])
+  if (error) throw error
+  return (data ?? []).filter((v) => !v.visto_supervisor_en || v.visto_supervisor_en < v.updated_at).length
+}
+
+/** Marca el vale como visto por su propio supervisor. Es una función (no un
+ * UPDATE directo) porque vales_update por RLS solo deja al supervisor
+ * editar su vale mientras sigue en Borrador — una vez enviado, ya no puede
+ * hacer UPDATE sobre la fila. fn_marcar_vale_visto es security definer y
+ * valida la autoría ella misma. */
+export async function marcarValeVisto(id) {
+  const { error } = await supabase.rpc('fn_marcar_vale_visto', { p_vale_id: id })
+  if (error) throw error
+}
+
 export async function registrarSalida(payload) {
   const { data, error } = await supabase.from('salidas').insert(payload).select().single()
   if (error) throw error

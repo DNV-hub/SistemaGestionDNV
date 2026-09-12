@@ -8,6 +8,8 @@ import AprobarLineaModal from '../components/AprobarLineaModal.vue'
 import CancelarValeModal from '../components/CancelarValeModal.vue'
 import EntregaFormModal from '../components/EntregaFormModal.vue'
 import { formatearNumero } from '../../../utils/formatearNumero'
+import { marcarValeVisto } from '../services/valesService'
+import { textoEntregaParaCompartir } from '../services/valesMensajes'
 
 const route = useRoute()
 const router = useRouter()
@@ -37,8 +39,15 @@ const puedeAprobarRechazar = computed(() => auth.tienePermiso('vales.aprobar_rec
 const puedeRegistrarEntrega = computed(() => auth.tienePermiso('salidas.registrar_entrega'))
 const LINEAS_CON_SALDO = ['Reservado', 'Parcialmente entregado']
 
-function cargar() {
-  vales.cargarDetalle(route.params.id)
+async function cargar() {
+  await vales.cargarDetalle(route.params.id)
+  // El badge de "novedades" del sidebar se apaga acá: abrir el detalle de
+  // un vale propio que ya tuvo una decisión (aprobado/rechazado/atendido)
+  // es la señal de que el supervisor la vio. Mientras sigue en Borrador no
+  // hay ninguna novedad que marcar — es su propio vale, sin decisión aún.
+  if (esDueno.value && vale.value && vale.value.estado !== 'Borrador') {
+    marcarValeVisto(vale.value.id).catch(() => {})
+  }
 }
 
 onMounted(cargar)
@@ -97,11 +106,36 @@ async function abrirEntrega(linea) {
   entregaEnProgreso.value = { linea, reserva }
 }
 
+const mensajeEntrega = ref('')
+const copiado = ref(false)
+
 async function registrarEntrega(payload) {
   const { linea, reserva } = entregaEnProgreso.value
   await vales.registrarEntrega({ linea, reserva, ...payload, usuario_id: auth.session.user.id })
+  copiado.value = false
+  mensajeEntrega.value = textoEntregaParaCompartir({
+    vale: vale.value,
+    material: linea.materiales?.descripcion ?? '—',
+    unidad: linea.materiales?.unidad ?? '',
+    cantidad: payload.cantidad,
+    almacen: reserva.almacenes?.nombre,
+    supervisorNombre: vale.value?.usuarios?.nombre,
+    registradoPor: auth.perfil?.nombre,
+  })
   entregaEnProgreso.value = null
   aviso.value = 'Entrega registrada.'
+}
+
+async function copiarMensajeEntrega() {
+  try {
+    await navigator.clipboard.writeText(mensajeEntrega.value)
+    copiado.value = true
+  } catch {
+    // Portapapeles bloqueado (navegador viejo, permiso denegado): el
+    // textarea sigue mostrando el texto para seleccionarlo y copiarlo a
+    // mano, así que no hace falta más que avisar.
+    aviso.value = 'No se pudo copiar automáticamente — selecciona el texto y cópialo a mano.'
+  }
 }
 
 /**
@@ -167,6 +201,17 @@ function situacion(linea) {
 
       <p v-if="vale.observaciones" class="observaciones">{{ vale.observaciones }}</p>
       <p v-if="aviso" class="aviso">{{ aviso }}</p>
+
+      <div v-if="mensajeEntrega" class="mensaje-wtpp">
+        <div class="mensaje-wtpp-cabecera">
+          <span>Mientras el supervisor no use la app, avísale por WhatsApp:</span>
+          <button type="button" class="cerrar-mensaje" aria-label="Cerrar" @click="mensajeEntrega = ''">✕</button>
+        </div>
+        <textarea readonly :value="mensajeEntrega" rows="8"></textarea>
+        <button type="button" class="copiar-mensaje" @click="copiarMensajeEntrega">
+          {{ copiado ? '✓ Copiado' : 'Copiar mensaje' }}
+        </button>
+      </div>
 
       <div class="acciones-vale">
         <button v-if="puedeEnviar" @click="enviar">Enviar para revisión</button>
@@ -446,6 +491,52 @@ button.mini {
 .aviso {
   color: var(--color-success);
   font-size: 0.9rem;
+}
+.mensaje-wtpp {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+.mensaje-wtpp-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+.cerrar-mensaje {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.1rem 0.3rem;
+}
+.mensaje-wtpp textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.copiar-mensaje {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
+  font-weight: 600;
+  cursor: pointer;
 }
 .error {
   color: var(--color-danger);
