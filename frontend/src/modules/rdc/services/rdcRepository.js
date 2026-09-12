@@ -32,7 +32,22 @@ export const PERSONAL_INDIRECTO_SALA_ELECTRICA = [
   'Topógrafo',
 ]
 
-export function crearBorrador({ supervisorId = null, creadoPor, sectorId = null, frenteId = null, capatazId = null } = {}) {
+/** `personalPrevio`/`maquinariaPrevia`: la cuadrilla y el equipo del último
+ * reporte, para arrancar el de hoy con eso puesto en vez de en cero — así
+ * funcionaba el RDC original, y es lo que de verdad pasa en el frente: la
+ * cuadrilla y el equipo rara vez cambian de un día al otro, así que el
+ * supervisor ajusta lo que sí cambió (alguien faltó, llegó una máquina
+ * nueva) en vez de volver a tipear todo. Si no se pasa nada, cae al default
+ * de siempre (las cinco categorías directas en cero, sin maquinaria). */
+export function crearBorrador({
+  supervisorId = null,
+  creadoPor,
+  sectorId = null,
+  frenteId = null,
+  capatazId = null,
+  personalPrevio = null,
+  maquinariaPrevia = null,
+} = {}) {
   const ahora = new Date().toISOString()
   return {
     id: nuevoId(),
@@ -71,14 +86,16 @@ export function crearBorrador({ supervisorId = null, creadoPor, sectorId = null,
     creadoEnDispositivo: ahora,
     actualizadoEn: ahora,
 
-    personal: PERSONAL_DIRECTO.map((categoria, i) => ({
-      id: nuevoId(),
-      categoria,
-      tipo: 'directa',
-      cantidad: 0,
-      orden: i + 1,
-    })),
-    maquinaria: [],
+    personal: personalPrevio
+      ? personalPrevio.map((p) => ({ ...p, id: nuevoId() }))
+      : PERSONAL_DIRECTO.map((categoria, i) => ({
+          id: nuevoId(),
+          categoria,
+          tipo: 'directa',
+          cantidad: 0,
+          orden: i + 1,
+        })),
+    maquinaria: maquinariaPrevia ? maquinariaPrevia.map((m) => ({ ...m, id: nuevoId() })) : [],
     hitos: [],
     metrados: [],
     elementos: [],

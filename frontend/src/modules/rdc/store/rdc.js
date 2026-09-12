@@ -131,10 +131,15 @@ export const useRdcStore = defineStore('rdc', {
       }
     },
 
-    /** Crea un reporte nuevo. Arrastra sector, frente, supervisor y capataz del
-     * último reporte: el supervisor trabaja en el mismo frente días seguidos y
-     * volver a elegirlos cada mañana es fricción pura. El RDC actual hace lo
-     * mismo y conviene no perderlo. */
+    /** Crea un reporte nuevo. Arrastra sector, frente, supervisor, capataz,
+     * cuadrilla de personal y equipo del último reporte: el supervisor
+     * trabaja en el mismo frente días seguidos, con la misma gente y las
+     * mismas máquinas, y volver a tipear todo eso cada mañana es fricción
+     * pura. Así funcionaba el RDC original y hay que conservarlo. Lo que el
+     * supervisor edite en el reporte de hoy (cambia de frente, falta un
+     * peón, llega una máquina nueva) es lo que se le va a ofrecer mañana:
+     * `ultimo` siempre es el reporte local más reciente, así que el arrastre
+     * se actualiza solo, reporte a reporte. */
     async nuevo() {
       const auth = useAuthStore()
       const ultimo = this.reportes[0]
@@ -146,6 +151,8 @@ export const useRdcStore = defineStore('rdc', {
         sectorId: ultimo?.sectorId ?? null,
         frenteId: ultimo?.frenteId ?? null,
         capatazId: ultimo?.capatazId ?? null,
+        personalPrevio: ultimo?.personal,
+        maquinariaPrevia: ultimo?.maquinaria,
       })
 
       this.actual = await repo.guardar(reporte)
