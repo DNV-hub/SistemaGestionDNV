@@ -454,6 +454,23 @@ const inicialesUsuario = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 1.35rem;
+  /* Firefox: delgado y del color del texto tenue, no el gris grueso por
+     defecto del sistema operativo. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+.nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }
 .marca-icono {
   width: 32px;
