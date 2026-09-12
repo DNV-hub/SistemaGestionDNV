@@ -5,6 +5,7 @@ import { useRdcStore } from '../store/rdc'
 import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import { nombreDe } from '../services/rdcCalculos'
+import { explicarErrorSync } from '../services/rdcErrores'
 import '../estilos/rdc-tema.css'
 import '../estilos/tabler-rdc.css'
 import '../estilos/complementos.css'
@@ -32,10 +33,10 @@ function estadoDe(r) {
 
 function detalleEnvio(r) {
   if (r.estado === ESTADO.BORRADOR) {
-    return r.errorSupabase ? `No se pudo guardar en la nube todavía: ${r.errorSupabase}` : 'Todavía no se ha cerrado.'
+    return r.errorSupabase ? explicarErrorSync(r.errorSupabase) : 'Todavía no se ha cerrado.'
   }
   const parte = (nombre, estado, error) =>
-    `${nombre}: ${estado === ENVIO.ENVIADO ? 'enviado' : estado === ENVIO.ERROR ? `error — ${error ?? 'sin detalle'}` : 'pendiente'}`
+    `${nombre}: ${estado === ENVIO.ENVIADO ? 'enviado' : estado === ENVIO.ERROR ? `error — ${explicarErrorSync(error) ?? 'sin detalle'}` : 'pendiente'}`
   return `${parte('Sistema', r.estadoSupabase, r.errorSupabase)}\n${parte('SharePoint', r.estadoSharepoint, r.sharepointError)}`
 }
 
@@ -241,7 +242,7 @@ async function borrar(r) {
                 <span v-else>{{ item.supervisorNombre }}</span>
               </div>
               <div v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR && item.raw.errorSupabase" class="card-error">
-                {{ item.raw.errorSupabase }}
+                {{ explicarErrorSync(item.raw.errorSupabase) }}
               </div>
             </div>
             <button
