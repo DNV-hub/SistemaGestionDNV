@@ -87,7 +87,13 @@ const categoriaBadge = (estado) => CATEGORIA_BADGE[estado] ?? 'draft'
 onMounted(async () => {
   await vales.cargarLista()
   if (puedeCrearParaOtro.value) await vales.cargarSupervisores()
+  vales.cargarStockDisponible()
 })
+
+// id de material -> disponible ahora, para el modal "Nuevo vale" (mismo
+// dato que ya usa el supervisor en su propio panel, solo que acá se
+// necesita como mapa para consultarlo material por material).
+const stockPorMaterialMapa = computed(() => new Map(vales.stockPorMaterial.map((m) => [m.id, m.disponible])))
 
 const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
 
@@ -230,6 +236,7 @@ function nuevoMovil() {
       v-if="mostrarModal"
       :frentes-activos="vales.frentesActivos"
       :materiales-activos="vales.materialesActivos"
+      :stock-por-material="stockPorMaterialMapa"
       :supervisores-activos="puedeCrearParaOtro ? vales.supervisoresActivos : null"
       @guardar="crear"
       @cerrar="mostrarModal = false"

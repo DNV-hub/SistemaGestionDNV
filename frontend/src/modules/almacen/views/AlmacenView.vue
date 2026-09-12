@@ -386,7 +386,10 @@ function abrirCorregirAjuste(a) {
     </nav>
 
     <p v-if="aviso" class="aviso">{{ aviso }}</p>
-    <p v-if="almacen.error" class="error">{{ almacen.error }}</p>
+    <p v-if="almacen.error" class="error">
+      {{ almacen.error }}
+      <button type="button" class="reintentar" @click="almacen.cargar">Reintentar</button>
+    </p>
     <p v-if="!almacen.almacenes.length && !almacen.cargando" class="aviso-vacio">
       Todavía no hay almacenes creados. Usa el botón "Almacenes" para crear el primero.
     </p>
@@ -848,5 +851,16 @@ button {
 .error {
   color: var(--color-danger);
   font-size: 0.9rem;
+}
+.reintentar {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--color-danger);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>

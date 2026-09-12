@@ -17,6 +17,7 @@ import {
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
 import { crearMaterialesEnLote } from '../../catalogo/services/catalogoService'
+import { conTiempoLimite } from '../../../utils/conTiempoLimite'
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
@@ -36,15 +37,22 @@ export const useAlmacenStore = defineStore('almacen', {
       this.cargando = true
       this.error = ''
       try {
-        const [almacenes, contratos, stock, ingresos, ajustes, salidas, materialesActivos] = await Promise.all([
-          listarAlmacenes(),
-          listarContratos(),
-          listarStock(),
-          listarIngresos(),
-          listarAjustes(),
-          listarSalidas(),
-          listarMaterialesActivos(),
-        ])
+        // conTiempoLimite: si una de las siete consultas se cuelga (red
+        // inestable, token refrescándose) sin resolver ni rechazar nunca,
+        // esta pantalla se quedaba en "Cargando…" indefinidamente y la
+        // única salida era recargar la página a ciegas. A los 20s se corta
+        // sola con un error que sí se puede reintentar desde acá.
+        const [almacenes, contratos, stock, ingresos, ajustes, salidas, materialesActivos] = await conTiempoLimite(
+          Promise.all([
+            listarAlmacenes(),
+            listarContratos(),
+            listarStock(),
+            listarIngresos(),
+            listarAjustes(),
+            listarSalidas(),
+            listarMaterialesActivos(),
+          ])
+        )
         this.almacenes = almacenes
         this.contratos = contratos
         this.stock = stock
@@ -53,7 +61,7 @@ export const useAlmacenStore = defineStore('almacen', {
         this.salidas = salidas
         this.materialesActivos = materialesActivos
       } catch (e) {
-        this.error = 'No se pudo cargar la información de almacén.'
+        this.error = e?.message ?? 'No se pudo cargar la información de almacén.'
         console.error(e)
       } finally {
         this.cargando = false

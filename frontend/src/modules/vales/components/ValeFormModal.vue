@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, useAttrs } from 'vue'
 import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
+import BuscadorSimple from '../../../components/BuscadorSimple.vue'
 
 const props = defineProps({
   frentesActivos: { type: Array, default: () => [] },
@@ -9,7 +10,16 @@ const props = defineProps({
   // que llegó por WhatsApp) ve este selector; un supervisor que crea su
   // propio vale no lo necesita, el dueño ya es él mismo.
   supervisoresActivos: { type: Array, default: null },
+  // id de material -> cantidad disponible ahora, para mostrarla al lado de
+  // cada línea a medida que se elige el material — igual que ya lo ve el
+  // supervisor en su propio panel, para no pedir a ciegas algo que no hay.
+  stockPorMaterial: { type: Map, default: () => new Map() },
 })
+
+const opcionesFrentes = computed(() =>
+  props.frentesActivos.map((f) => ({ value: f.id, etiqueta: f.codigo ? `${f.codigo} — ${f.nombre}` : f.nombre }))
+)
+const opcionesSupervisores = computed(() => (props.supervisoresActivos ?? []).map((s) => ({ value: s.id, etiqueta: s.nombre })))
 
 defineEmits(['cerrar'])
 const attrs = useAttrs()
@@ -35,6 +45,11 @@ function quitarLinea(idx) {
 
 function unidadDe(materialId) {
   return props.materialesActivos.find((m) => m.id === materialId)?.unidad ?? ''
+}
+
+function disponibleDe(materialId) {
+  if (!materialId) return null
+  return props.stockPorMaterial.get(materialId) ?? 0
 }
 
 const lineasValidas = computed(() =>
@@ -83,25 +98,22 @@ async function onSubmit() {
 
       <label>
         Frente
-        <select v-model="form.frente_id" required>
-          <option value="" disabled>Selecciona un frente…</option>
-          <option v-for="f in frentesActivos" :key="f.id" :value="f.id">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</option>
-        </select>
+        <BuscadorSimple v-model="form.frente_id" :opciones="opcionesFrentes" placeholder="Escribe para buscar un frente…" />
       </label>
 
       <label v-if="mostrarSelectorSupervisor">
         Supervisor (a nombre de quién es este vale)
-        <select v-model="form.supervisor_id" required>
-          <option value="" disabled>Selecciona un supervisor…</option>
-          <option v-for="s in supervisoresActivos" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-        </select>
+        <BuscadorSimple v-model="form.supervisor_id" :opciones="opcionesSupervisores" placeholder="Escribe para buscar un supervisor…" />
         <span class="ayuda">Para cargar un vale que llegó por WhatsApp u otro medio, a nombre del supervisor que lo pidió.</span>
       </label>
 
       <div class="lineas">
         <p class="etiqueta">Materiales solicitados</p>
         <div v-for="(linea, idx) in lineas" :key="idx" class="linea">
-          <BuscadorMaterial v-model="linea.material_id" :materiales="materialesActivos" class="linea-material" />
+          <div class="linea-material-col">
+            <BuscadorMaterial v-model="linea.material_id" :materiales="materialesActivos" class="linea-material" />
+            <span v-if="linea.material_id" class="stock-vivo">Disponible ahora: {{ disponibleDe(linea.material_id) }} {{ unidadDe(linea.material_id) }}</span>
+          </div>
           <input v-model="linea.cantidad_solicitada" type="number" step="0.001" min="0.001" placeholder="Cantidad" />
           <span class="unidad-badge">{{ unidadDe(linea.material_id) }}</span>
           <button type="button" class="quitar" title="Quitar línea" @click="quitarLinea(idx)">×</button>
@@ -138,12 +150,12 @@ async function onSubmit() {
 .modal {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  width: 480px;
+  gap: 0.9rem;
+  width: 640px;
   max-width: calc(100vw - 2rem);
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1.75rem;
   background: var(--color-surface);
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
@@ -175,8 +187,8 @@ textarea {
 .lineas {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.6rem;
+  gap: 0.7rem;
+  padding: 0.9rem;
   background: var(--color-surface-2);
   border-radius: var(--radius-control);
 }
@@ -188,14 +200,33 @@ textarea {
 }
 .linea {
   display: flex;
-  gap: 0.4rem;
-  align-items: center;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+.linea-material-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
 }
 .linea-material {
   flex: 1;
 }
+.stock-vivo {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  padding-left: 0.15rem;
+}
 .linea input[type='number'] {
-  width: 100px;
+  width: 110px;
+  flex-shrink: 0;
+}
+.linea .unidad-badge {
+  padding-top: 0.5rem;
+}
+.linea .quitar {
+  padding-top: 0.3rem;
 }
 .unidad-badge {
   min-width: 2.5rem;

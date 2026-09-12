@@ -143,6 +143,13 @@ async function enviar() {
 
 <style scoped>
 .vale-nuevo {
+  /* Esta pantalla es de tema claro siempre, sin importar si el Sistema
+     está en modo oscuro — sin esto, los controles nativos del navegador
+     (inputs sin `background` propio, como el de cantidad) heredan el
+     `color-scheme: dark` de más arriba y el navegador los renderiza con
+     fondo negro y texto que no combina con el resto de la pantalla, que
+     sigue clara. */
+  color-scheme: light;
   --bg: #f4f5f7;
   --card: #ffffff;
   --border-lista: #e4e7ec;
@@ -290,7 +297,13 @@ async function enviar() {
   text-align: center;
   font-size: 16px;
   font-family: inherit;
+  /* Sin `background` propio, algunos navegadores de Android oscurecen el
+     input solo (modo oscuro forzado del sistema) sin ajustar el color del
+     texto a la par — quedaba fondo negro con números casi ilegibles. Fijar
+     los dos y `color-scheme: light` evita que el navegador reinvente nada. */
+  background: var(--card);
   color: var(--text);
+  color-scheme: light;
   flex-shrink: 0;
 }
 .tarjeta-mat-unidad {

@@ -43,6 +43,11 @@ function unidadDe(materialId) {
   return vales.materialesActivos.find((m) => m.id === materialId)?.unidad ?? ''
 }
 
+function disponibleDe(materialId) {
+  if (!materialId) return null
+  return vales.stockPorMaterial.find((m) => m.id === materialId)?.disponible ?? 0
+}
+
 function agregarLinea() {
   lineas.value.push({ material_id: '', cantidad_solicitada: '' })
 }
@@ -197,7 +202,10 @@ async function solicitarDevolucion() {
       </label>
 
       <div v-for="(linea, idx) in lineas" :key="idx" class="linea">
-        <BuscadorMaterial v-model="linea.material_id" :materiales="vales.materialesActivos" class="linea-material" />
+        <div class="linea-material-col">
+          <BuscadorMaterial v-model="linea.material_id" :materiales="vales.materialesActivos" class="linea-material" />
+          <span v-if="linea.material_id" class="stock-vivo">Disponible ahora: {{ disponibleDe(linea.material_id) }} {{ unidadDe(linea.material_id) }}</span>
+        </div>
         <div class="linea-cantidad">
           <input v-model="linea.cantidad_solicitada" type="number" step="0.001" min="0.001" placeholder="Cantidad" />
           <span class="unidad-badge">{{ unidadDe(linea.material_id) }}</span>
@@ -411,9 +419,19 @@ textarea {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.linea-material {
+.linea-material-col {
   flex: 1;
   min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.linea-material {
+  flex: 1;
+}
+.stock-vivo {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
 }
 .linea-cantidad {
   display: flex;
