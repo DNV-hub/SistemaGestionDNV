@@ -135,7 +135,14 @@ const navAlmacen = computed(() => [
   { to: '/alertas', label: 'Alertas', icono: 'alertas', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
 ])
 
-const navSistema = [{ to: '/usuarios', label: 'Usuarios', icono: 'usuarios', permiso: 'usuarios.ver' }]
+// "Usuarios y roles" asigna qué rol tiene cada persona; "Roles y permisos"
+// (nuevo) decide qué puede hacer cada rol — son dos herramientas distintas,
+// aunque las dos viven en este mismo cajón del menú porque ambas son
+// configuración de acceso y ninguna la toca un supervisor en el día a día.
+const navSistema = [
+  { to: '/usuarios', label: 'Usuarios y roles', icono: 'usuarios', permiso: 'usuarios.ver' },
+  { to: '/configuracion/roles', label: 'Roles y permisos', icono: 'engranaje', permiso: 'roles.gestionar' },
+]
 
 function visibles(items) {
   return items.filter((item) => auth.tienePermiso(item.permiso) && !item.rolesExcluidos?.includes(auth.nombreRol))
@@ -230,13 +237,14 @@ const inicialesUsuario = computed(() => {
             <span>{{ tema.modo === 'dark' ? 'Modo claro' : 'Modo oscuro' }}</span>
           </button>
           <router-link
-            v-if="visibles(navSistema).length"
-            :to="navSistema[0].to"
+            v-for="item in visibles(navSistema)"
+            :key="item.to"
+            :to="item.to"
             class="menu-item"
             @click="mostrarMenu = false"
           >
-            <IconoNav :nombre="navSistema[0].icono" />
-            <span>{{ navSistema[0].label }} y roles</span>
+            <IconoNav :nombre="item.icono" />
+            <span>{{ item.label }}</span>
           </router-link>
           <button type="button" class="menu-item peligro" @click="cerrarSesionDesdeMenu">
             <IconoNav nombre="salir" />
@@ -306,13 +314,14 @@ const inicialesUsuario = computed(() => {
         <span>{{ tema.modo === 'dark' ? 'Modo claro' : 'Modo oscuro' }}</span>
       </button>
       <router-link
-        v-if="visibles(navSistema).length"
-        :to="navSistema[0].to"
+        v-for="item in visibles(navSistema)"
+        :key="item.to"
+        :to="item.to"
         class="hoja-item"
         @click="mostrarMas = false"
       >
-        <IconoNav :nombre="navSistema[0].icono" />
-        <span>{{ navSistema[0].label }} y roles</span>
+        <IconoNav :nombre="item.icono" />
+        <span>{{ item.label }}</span>
       </router-link>
       <button type="button" class="hoja-item peligro" @click="cerrarSesionDesdeMas">
         <IconoNav nombre="salir" />
