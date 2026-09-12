@@ -89,6 +89,19 @@ async function onSubmit() {
         <input v-model="form.unidad" type="text" required placeholder="m3, kg, und…" />
       </label>
 
+      <label class="destacado">
+        ¿Este material necesita conversión de unidades? (rollos de malla, barras, cables…)
+        <select v-model="form.tipo_conversion">
+          <option value="ninguna">No — se controla y se paga en la misma unidad</option>
+          <option value="area">Sí, por área — cada ingreso pide ancho × largo del rollo (→ m2)</option>
+          <option value="longitud">Sí, por longitud — cada ingreso pide el largo de la pieza (→ ml)</option>
+        </select>
+        <span class="ayuda">
+          Si esto se queda en "No" y en realidad el material sí necesita conversión (como una malla), el ingreso
+          nunca va a pedir las medidas y el EDP va a salir mal. Revísalo también al editar un material ya creado.
+        </span>
+      </label>
+
       <label>
         Descripción EDP
         <select v-model="form.descripcion_edp_id">
@@ -100,19 +113,6 @@ async function onSubmit() {
       <label>
         Unidad EDP
         <input v-model="form.unidad_edp" type="text" placeholder="m3, kg, und…" />
-      </label>
-
-      <label>
-        Conversión al ingresar
-        <select v-model="form.tipo_conversion">
-          <option value="ninguna">Ninguna — mismas unidades</option>
-          <option value="area">Área (ancho × largo del rollo → m2)</option>
-          <option value="longitud">Longitud (largo de la pieza → ml)</option>
-        </select>
-        <span class="ayuda">
-          Si no es "Ninguna", cada ingreso de este material va a pedir esas medidas para calcular el EDP — pueden
-          variar de un ingreso a otro (ej. rollos de distinto tamaño).
-        </span>
       </label>
 
       <label>
@@ -202,6 +202,12 @@ input:disabled {
   font-size: 0.75rem;
   font-weight: 400;
   color: var(--color-text-muted);
+}
+.destacado {
+  padding: 0.6rem 0.7rem;
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-control);
 }
 .acciones {
   display: flex;
