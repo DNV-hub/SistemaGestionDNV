@@ -6,6 +6,7 @@ import { useTemaStore } from './store/tema'
 import IconoNav from './components/IconoNav.vue'
 import { contarValesPendientes, contarAlertasActivas } from './modules/dashboard/services/dashboardService'
 import { suplantandoAOtraCuenta, volverAMiCuenta } from './modules/developer/services/developerService'
+import { hayActualizacionSW, aplicarActualizacionSW } from './actualizacionSW'
 import { pendientes as rdcPendientes } from './modules/rdc/services/rdcRepository'
 import { pendientes as fotosPendientes } from './modules/fotos/services/fotosRepository'
 
@@ -171,6 +172,11 @@ const inicialesUsuario = computed(() => {
 </script>
 
 <template>
+  <div v-if="hayActualizacionSW" class="toast-actualizacion">
+    <span>Hay una versión nueva de la aplicación.</span>
+    <button type="button" @click="aplicarActualizacionSW">Actualizar</button>
+  </div>
+
   <div v-if="viendoComoOtraCuenta" class="banner-suplantacion">
     <span>Developer: viendo el sistema como <strong>{{ auth.perfil?.nombre }}</strong> ({{ auth.nombreRol }}).</span>
     <button type="button" :disabled="volviendo" @click="volver">{{ volviendo ? 'Volviendo…' : 'Volver a mi cuenta' }}</button>
@@ -332,6 +338,34 @@ const inicialesUsuario = computed(() => {
 </template>
 
 <style scoped>
+.toast-actualizacion {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.75rem 0.7rem 1rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 0.85rem;
+  max-width: calc(100vw - 2rem);
+}
+.toast-actualizacion button {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
 .banner-suplantacion {
   position: fixed;
   top: 0;

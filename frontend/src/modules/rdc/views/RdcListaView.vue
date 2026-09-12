@@ -273,6 +273,13 @@ async function borrar(r) {
    rdc-tema.css a propósito: es el fondo general de página, y queremos que
    ESTA pantalla (y solo esta, por ahora) use el tono nuevo. */
 .rdc-app {
+  /* En el celular la pantalla ya es angosta y esto no hace nada; en
+     escritorio evita que las tarjetas del historial se estiren de punta a
+     punta de la ventana, que es como se ve hoy — igual que ya hace
+     rdc-tema.css con FotosView (`.rdc-app .app{max-width:720px}`), pero acá
+     directo en la raíz porque esta pantalla no tiene ese wrapper `.app`. */
+  max-width: 720px;
+  margin: 0 auto;
   --bg: #f4f5f7;
   --card: #ffffff;
   --border-lista: #e4e7ec;

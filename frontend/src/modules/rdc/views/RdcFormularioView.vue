@@ -157,6 +157,11 @@ function alSoltar(e) {
   height: 100vh;
   height: calc(100dvh - env(safe-area-inset-top));
   background: var(--bg);
+  /* En el celular esto no hace nada (la pantalla ya es más angosta que
+     720px); en escritorio evita que el formulario se estire de punta a
+     punta de la ventana — mismo tratamiento que ya tiene RdcListaView. */
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 .appbar {
