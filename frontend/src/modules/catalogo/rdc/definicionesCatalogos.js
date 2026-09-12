@@ -124,6 +124,9 @@ export const CATALOGOS_RDC = [
     // algo real, la propia base rechaza el borrado con una violación de
     // llave foránea antes de que se pierda nada.
     campoActivo: null,
+    // Tampoco tiene columna `orden` (a diferencia de los demás catálogos):
+    // se ordena por código, que es su llave de negocio real.
+    ordenarPor: 'codigo',
     porFrente: true,
     columnas: [
       { clave: 'codigo', etiqueta: 'Código', tipo: 'texto', requerido: true },

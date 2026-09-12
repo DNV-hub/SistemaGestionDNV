@@ -16,7 +16,14 @@ const route = useRoute()
 const router = useRouter()
 
 const cargando = ref(true)
-const error = ref('')
+// Un error por catálogo, no uno solo global: antes, si UNA de las nueve
+// tablas fallaba (pasó con la biblioteca de pernos, que no tiene columna
+// `orden` y se pedía ordenada por esa columna igual que las demás), el
+// `Promise.all` entero rechazaba y ninguno de los otros ocho catálogos
+// llegaba a mostrarse — parecía que todo estaba roto cuando solo uno lo
+// estaba. Con `allSettled` cada catálogo vive o muere por su cuenta.
+const erroresPorCatalogo = reactive({})
+const errorUsuarios = ref('')
 // clave del catálogo -> sus filas. Se cargan los nueve de una sola vez al
 // entrar (son catálogos chicos de referencia, no algo que crezca sin límite)
 // para que cambiar de pestaña sea instantáneo, sin ida y vuelta a la red.
@@ -25,21 +32,24 @@ const usuarios = ref([])
 
 async function cargarTodo() {
   cargando.value = true
-  error.value = ''
-  try {
-    const [filasPorCatalogo, usuariosVinculables] = await Promise.all([
-      Promise.all(CATALOGOS_RDC.map((def) => listarCatalogo(def.tabla))),
-      listarUsuariosVinculables(),
-    ])
-    CATALOGOS_RDC.forEach((def, i) => {
-      datos[def.clave] = filasPorCatalogo[i]
-    })
-    usuarios.value = usuariosVinculables
-  } catch (e) {
-    error.value = e?.message ?? 'No se pudieron cargar los catálogos del RDC.'
-  } finally {
-    cargando.value = false
-  }
+  const [resultadosCatalogos, resultadoUsuarios] = await Promise.all([
+    Promise.allSettled(CATALOGOS_RDC.map((def) => listarCatalogo(def.tabla, { orderBy: def.ordenarPor ?? 'orden' }))),
+    Promise.allSettled([listarUsuariosVinculables()]),
+  ])
+  CATALOGOS_RDC.forEach((def, i) => {
+    const r = resultadosCatalogos[i]
+    if (r.status === 'fulfilled') {
+      datos[def.clave] = r.value
+      erroresPorCatalogo[def.clave] = ''
+    } else {
+      datos[def.clave] = []
+      erroresPorCatalogo[def.clave] = r.reason?.message ?? 'No se pudo cargar este catálogo.'
+    }
+  })
+  const [usuariosResultado] = resultadoUsuarios
+  if (usuariosResultado.status === 'fulfilled') usuarios.value = usuariosResultado.value
+  else errorUsuarios.value = usuariosResultado.reason?.message ?? 'No se pudieron cargar las cuentas para vincular.'
+  cargando.value = false
 }
 onMounted(cargarTodo)
 
@@ -62,6 +72,7 @@ function irA(clave) {
   router.replace({ query: { ...route.query, tab: clave } })
 }
 const definicionActiva = computed(() => CATALOGOS_RDC.find((d) => d.clave === claveActiva.value) ?? CATALOGOS_RDC[0])
+const errorActivo = computed(() => erroresPorCatalogo[claveActiva.value] || '')
 
 // Prefijos, Partidas EDT y Pernos son catálogos "por frente" (así los pidió
 // el modelo original): antes de ver o tocar sus filas hay que elegir uno.
@@ -114,7 +125,8 @@ async function alEliminar(id) {
       </button>
     </nav>
 
-    <p v-if="error" class="error">{{ error }}</p>
+    <p v-if="errorUsuarios" class="error">{{ errorUsuarios }}</p>
+    <p v-if="errorActivo" class="error">{{ errorActivo }}</p>
     <p v-if="cargando">Cargando…</p>
 
     <template v-else>
