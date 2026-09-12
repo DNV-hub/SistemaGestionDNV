@@ -56,7 +56,14 @@ export const UNIDADES = ['ML', 'M2', 'M3', 'UND', 'HH', 'GLB', 'VIAJE']
 // Nombre exacto del sector que además reporta mano de obra indirecta. En el
 // RDC original esto es una comparación de texto suelta en medio del código de
 // exportación; acá al menos está en un solo lugar y con nombre.
-export const SECTOR_SALA_ELECTRICA = 'A: 4000 - SALA ELECTRICA'
+//
+// Antes de 20260911170000 este sector vivía en rdc_sectores con el nombre
+// "A: 4000 - SALA ELECTRICA" (el RDC codificaba el área en el propio texto).
+// Al unificarse con la tabla `sectores` del Sistema (que no tiene esa
+// convención) se limpió a "SALA ELECTRICA" — si esta constante no se
+// actualiza junto con esa migración, el personal indirecto de este sector
+// deja de agregarse solo, en silencio.
+export const SECTOR_SALA_ELECTRICA = 'SALA ELECTRICA'
 
 // Grilla de medias horas (05:00 a 22:30) que usan los selectores de horario de
 // los metrados.

@@ -277,7 +277,7 @@ async function borrarReportesSeleccionados() {
             <tr v-for="r in reportes" :key="r.id">
               <td><input type="checkbox" :checked="reportesSeleccionados.has(r.id)" @change="alternar(reportesSeleccionados, r.id)" /></td>
               <td>{{ r.fecha }}</td>
-              <td>{{ r.rdc_frentes?.nombre ?? '—' }}</td>
+              <td>{{ r.frentes?.nombre ?? '—' }}</td>
               <td>{{ r.rdc_supervisores?.nombre ?? '—' }}</td>
               <td>{{ r.estado }}</td>
             </tr>

@@ -11,10 +11,15 @@
 // vincular en Supervisores) y vive en CatalogosRdcView.vue, no aquí — este
 // archivo es solo forma, no datos.
 export const CATALOGOS_RDC = [
+  // Sectores y Frentes NO son catálogos propios del RDC (a diferencia de los
+  // siete de abajo): son las mismas tablas `sectores`/`frentes` que ya usa
+  // el resto del Sistema (Vales, Kardex, Procura, Almacén) desde la
+  // migración 20260911170000 — una sola fuente, editable desde acá y visible
+  // también en el módulo Frentes.
   {
     clave: 'sectores',
     etiqueta: 'Sectores',
-    tabla: 'rdc_sectores',
+    tabla: 'sectores',
     campoActivo: 'activo',
     columnas: [
       { clave: 'nombre', etiqueta: 'Nombre', tipo: 'texto', requerido: true },
@@ -24,12 +29,18 @@ export const CATALOGOS_RDC = [
   {
     clave: 'frentes',
     etiqueta: 'Frentes',
-    tabla: 'rdc_frentes',
-    campoActivo: 'activo',
+    tabla: 'frentes',
+    // `frentes` no tiene columna `activo`: su ciclo de vida es `estado`
+    // (activo / paralizado / cerrado), así que se administra como una
+    // columna de selección más, no con el checkbox especial de activo.
+    campoActivo: null,
+    ordenarPor: 'nombre',
     columnas: [
       { clave: 'nombre', etiqueta: 'Nombre', tipo: 'texto', requerido: true },
       { clave: 'sector_id', etiqueta: 'Sector', tipo: 'seleccion', opciones: 'sectores', requerido: true },
-      { clave: 'orden', etiqueta: 'Orden', tipo: 'numero' },
+      { clave: 'codigo', etiqueta: 'Código', tipo: 'texto' },
+      { clave: 'area', etiqueta: 'Área', tipo: 'texto', requerido: true },
+      { clave: 'estado', etiqueta: 'Estado', tipo: 'seleccion', opciones: 'estadoFrente', requerido: true },
     ],
   },
   {
@@ -149,5 +160,10 @@ export const OPCIONES_FIJAS = {
   bloquePartida: [
     { value: 1, label: '1 — Preliminares' },
     { value: 3, label: '3 — Complementarias' },
+  ],
+  estadoFrente: [
+    { value: 'activo', label: 'Activo' },
+    { value: 'paralizado', label: 'Paralizado' },
+    { value: 'cerrado', label: 'Cerrado' },
   ],
 }

@@ -77,9 +77,9 @@ const errorActivo = computed(() => erroresPorCatalogo[claveActiva.value] || '')
 // Prefijos, Partidas EDT y Pernos son catálogos "por frente" (así los pidió
 // el modelo original): antes de ver o tocar sus filas hay que elegir uno.
 const frenteSeleccionadoId = ref(null)
-const frentesOrdenados = computed(() =>
-  [...(datos.frentes ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0) || a.nombre.localeCompare(b.nombre)),
-)
+// `frentes` no tiene columna `orden` (a diferencia de los demás catálogos
+// del RDC): se ordena alfabéticamente.
+const frentesOrdenados = computed(() => [...(datos.frentes ?? [])].sort((a, b) => a.nombre.localeCompare(b.nombre)))
 
 const filasVisibles = computed(() => {
   const todas = datos[definicionActiva.value.clave] ?? []
@@ -135,7 +135,7 @@ async function alEliminar(id) {
           Frente:
           <select v-model="frenteSeleccionadoId">
             <option :value="null">— Elige un frente —</option>
-            <option v-for="f in frentesOrdenados" :key="f.id" :value="f.id">{{ f.activo ? f.nombre : `${f.nombre} (inactivo)` }}</option>
+            <option v-for="f in frentesOrdenados" :key="f.id" :value="f.id">{{ f.estado === 'activo' ? f.nombre : `${f.nombre} (${f.estado})` }}</option>
           </select>
         </label>
       </div>

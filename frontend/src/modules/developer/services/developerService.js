@@ -23,7 +23,7 @@ export async function borrarVale(id) {
 export async function listarReportesRdcParaBorrar() {
   const { data, error } = await supabase
     .from('rdc_reportes')
-    .select('id, fecha, estado, rdc_frentes(nombre), rdc_supervisores(nombre)')
+    .select('id, fecha, estado, frentes(nombre), rdc_supervisores(nombre)')
     .order('fecha', { ascending: false })
     .limit(500)
   if (error) throw error

@@ -19,8 +19,14 @@ const numero = (v) => (v === '' || v === null || v === undefined ? null : Number
  * el formulario se pueda dibujar sin señal (ver rdcRepository). */
 export async function descargarCatalogos() {
   const consultas = {
-    sectores: supabase.from('rdc_sectores').select('id, nombre, orden').eq('activo', true).order('orden'),
-    frentes: supabase.from('rdc_frentes').select('id, nombre, sector_id, orden').eq('activo', true).order('orden'),
+    // sectores/frentes ya no son catálogos propios del RDC (20260911170000):
+    // son los mismos que usa el resto del Sistema (Vales, Kardex, Procura,
+    // Almacén). Sin `orden` (esa tabla no lo tiene) y "activo" para un
+    // frente es su `estado` — se incluye también "paralizado" porque un
+    // frente parado temporalmente sigue siendo uno sobre el que un
+    // supervisor puede necesitar reportar (por ejemplo, un Stand By).
+    sectores: supabase.from('sectores').select('id, nombre').eq('activo', true).order('nombre'),
+    frentes: supabase.from('frentes').select('id, nombre, sector_id').neq('estado', 'cerrado').order('nombre'),
     supervisores: supabase.from('rdc_supervisores').select('id, nombre, usuario_id').eq('activo', true).order('orden'),
     capataces: supabase.from('rdc_capataces').select('id, nombre').eq('activo', true).order('orden'),
     redlineSupervisores: supabase.from('rdc_redline_supervisores').select('id, nombre').eq('activo', true).order('orden'),
@@ -272,7 +278,7 @@ export async function listarReportes({ desde, hasta, frenteId, supervisorId } = 
     // necesita para decidir si el borrador que está mostrando es del propio
     // usuario (y por lo tanto se le puede ofrecer borrarlo), sin tener que
     // volver a preguntarle a la base fila por fila.
-    .select('id, fecha, estado, estado_sharepoint, created_at, creado_por, supervisor_id, rdc_frentes(nombre), rdc_sectores(nombre), rdc_supervisores(nombre)')
+    .select('id, fecha, estado, estado_sharepoint, created_at, creado_por, supervisor_id, frentes(nombre), sectores(nombre), rdc_supervisores(nombre)')
     .order('fecha', { ascending: false })
     .limit(300)
 

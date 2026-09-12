@@ -97,7 +97,7 @@ const historialAgrupado = computed(() => {
   const remotos = rdc.historicoRemoto.map((r) => ({
     id: r.id,
     fecha: r.fecha,
-    frenteNombre: r.rdc_frentes?.nombre ?? '—',
+    frenteNombre: r.frentes?.nombre ?? '—',
     esLocal: false,
     supervisorNombre: r.rdc_supervisores?.nombre ?? '—',
     // Un borrador que llegó de otro dispositivo (ahora también se
