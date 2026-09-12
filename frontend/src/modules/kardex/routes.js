@@ -1,10 +1,8 @@
-import KardexView from './views/KardexView.vue'
-
 export const kardexRoutes = [
   {
     path: '/kardex',
     name: 'kardex',
-    component: KardexView,
+    component: () => import('./views/KardexView.vue'),
     meta: { permiso: 'kardex.ver' },
   },
 ]

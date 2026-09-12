@@ -1,10 +1,8 @@
-import AlmacenView from './views/AlmacenView.vue'
-
 export const almacenRoutes = [
   {
     path: '/almacen',
     name: 'almacen',
-    component: AlmacenView,
+    component: () => import('./views/AlmacenView.vue'),
     meta: { permiso: 'stock.ver' },
   },
 ]

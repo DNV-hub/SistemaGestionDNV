@@ -1,10 +1,8 @@
-import RolesPermisosView from './views/RolesPermisosView.vue'
-
 export const configuracionRoutes = [
   {
     path: '/configuracion/roles',
     name: 'configuracion-roles',
-    component: RolesPermisosView,
+    component: () => import('./views/RolesPermisosView.vue'),
     meta: { permiso: 'roles.gestionar' },
   },
 ]

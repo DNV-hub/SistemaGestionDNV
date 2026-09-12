@@ -1,12 +1,8 @@
-import CatalogoView from './views/CatalogoView.vue'
-import CapatacesView from './rdc/views/CapatacesView.vue'
-import CatalogosRdcView from './rdc/views/CatalogosRdcView.vue'
-
 export const catalogoRoutes = [
   {
     path: '/catalogo',
     name: 'catalogo',
-    component: CatalogoView,
+    component: () => import('./views/CatalogoView.vue'),
     // catalogo.ver también autoriza la lectura de `materiales` para las
     // pantallas que lo incrustan (Vales, Kardex, Almacén) — Almacén sí lo
     // necesita para eso, pero no debe gestionar el catálogo, así que la
@@ -20,13 +16,13 @@ export const catalogoRoutes = [
   {
     path: '/catalogo/capataces',
     name: 'catalogo-capataces',
-    component: CapatacesView,
+    component: () => import('./rdc/views/CapatacesView.vue'),
     meta: { permiso: 'rdc.catalogos_gestionar' },
   },
   {
     path: '/catalogo/rdc',
     name: 'catalogo-rdc',
-    component: CatalogosRdcView,
+    component: () => import('./rdc/views/CatalogosRdcView.vue'),
     meta: { permiso: 'rdc.catalogos_gestionar' },
   },
 ]

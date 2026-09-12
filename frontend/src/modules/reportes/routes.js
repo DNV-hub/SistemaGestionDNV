@@ -1,10 +1,8 @@
-import ReportesView from './views/ReportesView.vue'
-
 export const reportesRoutes = [
   {
     path: '/reportes',
     name: 'reportes',
-    component: ReportesView,
+    component: () => import('./views/ReportesView.vue'),
     meta: { permiso: 'reportes.exportar' },
   },
 ]

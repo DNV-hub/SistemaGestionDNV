@@ -1,17 +1,14 @@
-import ProcuraView from './views/ProcuraView.vue'
-import ProcuraFrenteView from './views/ProcuraFrenteView.vue'
-
 export const procuraRoutes = [
   {
     path: '/procura',
     name: 'procura',
-    component: ProcuraView,
+    component: () => import('./views/ProcuraView.vue'),
     meta: { permiso: 'procura.ver' },
   },
   {
     path: '/procura/:frenteId',
     name: 'procura-frente',
-    component: ProcuraFrenteView,
+    component: () => import('./views/ProcuraFrenteView.vue'),
     meta: { permiso: 'procura.ver' },
   },
 ]

@@ -1,10 +1,8 @@
-import AlertasView from './views/AlertasView.vue'
-
 export const alertasRoutes = [
   {
     path: '/alertas',
     name: 'alertas',
-    component: AlertasView,
+    component: () => import('./views/AlertasView.vue'),
     meta: { permiso: 'alertas.ver' },
   },
 ]

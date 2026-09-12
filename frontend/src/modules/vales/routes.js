@@ -1,15 +1,8 @@
-import ValesView from './views/ValesView.vue'
-import ValeDetalleView from './views/ValeDetalleView.vue'
-import ValeNuevoView from './views/ValeNuevoView.vue'
-import SelectorMaterialView from './views/SelectorMaterialView.vue'
-import StockEnVivoView from './views/StockEnVivoView.vue'
-import DevolucionNuevaView from './views/DevolucionNuevaView.vue'
-
 export const valesRoutes = [
   {
     path: '/vales',
     name: 'vales',
-    component: ValesView,
+    component: () => import('./views/ValesView.vue'),
     meta: { permiso: 'vales.ver_propios' },
   },
   // Hoja a pantalla completa para celular (docs/mockups/04-vale-nuevo.html +
@@ -19,13 +12,13 @@ export const valesRoutes = [
   {
     path: '/vales/nuevo',
     name: 'vale-nuevo',
-    component: ValeNuevoView,
+    component: () => import('./views/ValeNuevoView.vue'),
     meta: { permiso: 'vales.crear', ocultarTabbar: true },
   },
   {
     path: '/vales/nuevo/material',
     name: 'vale-nuevo-material',
-    component: SelectorMaterialView,
+    component: () => import('./views/SelectorMaterialView.vue'),
     meta: { permiso: 'vales.crear', ocultarTabbar: true },
   },
   // Accesos rápidos dentro de "Vales" (antes vivían en el panel de escritorio
@@ -33,19 +26,19 @@ export const valesRoutes = [
   {
     path: '/vales/stock',
     name: 'vales-stock',
-    component: StockEnVivoView,
+    component: () => import('./views/StockEnVivoView.vue'),
     meta: { permiso: 'vales.ver_propios', ocultarTabbar: true },
   },
   {
     path: '/vales/devolucion',
     name: 'vales-devolucion',
-    component: DevolucionNuevaView,
+    component: () => import('./views/DevolucionNuevaView.vue'),
     meta: { permiso: 'devoluciones.crear', ocultarTabbar: true },
   },
   {
     path: '/vales/:id',
     name: 'vale-detalle',
-    component: ValeDetalleView,
+    component: () => import('./views/ValeDetalleView.vue'),
     meta: { permiso: 'vales.ver_propios' },
   },
 ]
