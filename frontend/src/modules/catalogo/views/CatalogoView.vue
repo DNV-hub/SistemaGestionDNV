@@ -6,6 +6,7 @@ import MaterialFormModal from '../components/MaterialFormModal.vue'
 import CategoriasModal from '../components/CategoriasModal.vue'
 import NombresEdpModal from '../components/NombresEdpModal.vue'
 import ImportarExcelModal from '../components/ImportarExcelModal.vue'
+import CatalogoTabs from '../components/CatalogoTabs.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
 import { descargarExcel } from '../../../utils/exportarExcel'
 
@@ -124,6 +125,7 @@ async function eliminar(material) {
 
 <template>
   <div class="catalogo">
+    <CatalogoTabs />
     <header class="cabecera">
       <h1>Catálogo de materiales</h1>
       <div class="acciones-cabecera">
