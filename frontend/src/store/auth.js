@@ -50,7 +50,15 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   getters: {
-    estaAutenticado: (state) => !!state.session,
+    // No es solo "hay sesión viva": también cuenta tener un perfil en
+    // caché sin haber confirmado un cierre de sesión real. `perfil` se
+    // limpia a `null` en los dos únicos lugares donde SÍ hay un cierre de
+    // sesión de verdad (signOut() y el SIGNED_OUT de onAuthStateChange con
+    // conexión) — nunca por un fallo de red. Ver el comentario de init()
+    // para el caso concreto que esto resuelve. La seguridad real no
+    // depende de esto: cada consulta a Supabase se valida con RLS, que no
+    // usa esta caché.
+    estaAutenticado: (state) => !!state.session || !!state.perfil,
     nombreRol: (state) => state.perfil?.roles?.nombre ?? null,
   },
 
@@ -68,6 +76,22 @@ export const useAuthStore = defineStore('auth', {
         // inmediato aunque no haya red; después se intenta refrescar.
         this.aplicarCache()
         await this.cargarPerfil()
+      } else if (!navigator.onLine) {
+        // Esto es lo que resuelve "en Android, cada vez que vuelvo a la
+        // app me manda al login": init() corre una sola vez, al cargar la
+        // página — pero un navegador móvil descarta de memoria una pestaña
+        // en segundo plano (pantalla apagada, cambio de app) y la recrea
+        // de cero al volver, así que en la práctica init() se repite en
+        // cada regreso. Si en ESE instante todavía no hay señal (típico
+        // recién despertando el teléfono), getSession() no puede confirmar
+        // si el token vencido se puede renovar y devuelve sesión nula —
+        // pero eso no significa que la sesión haya muerto de verdad, solo
+        // que todavía no se pudo preguntar. Sin este `else if`, esa duda se
+        // trataba como cierre de sesión real y mandaba al supervisor al
+        // login sin haber cerrado sesión nunca. Se entra con lo último que
+        // se sabía (el perfil en caché); en cuanto vuelva la señal, el
+        // listener de abajo corrige solo si la sesión sí venció de verdad.
+        this.aplicarCache()
       }
       this.cargando = false
 
