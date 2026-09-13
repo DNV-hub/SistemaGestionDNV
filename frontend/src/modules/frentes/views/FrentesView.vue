@@ -127,7 +127,12 @@ async function eliminar(frente) {
         <fieldset v-for="gs in grupo.sectores" :key="gs.sector" class="corchete">
           <legend>{{ gs.sector }}</legend>
           <div class="tarjetas">
-            <article v-for="f in gs.frentes" :key="f.id" class="tarjeta" :class="{ cerrado: f.estado === 'cerrado' }">
+            <article
+              v-for="f in gs.frentes"
+              :key="f.id"
+              class="tarjeta"
+              :class="{ cerrado: f.estado === 'cerrado', planificado: f.estado === 'planificado' }"
+            >
               <header class="tarjeta-cabecera">
                 <span class="tarjeta-nombre">{{ f.nombre }}</span>
                 <span class="badge" :class="f.estado">{{ f.estado }}</span>
@@ -251,6 +256,9 @@ button {
 .tarjeta.cerrado {
   opacity: 0.65;
 }
+.tarjeta.planificado {
+  border-style: dashed;
+}
 .tarjeta-cabecera {
   display: flex;
   align-items: flex-start;
@@ -289,6 +297,10 @@ button {
   font-size: 0.72rem;
   font-weight: 600;
   white-space: nowrap;
+}
+.badge.planificado {
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 .badge.activo {
   background: var(--color-success-soft);

@@ -25,7 +25,11 @@ function estadoInicial() {
     nombre: props.frente?.nombre ?? '',
     codigo: props.frente?.codigo ?? '',
     contrato_id: base?.contrato_id ?? props.contratos[0]?.id ?? '',
-    estado: props.frente?.estado ?? 'activo',
+    // Un frente nuevo nace 'planificado': existe en el catálogo pero no
+    // aparece todavía en el Reporte Diario ni en Vales hasta que
+    // Planeamiento lo pase a 'activo' a mano, cuando el trabajo arranque
+    // de verdad.
+    estado: props.frente?.estado ?? 'planificado',
     fecha_inicio: props.frente?.fecha_inicio ?? new Date().toISOString().slice(0, 10),
     fecha_cierre: props.frente?.fecha_cierre ?? '',
   }
@@ -110,13 +114,18 @@ async function onSubmit() {
         <input v-model="form.fecha_inicio" type="date" required />
       </label>
 
-      <label v-if="frente" v-show="puedeEditarEstado">
+      <label v-show="puedeEditarEstado">
         Estado
         <select v-model="form.estado">
+          <option value="planificado">Planificado (aún no inició)</option>
           <option value="activo">Activo</option>
           <option value="paralizado">Paralizado</option>
           <option value="cerrado">Cerrado</option>
         </select>
+        <span v-if="form.estado === 'planificado'" class="ayuda">
+          Mientras siga en "Planificado", no va a aparecer en el Reporte Diario de Campo ni en el selector de Vales
+          — pásalo a "Activo" cuando el trabajo arranque de verdad.
+        </span>
       </label>
 
       <label v-if="frente && form.estado === 'cerrado'">

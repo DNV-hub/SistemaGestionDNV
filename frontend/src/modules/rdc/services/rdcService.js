@@ -21,12 +21,14 @@ export async function descargarCatalogos() {
   const consultas = {
     // sectores/frentes ya no son catálogos propios del RDC (20260911170000):
     // son los mismos que usa el resto del Sistema (Vales, Kardex, Procura,
-    // Almacén). Sin `orden` (esa tabla no lo tiene) y "activo" para un
-    // frente es su `estado` — se incluye también "paralizado" porque un
-    // frente parado temporalmente sigue siendo uno sobre el que un
-    // supervisor puede necesitar reportar (por ejemplo, un Stand By).
+    // Almacén). Sin `orden` (esa tabla no lo tiene). Un frente aparece acá
+    // solo si 'activo' o 'paralizado': un frente parado temporalmente sigue
+    // siendo uno sobre el que un supervisor puede necesitar reportar (por
+    // ejemplo, un Stand By), pero uno 'planificado' (Planeamiento lo definió
+    // pero el trabajo todavía no arranca) o 'cerrado' no tiene nada que
+    // reportar todavía o nunca más — no debe aparecer en el formulario.
     sectores: supabase.from('sectores').select('id, nombre').eq('activo', true).order('nombre'),
-    frentes: supabase.from('frentes').select('id, nombre, sector_id').neq('estado', 'cerrado').order('nombre'),
+    frentes: supabase.from('frentes').select('id, nombre, sector_id').in('estado', ['activo', 'paralizado']).order('nombre'),
     supervisores: supabase.from('rdc_supervisores').select('id, nombre, usuario_id').eq('activo', true).order('orden'),
     capataces: supabase.from('rdc_capataces').select('id, nombre').eq('activo', true).order('orden'),
     redlineSupervisores: supabase.from('rdc_redline_supervisores').select('id, nombre').eq('activo', true).order('orden'),
