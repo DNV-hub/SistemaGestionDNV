@@ -49,6 +49,24 @@ watch(
   () => Object.assign(form, estadoInicial())
 )
 
+// Al elegir "Planificado" a mano, se borra la fecha de inicio en el mismo
+// momento — no alcanza con que el trigger de la base la ignore, porque el
+// trigger deriva el estado A PARTIR de la fecha: si un frente que ya
+// estaba activo (con su fecha de ayer, de anteayer, la que sea) se edita y
+// se le pone "Planificado" pero esa fecha vieja se manda igual, el propio
+// trigger la vuelve a leer y recalcula 'activo' de nuevo — exactamente el
+// bug que reportó el usuario. Solo reacciona a un CAMBIO real a
+// 'planificado' (no dispara si ya estaba así desde que se abrió el
+// formulario), para no pisar una fecha que alguien recién tipeó para
+// programarlo (eso sí tiene que sobrevivir: el trigger la toma y lo pasa
+// solo a "Próximo").
+watch(
+  () => form.estado,
+  (nuevo) => {
+    if (nuevo === 'planificado') form.fecha_inicio = ''
+  }
+)
+
 async function onSubmit() {
   error.value = ''
   if (!form.area.trim() || !form.sector.trim() || !form.nombre.trim() || !form.contrato_id) {
