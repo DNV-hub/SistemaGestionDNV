@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../store/auth'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import { nombreDe } from '../services/rdcCalculos'
 import { explicarErrorSync } from '../services/rdcErrores'
+import RdcTabs from '../components/RdcTabs.vue'
 import '../estilos/rdc-tema.css'
 import '../estilos/tabler-rdc.css'
 import '../estilos/complementos.css'
@@ -185,6 +186,8 @@ async function borrar(r) {
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h15L12 11v5.5L8 14.5V11L2.5 4.5z"/></svg>
       </button>
     </header>
+
+    <RdcTabs />
 
     <main class="content">
       <div v-if="adoptando" class="alert alert-amber">

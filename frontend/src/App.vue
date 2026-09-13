@@ -123,11 +123,18 @@ const SOLO_CAMPO = ['Supervisor']
 // labelMovil: la pestaña flotante es angosta y solo tiene lugar para una
 // palabra — el sidebar de escritorio (label) no se toca, sigue con el
 // nombre completo.
+// Reporte diario / Fotografías / Sketch's quedan SOLO acá, como 3 accesos
+// sueltos, para Supervisor — es exactamente su tabbar de celular (ver
+// tabsMoviles) y tocarlo sería empeorar la pantalla que mejor le funciona.
+// Para cualquier otro rol que los vea (Planeamiento, Administrador,
+// Consulta), las mismas tres pantallas se agrupan en un solo ítem "RDC" más
+// abajo, en Planeamiento — con pestañas propias arriba del contenido (ver
+// RdcTabs.vue) en vez de tres líneas sueltas mezcladas con Dashboard/Reportes.
 const navPrincipal = computed(() => [
   { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value },
-  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value },
-  { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios' },
+  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO },
+  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO },
+  { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO },
   { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
   { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
 ])
@@ -136,6 +143,7 @@ const navPlaneamiento = computed(() => [
   { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
   { to: '/frentes', label: 'Frentes', icono: 'frentes', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
   { to: '/procura', label: 'Procura', icono: 'procura', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/rdc', label: 'RDC', icono: 'rdc', permiso: 'rdc.ver_propios', rolesExcluidos: SOLO_CAMPO },
 ])
 
 const navAlmacen = computed(() => [
@@ -156,7 +164,12 @@ const navSistema = [
 ]
 
 function visibles(items) {
-  return items.filter((item) => auth.tienePermiso(item.permiso) && !item.rolesExcluidos?.includes(auth.nombreRol))
+  return items.filter(
+    (item) =>
+      auth.tienePermiso(item.permiso) &&
+      !item.rolesExcluidos?.includes(auth.nombreRol) &&
+      (!item.rolesIncluidos || item.rolesIncluidos.includes(auth.nombreRol))
+  )
 }
 
 // En celular no entran todos los módulos en una barra: se muestran los 4

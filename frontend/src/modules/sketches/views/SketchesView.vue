@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRdcStore } from '../../rdc/store/rdc'
 import { useSketchesStore } from '../store/sketches'
 import { etiquetaDesdeNombre } from '../services/sketchesService'
+import RdcTabs from '../../rdc/components/RdcTabs.vue'
 import '../../rdc/estilos/rdc-tema.css'
 import '../../rdc/estilos/tabler-rdc.css'
 import '../../rdc/estilos/complementos.css'
@@ -143,6 +144,8 @@ function descargarActual() {
       <header class="appbar-plana">
         <h1>Sketch's</h1>
       </header>
+
+      <RdcTabs />
 
       <div class="card">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px">

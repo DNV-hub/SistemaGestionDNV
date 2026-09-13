@@ -5,6 +5,7 @@ import { useRdcStore } from '../../rdc/store/rdc'
 import { useFotosStore } from '../store/fotos'
 import { FOTO_TIPOS } from '../services/fotosConstantes'
 import { ENVIO } from '../services/fotosDb'
+import RdcTabs from '../../rdc/components/RdcTabs.vue'
 import '../../rdc/estilos/rdc-tema.css'
 import '../../rdc/estilos/tabler-rdc.css'
 import '../../rdc/estilos/complementos.css'
@@ -74,6 +75,8 @@ function detalleEnvio(e) {
       <header class="appbar-plana">
         <h1>Fotos</h1>
       </header>
+
+      <RdcTabs />
 
       <div class="supervisor-banner-fotos">
         <div style="flex: 1; min-width: 0">
