@@ -5,6 +5,7 @@ import {
   actualizarAlmacen,
   eliminarAlmacen,
   listarStock,
+  listarStockMinimos,
   listarIngresos,
   crearIngreso,
   crearIngresosMasivo,
@@ -24,6 +25,7 @@ export const useAlmacenStore = defineStore('almacen', {
     almacenes: [],
     contratos: [],
     stock: [],
+    stockMinimos: [],
     ingresos: [],
     ajustes: [],
     salidas: [],
@@ -42,11 +44,12 @@ export const useAlmacenStore = defineStore('almacen', {
         // esta pantalla se quedaba en "Cargando…" indefinidamente y la
         // única salida era recargar la página a ciegas. A los 20s se corta
         // sola con un error que sí se puede reintentar desde acá.
-        const [almacenes, contratos, stock, ingresos, ajustes, salidas, materialesActivos] = await conTiempoLimite(
+        const [almacenes, contratos, stock, stockMinimos, ingresos, ajustes, salidas, materialesActivos] = await conTiempoLimite(
           Promise.all([
             listarAlmacenes(),
             listarContratos(),
             listarStock(),
+            listarStockMinimos(),
             listarIngresos(),
             listarAjustes(),
             listarSalidas(),
@@ -56,6 +59,7 @@ export const useAlmacenStore = defineStore('almacen', {
         this.almacenes = almacenes
         this.contratos = contratos
         this.stock = stock
+        this.stockMinimos = stockMinimos
         this.ingresos = ingresos
         this.ajustes = ajustes
         this.salidas = salidas
@@ -102,7 +106,13 @@ export const useAlmacenStore = defineStore('almacen', {
     },
 
     async refrescarStock() {
-      this.stock = await listarStock()
+      // Un ingreso nuevo cambia el "último ingreso" de esa fila, así que el
+      // mínimo efectivo hay que refrescarlo junto con el stock — quedarse
+      // con el viejo mostraría un umbral basado en un lote que ya no es el
+      // más reciente.
+      const [stock, stockMinimos] = await Promise.all([listarStock(), listarStockMinimos()])
+      this.stock = stock
+      this.stockMinimos = stockMinimos
     },
 
     async registrarIngreso(payload) {

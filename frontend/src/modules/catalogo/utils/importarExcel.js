@@ -144,6 +144,8 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
       }
     }
 
+    // Porcentaje del último ingreso (0.2 = 20%), no una cantidad fija — ver
+    // la ayuda del modal de importación.
     const stockMinimo = f.stockMinimo ? normalizarNumero(f.stockMinimo) : null
     const tipoConversion = normalizarConversion(f.conversion)
 
@@ -161,7 +163,7 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
       categoriaNombre: f.categoriaNombre || null,
       categoriaId,
       categoriaNueva,
-      stock_minimo_default: Number.isFinite(stockMinimo) ? stockMinimo : null,
+      stock_minimo_pct: Number.isFinite(stockMinimo) ? stockMinimo : null,
       tipoConversion, // null: celda vacía. undefined: valor inválido. 'ninguna'/'area'/'longitud': válido.
       yaExiste,
     }

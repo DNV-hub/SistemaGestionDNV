@@ -102,7 +102,10 @@ export const useCatalogoStore = defineStore('catalogo', {
           null,
         categoria_id:
           f.categoriaId ?? (f.categoriaNombre ? idPorCategoria.get(normalizarClave(f.categoriaNombre)) : null) ?? null,
-        stock_minimo_default: f.stock_minimo_default ?? null,
+        // La columna es NOT NULL (default 20%) — si el Excel no trae el
+        // dato, se cae al estándar en vez de mandar null y que la base
+        // rechace el insert.
+        stock_minimo_pct: f.stock_minimo_pct ?? 0.2,
       }))
 
       const creados = payloads.length ? await crearMaterialesEnLote(payloads) : []

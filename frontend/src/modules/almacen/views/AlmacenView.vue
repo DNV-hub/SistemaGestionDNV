@@ -53,8 +53,16 @@ async function rechazarDevolucion(d) {
   aviso.value = 'Devolución rechazada.'
 }
 
+// stock_con_minimo ya calcula el mínimo (20% del último ingreso, por
+// defecto) del lado de la base — misma fuente que usan las alertas, para
+// que esta pantalla nunca diga algo distinto de lo que dispara una alerta.
+// `stock` está partido por (almacén, material, contrato), así que la
+// llave para cruzar ambas listas necesita los tres campos.
+const claveMinimo = (almacenId, materialId, contratoId) => `${almacenId}::${materialId}::${contratoId}`
+const minimosPorFila = computed(() => new Map(almacen.stockMinimos.map((m) => [claveMinimo(m.almacen_id, m.material_id, m.contrato_id), m])))
+
 function stockMinimoEfectivo(fila) {
-  return fila.stock_minimo ?? fila.materiales?.stock_minimo_default ?? null
+  return minimosPorFila.value.get(claveMinimo(fila.almacen_id, fila.material_id, fila.contrato_id))?.stock_minimo_efectivo ?? null
 }
 
 function bajoMinimo(fila) {

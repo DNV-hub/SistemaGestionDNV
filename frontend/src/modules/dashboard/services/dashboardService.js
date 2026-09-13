@@ -56,21 +56,24 @@ export async function contarFrentesActivos() {
 
 /**
  * No usa la tabla `alertas` (puede estar desactualizada si nadie la
- * refrescó): calcula el umbral directo desde stock. Devuelve la lista
- * completa (peor primero, por qué tan por debajo del mínimo está) para
- * poder mostrar las más críticas con su barra, no solo un conteo.
+ * refrescó): calcula el umbral directo desde `stock_con_minimo` — la misma
+ * vista que usa fn_evaluar_alertas, con el mínimo (20% del último ingreso,
+ * por defecto) ya resuelto del lado de la base. Devuelve la lista completa
+ * (peor primero, por qué tan por debajo del mínimo está) para poder
+ * mostrar las más críticas con su barra, no solo un conteo.
  */
 export async function listarStockCritico() {
   const { data, error } = await supabase
-    .from('stock')
-    .select(
-      'cantidad_disponible, stock_minimo, almacenes(codigo, nombre), materiales(codigo, descripcion, unidad, stock_minimo_default)'
-    )
+    .from('stock_con_minimo')
+    .select('material_codigo, material_descripcion, material_unidad, almacen_codigo, almacen_nombre, cantidad_disponible, stock_minimo_efectivo')
   if (error) throw error
   return data
-    .map((s) => ({ ...s, minimo: s.stock_minimo ?? s.materiales?.stock_minimo_default }))
-    .filter((s) => s.minimo !== null && s.minimo !== undefined && Number(s.cantidad_disponible) <= Number(s.minimo))
-    .sort((a, b) => Number(a.cantidad_disponible) / (Number(a.minimo) || 1) - Number(b.cantidad_disponible) / (Number(b.minimo) || 1))
+    .filter((s) => s.stock_minimo_efectivo !== null && Number(s.cantidad_disponible) <= Number(s.stock_minimo_efectivo))
+    .sort(
+      (a, b) =>
+        Number(a.cantidad_disponible) / (Number(a.stock_minimo_efectivo) || 1) -
+        Number(b.cantidad_disponible) / (Number(b.stock_minimo_efectivo) || 1)
+    )
 }
 
 /**

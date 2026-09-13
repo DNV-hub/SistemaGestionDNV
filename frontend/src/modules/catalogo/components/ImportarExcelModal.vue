@@ -82,6 +82,8 @@ async function confirmarImportacion() {
         <strong>UNIDAD ALMACEN</strong> (obligatorias) — <strong>DESCRIPCION EDP</strong>,
         <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong>, <strong>STOCK MINIMO</strong> y
         <strong>CONVERSION</strong> (ninguna / area / longitud) son opcionales.
+        STOCK MINIMO es un porcentaje del último ingreso, no una cantidad fija: escribe <strong>0.2</strong> para 20%
+        (si el último lote que entró fue de 100, avisa al llegar a 20).
         Si el nombre EDP o la categoría no existen todavía, se crean automáticamente. Un código que <strong>ya
         existe</strong> no se vuelve a crear, pero si trae algo en CONVERSION esa columna sí se actualiza — así se
         puede exportar el catálogo, corregir esa columna en Excel, y volver a subir el mismo archivo.
@@ -141,7 +143,7 @@ async function confirmarImportacion() {
                 <th>Unidad Almacén</th>
                 <th>Unidad EDP</th>
                 <th>Categoría</th>
-                <th>Stock mínimo</th>
+                <th>% mínimo</th>
                 <th>Conversión</th>
                 <th>Estado</th>
               </tr>
@@ -161,7 +163,7 @@ async function confirmarImportacion() {
                   {{ f.categoriaNombre ?? '—' }}
                   <span v-if="f.categoriaNueva" class="etiqueta">nueva</span>
                 </td>
-                <td>{{ f.stock_minimo_default ?? '—' }}</td>
+                <td>{{ f.stock_minimo_pct != null ? Math.round(f.stock_minimo_pct * 100) + '%' : '—' }}</td>
                 <td>{{ f.tipoConversion === undefined ? 'inválida' : f.tipoConversion ?? '—' }}</td>
                 <td>
                   {{

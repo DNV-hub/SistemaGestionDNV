@@ -105,7 +105,7 @@ function exportarCatalogo() {
         'DESCRIPCION EDP': m.nombres_edp?.nombre ?? '',
         'UNIDAD EDP': m.unidad_edp ?? '',
         CATEGORIA: m.categorias?.nombre ?? '',
-        'STOCK MINIMO': m.stock_minimo_default ?? '',
+        'STOCK MINIMO': m.stock_minimo_pct ?? '',
         CONVERSION: m.tipo_conversion ?? 'ninguna',
         ESTADO: m.estado,
       })),
@@ -162,7 +162,7 @@ async function eliminar(material) {
           <th>Unidad Almacén</th>
           <th>Unidad EDP</th>
           <th>Categoría</th>
-          <th>Stock mínimo</th>
+          <th>% mínimo</th>
           <th>Estado</th>
           <th v-if="mostrarColumnaAcciones"></th>
         </tr>
@@ -176,7 +176,7 @@ async function eliminar(material) {
           <td>{{ m.unidad }}</td>
           <td>{{ m.unidad_edp ?? '—' }}</td>
           <td>{{ m.categorias?.nombre ?? '—' }}</td>
-          <td>{{ m.stock_minimo_default ?? '—' }}</td>
+          <td>{{ m.stock_minimo_pct != null ? Math.round(m.stock_minimo_pct * 100) + '%' : '—' }}</td>
           <td>
             <span class="badge" :class="m.estado">{{ m.estado }}</span>
           </td>

@@ -24,7 +24,10 @@ function estadoInicial() {
     tipo_conversion: props.material?.tipo_conversion ?? 'ninguna',
     categoria_id: props.material?.categoria_id ?? '',
     estado: props.material?.estado ?? 'activo',
-    stock_minimo_default: props.material?.stock_minimo_default ?? '',
+    // % del último ingreso que se considera "stock mínimo" (0.2 = 20%). Un
+    // material nuevo arranca en el estándar del sistema; no en vacío, porque
+    // sin esto las alertas de stock bajo simplemente no se generan para él.
+    stock_minimo_pct: props.material?.stock_minimo_pct ?? 0.2,
     observaciones: props.material?.observaciones ?? '',
   }
 }
@@ -56,7 +59,9 @@ async function onSubmit() {
       tipo_conversion: form.tipo_conversion,
       categoria_id: form.categoria_id || null,
       estado: form.estado,
-      stock_minimo_default: form.stock_minimo_default === '' ? null : Number(form.stock_minimo_default),
+      // stock_minimo_pct es NOT NULL en la base (default 20%) — si lo dejan
+      // vacío, se manda el estándar en vez de un null que la base rechazaría.
+      stock_minimo_pct: form.stock_minimo_pct === '' ? 0.2 : Number(form.stock_minimo_pct),
       observaciones: form.observaciones.trim() || null,
     })
   } catch (e) {
@@ -132,8 +137,9 @@ async function onSubmit() {
       </label>
 
       <label>
-        Stock mínimo por defecto
-        <input v-model="form.stock_minimo_default" type="number" step="0.001" min="0" />
+        % de stock mínimo (sobre el último ingreso)
+        <input v-model="form.stock_minimo_pct" type="number" step="0.01" min="0" max="1" placeholder="0.2" />
+        <span class="ayuda">Ej. 0.2 = 20%. Si el último lote que entró fue de 100, se avisa al llegar a 20.</span>
       </label>
 
       <label>

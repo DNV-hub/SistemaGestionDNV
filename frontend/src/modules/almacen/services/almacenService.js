@@ -49,7 +49,7 @@ export async function listarLotesDisponibles(materialId, almacenId) {
 }
 
 const SELECT_STOCK =
-  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_default), contratos(id, codigo, nombre)'
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_pct), contratos(id, codigo, nombre)'
 
 /** Stock agregado por material (sumado entre almacenes) con Categoría/Tipo
  * de material y la cantidad también en la unidad del EDP, para el
@@ -123,6 +123,22 @@ export async function listarStock() {
     .from('stock')
     .select(SELECT_STOCK)
     .order('material_id')
+  if (error) throw error
+  return data
+}
+
+/**
+ * El mínimo efectivo (20% del último ingreso, por defecto) ya viene
+ * calculado desde la vista `stock_con_minimo` — misma fuente que usan las
+ * alertas, para que la pantalla de Almacén nunca diga algo distinto de lo
+ * que dispara una alerta. `stock` está partido por (almacén, material,
+ * contrato), así que la llave para cruzarlo con la fila de stock también
+ * necesita los tres campos.
+ */
+export async function listarStockMinimos() {
+  const { data, error } = await supabase
+    .from('stock_con_minimo')
+    .select('almacen_id, material_id, contrato_id, stock_minimo_efectivo, ultimo_ingreso_cantidad')
   if (error) throw error
   return data
 }

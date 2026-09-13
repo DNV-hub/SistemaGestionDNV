@@ -116,11 +116,6 @@ const ETIQUETAS_MOVIMIENTO = {
   ajuste_negativo: 'Ajuste −',
 }
 
-function ratioStock(item) {
-  const ratio = Number(item.cantidad_disponible) / Number(item.minimo || 1)
-  return Math.max(0, Math.min(1, ratio))
-}
-
 function claseStock(item) {
   return Number(item.cantidad_disponible) <= 0 ? 'Agotado' : 'Crítico'
 }
@@ -301,8 +296,8 @@ function totalMaquinariaFrente(fila) {
           <ul class="lista-stock">
             <li v-for="(item, i) in dashboard.stockCritico.slice(0, 6)" :key="i">
               <span class="punto" :class="claseStock(item) === 'Agotado' ? 'danger' : 'warning'"></span>
-              <span class="texto">{{ item.materiales?.codigo }} — {{ item.materiales?.descripcion }}</span>
-              <span class="numero">{{ item.cantidad_disponible }} {{ item.materiales?.unidad }}</span>
+              <span class="texto">{{ item.material_codigo }} — {{ item.material_descripcion }}</span>
+              <span class="numero">{{ item.cantidad_disponible }} {{ item.material_unidad }}</span>
               <span class="badge-estado" :class="claseStock(item) === 'Agotado' ? 'danger' : 'warning'">{{ claseStock(item) }}</span>
             </li>
           </ul>
