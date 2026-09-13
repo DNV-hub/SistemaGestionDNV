@@ -62,10 +62,16 @@ const estadoEnvio = computed(() => {
   return 'pendiente'
 })
 
-// Solo se corrige un reporte propio que está en este dispositivo: la
-// corrección se vuelve a enviar desde acá.
+// Quien tiene rdc.editar_todos (Planeamiento, Administrador) puede
+// corregir CUALQUIER reporte, esté o no en este dispositivo — es el caso
+// de "corregir un reporte mal hecho" que ya mandó un supervisor de
+// verdad. Sin ese permiso, sigue la regla de siempre: solo un reporte
+// propio que ya está acá.
 const puedeCorregir = computed(
-  () => !!reporte.value && rdc.reportes.some((r) => r.id === reporte.value.id) && auth.tienePermiso('rdc.editar_propio'),
+  () =>
+    !!reporte.value &&
+    (auth.tienePermiso('rdc.editar_todos') ||
+      (rdc.reportes.some((r) => r.id === reporte.value.id) && auth.tienePermiso('rdc.editar_propio'))),
 )
 
 async function corregir() {
@@ -73,6 +79,14 @@ async function corregir() {
     'Vas a reabrir este reporte para corregirlo.\n\nNo se borra nada de lo que escribiste. El nuevo envío se guarda como archivo NUEVO, con "(C)" al final del nombre, así queda el original y la versión corregida.\n\n¿Continuar?',
   )
   if (!confirmado) return
+  // rdc.corregir() lee de la base LOCAL (IndexedDB) — un reporte ajeno
+  // (de otro supervisor) todavía no está acá, hay que traerlo entero
+  // primero. Mismo mecanismo que ya usa la lista para adoptar un borrador
+  // de otro dispositivo; acá simplemente puede ser un reporte YA
+  // finalizado, no le importa el estado.
+  if (!rdc.reportes.some((r) => r.id === reporte.value.id)) {
+    await rdc.adoptarRemoto(reporte.value.id)
+  }
   await rdc.corregir(reporte.value.id)
   router.push({ name: 'rdc-editar', params: { id: reporte.value.id } })
 }
