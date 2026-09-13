@@ -108,6 +108,11 @@ const tiempoEfectivoTexto = computed(() => fmtHm(tiempoEfectivoMin(reporte.value
 const faltantes = computed(() => {
   const f = []
   if (!reporte.value.fecha) f.push('la fecha')
+  // El desplegable de Frente muestra TODOS los frentes cuando todavía no se
+  // eligió sector (rdc.frentesDelSector) — es posible llegar acá con frente
+  // puesto pero sector sin elegir, y sector_id también es obligatorio del
+  // lado del Sistema.
+  if (!reporte.value.sectorId) f.push('el sector')
   if (!reporte.value.frenteId) f.push('el frente')
   if (!reporte.value.supervisorId) f.push('el supervisor responsable')
   return f

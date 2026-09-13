@@ -92,6 +92,21 @@ function agregarOtro() {
           </select>
         </div>
       </div>
+
+      <!-- Un supervisor de campo nunca ve esto: el reporte ya es suyo desde
+           que se crea (rdc.supervisorPropio). Quien lo llena sin ser
+           supervisor (Planeamiento cubriendo a alguien, por ejemplo) tiene
+           que decir de quién es — si no, el reporte no se puede guardar en
+           el Sistema, ahí supervisor_id es obligatorio. -->
+      <div v-if="!rdc.supervisorPropio" class="grid2" style="margin-bottom: 10px">
+        <div class="field">
+          <label for="f-supervisor">Supervisor</label>
+          <select id="f-supervisor" v-model="reporte.supervisorId" @change="guardar">
+            <option :value="null">— Seleccionar —</option>
+            <option v-for="s in rdc.catalogos?.supervisores ?? []" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+          </select>
+        </div>
+      </div>
     </div>
 
     <div class="card">

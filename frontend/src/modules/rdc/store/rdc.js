@@ -60,6 +60,17 @@ export const useRdcStore = defineStore('rdc', {
       if (!state.actual?.sectorId) return state.catalogos?.frentes ?? []
       return (state.catalogos?.frentes ?? []).filter((f) => f.sector_id === state.actual.sectorId)
     },
+
+    /** El registro de rdc_supervisores vinculado a la cuenta que está
+     * conectada ahora — null para quien no es supervisor de campo
+     * (Planeamiento, Administrador…), que es justo la señal que usa
+     * PasoDatos.vue para decidir si hay que mostrar el selector de
+     * "Supervisor" (un supervisor de verdad nunca lo necesita: el reporte
+     * es siempre suyo). */
+    supervisorPropio: (state) => {
+      const auth = useAuthStore()
+      return (state.catalogos?.supervisores ?? []).find((s) => s.usuario_id === auth.perfil?.id) ?? null
+    },
   },
 
   actions: {
@@ -150,14 +161,13 @@ export const useRdcStore = defineStore('rdc', {
     async nuevo() {
       const auth = useAuthStore()
       const ultimo = this.reportes[0]
-      const supervisorPropio = (this.catalogos?.supervisores ?? []).find((s) => s.usuario_id === auth.perfil?.id)
 
       const reporte =
         auth.perfil?.rdc_heredar_reporte_completo && ultimo
           ? repo.crearBorradorDesde(ultimo, { creadoPor: auth.perfil?.id })
           : repo.crearBorrador({
               creadoPor: auth.perfil?.id,
-              supervisorId: supervisorPropio?.id ?? ultimo?.supervisorId ?? null,
+              supervisorId: this.supervisorPropio?.id ?? ultimo?.supervisorId ?? null,
               sectorId: ultimo?.sectorId ?? null,
               frenteId: ultimo?.frenteId ?? null,
               capatazId: ultimo?.capatazId ?? null,

@@ -57,6 +57,17 @@ export async function sincronizar({ catalogos } = {}) {
       // más nuevo de la laptop con una versión atrasada. En ese caso hay que
       // bajar la versión del servidor en vez de subir la de acá.
       if (reporte.estado === ESTADO.BORRADOR) {
+        // sector_id/frente_id/supervisor_id son NOT NULL del lado de
+        // Supabase — un borrador recién creado, antes de que alguien
+        // termine de elegirlos en el Paso 1, no tiene nada válido que
+        // respaldar todavía. Sin este chequeo, cada intento de sync
+        // mientras tanto fallaba con un error de columna que en realidad no
+        // es un error: es que el supervisor (o quien esté llenando el
+        // reporte) recién está empezando a escribirlo.
+        if (!reporte.sectorId || !reporte.frenteId || !reporte.supervisorId) {
+          resumen.omitidos++
+          continue
+        }
         try {
           const actualizadoEnRemoto = await obtenerActualizadoEnRemoto(reporte.id)
           if (actualizadoEnRemoto && new Date(actualizadoEnRemoto) > new Date(reporte.actualizadoEn)) {
