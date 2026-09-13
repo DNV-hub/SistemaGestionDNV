@@ -192,7 +192,7 @@ function etiquetaParalizado(updatedAt) {
 
   <div v-else class="dashboard">
     <header class="page-head">
-      <div class="greet">{{ saludo }}, {{ auth.perfil?.nombre }} <span>· {{ fechaLegible }}</span></div>
+      <div class="greet">{{ saludo }}, {{ auth.perfil?.nombre }} <span class="fecha">· {{ fechaLegible }}</span></div>
       <div v-if="!dashboard.cargando" class="live"><span class="live-dot"></span>Actualizado {{ hace }}</div>
     </header>
 
@@ -958,6 +958,14 @@ function etiquetaParalizado(updatedAt) {
 @media (max-width: 980px) {
   .dashboard {
     height: auto;
+    /* La barra de pestañas flotante de App.vue existe en todo este rango
+       (aparece por debajo de 1024px) — sin este espacio, la última
+       tarjeta (Alertas) queda tapada debajo de ella sin poder bajar más.
+       Mismo valor que ya usa el resto del Sistema en celular (RDC, Vales).
+       padding-bottom aparte (no en el shorthand `padding`) a propósito:
+       así el 640px de abajo puede tocar el resto del padding sin tener
+       que repetir este valor ni arriesgarse a resetearlo por accidente. */
+    padding-bottom: 108px;
   }
   .grid {
     grid-template-columns: 1fr;
@@ -976,12 +984,20 @@ function etiquetaParalizado(updatedAt) {
 }
 @media (max-width: 640px) {
   .dashboard {
-    padding: 1rem 0.85rem 1.25rem;
+    padding-top: 1rem;
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
   }
   .page-head {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.3rem;
+  }
+  /* La fecha completa ("domingo, 13 de setiembre de 2026") no entra
+     cómoda en una pantalla angosta — en el mockup del celular el
+     encabezado ni la muestra, solo el saludo y "Actualizado hace…". */
+  .greet .fecha {
+    display: none;
   }
   .frentes-scroll {
     grid-template-columns: 1fr;
