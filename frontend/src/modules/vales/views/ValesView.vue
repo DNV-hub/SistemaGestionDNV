@@ -137,7 +137,6 @@ function nuevoMovil() {
         <p v-if="puedeVerTodos" class="subtitulo">Los que esperan una decisión aparecen primero, del más antiguo al más nuevo.</p>
       </div>
       <div class="acciones-header">
-        <button type="button" class="secundario" @click="router.push('/vales/stock')">Stock en vivo</button>
         <button v-if="puedeDevolver" type="button" class="secundario" @click="router.push('/vales/devolucion')">Devolver material</button>
         <button v-if="puedeCrear" @click="mostrarModal = true">+ Nuevo vale</button>
       </div>
@@ -194,10 +193,6 @@ function nuevoMovil() {
       </header>
 
       <div class="accesos-rapidos">
-        <button type="button" class="chip" @click="router.push('/vales/stock')">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4.2 7 1.5l5.5 2.7L7 6.9 1.5 4.2Z"/><path d="M1.5 4.2v5.6L7 12.5l5.5-2.7V4.2M7 6.9v5.6"/></svg>
-          Stock en vivo
-        </button>
         <button v-if="puedeDevolver" type="button" class="chip" @click="router.push('/vales/devolucion')">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5 1.5 7l3 2.5M1.5 7h7a3 3 0 0 1 0 6h-1"/></svg>
           Devolver material

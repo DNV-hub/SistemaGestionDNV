@@ -9,7 +9,7 @@ import CancelarValeModal from '../components/CancelarValeModal.vue'
 import EntregaFormModal from '../components/EntregaFormModal.vue'
 import { formatearNumero } from '../../../utils/formatearNumero'
 import { marcarValeVisto } from '../services/valesService'
-import { textoEntregaParaCompartir } from '../services/valesMensajes'
+import { textoEntregaParaCompartir, textoRequerimientoParaCompartir } from '../services/valesMensajes'
 
 const route = useRoute()
 const router = useRouter()
@@ -138,6 +138,33 @@ async function copiarMensajeEntrega() {
   }
 }
 
+// Mensaje de "acabo de mandar este requerimiento" para el grupo de
+// WhatsApp — a diferencia del de entrega (que se genera solo apenas
+// Almacén registra la entrega), este es a pedido: el supervisor arma su
+// vale con la app y, si quiere avisar igual por WhatsApp mientras el
+// resto de la cuadrilla todavía no usa el sistema, lo genera cuando
+// quiera desde acá, no solo una vez al crearlo.
+const mensajeRequerimiento = ref('')
+const copiadoRequerimiento = ref(false)
+
+function generarMensajeRequerimiento() {
+  mensajeRequerimiento.value = textoRequerimientoParaCompartir({
+    vale: vale.value,
+    supervisorNombre: vale.value?.usuarios?.nombre,
+    actividad: vale.value?.actividad,
+  })
+  copiadoRequerimiento.value = false
+}
+
+async function copiarMensajeRequerimiento() {
+  try {
+    await navigator.clipboard.writeText(mensajeRequerimiento.value)
+    copiadoRequerimiento.value = true
+  } catch {
+    aviso.value = 'No se pudo copiar automáticamente — selecciona el texto y cópialo a mano.'
+  }
+}
+
 /**
  * Situación de una línea frente a stock y Procura, para alertar al que
  * aprueba/revisa sin que tenga que ir a mirar otras pantallas (Almacén,
@@ -199,6 +226,7 @@ function situacion(linea) {
         <span class="badge" :class="vale.estado.toLowerCase().replace(/\s+/g, '-')">{{ vale.estado }}</span>
       </header>
 
+      <p v-if="vale.actividad" class="observaciones">Actividad: {{ vale.actividad }}</p>
       <p v-if="vale.observaciones" class="observaciones">{{ vale.observaciones }}</p>
       <p v-if="aviso" class="aviso">{{ aviso }}</p>
 
@@ -213,8 +241,20 @@ function situacion(linea) {
         </button>
       </div>
 
+      <div v-if="mensajeRequerimiento" class="mensaje-wtpp">
+        <div class="mensaje-wtpp-cabecera">
+          <span>Mientras el resto de la cuadrilla no usa la app, avisa por WhatsApp:</span>
+          <button type="button" class="cerrar-mensaje" aria-label="Cerrar" @click="mensajeRequerimiento = ''">✕</button>
+        </div>
+        <textarea readonly :value="mensajeRequerimiento" rows="10"></textarea>
+        <button type="button" class="copiar-mensaje" @click="copiarMensajeRequerimiento">
+          {{ copiadoRequerimiento ? '✓ Copiado' : 'Copiar mensaje' }}
+        </button>
+      </div>
+
       <div class="acciones-vale">
         <button v-if="puedeEnviar" @click="enviar">Enviar para revisión</button>
+        <button type="button" class="secundario" @click="generarMensajeRequerimiento">Generar mensaje para WhatsApp</button>
         <button v-if="puedeCancelar" class="peligro" @click="mostrarModalCancelar = true">Cancelar vale</button>
       </div>
 
@@ -357,6 +397,11 @@ button {
 }
 button.peligro {
   background: var(--color-danger);
+}
+button.secundario {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 button.mini {
   padding: 0.3rem 0.6rem;

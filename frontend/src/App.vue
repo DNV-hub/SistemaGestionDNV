@@ -140,11 +140,21 @@ const SOLO_CAMPO = ['Supervisor']
 // los 4 que de verdad importa fijar (Dashboard/RDC/Almacén/Vales); el
 // resto usa las 4 pestañas de Supervisor tal cual estaban (sin marcar
 // prioridad, no hace falta: ahí ya son exactamente 4 en total).
+// Dashboard/RDC/Almacén (prioridad 1/2/3) y Reporte diario/Fotografías/
+// Sketch's (prioridad 1/2/3 también) nunca aparecen juntos para la misma
+// cuenta — son mutuamente excluyentes por rolesExcluidos/rolesIncluidos
+// (SOLO_CAMPO ve el segundo grupo, todos los demás ven el primero) — así
+// que pueden compartir el mismo número de prioridad sin pisarse: cada
+// rol arma sus propias 4 pestañas fijas con el mismo esquema 1-2-3-4.
+// Antes Vales (prioridad 4, es de los dos grupos) tenía la única
+// prioridad marcada del lado de Supervisor, así que terminaba
+// colándose ADELANTE de Reporte/Fotos/Sketch's al ordenar — se
+// reportó como "en el celular ahora aparece primero Vales".
 const navPrincipal = computed(() => [
   { to: '/', label: 'Dashboard', icono: 'dashboard', color: 'amber', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 1 },
-  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO },
-  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', color: 'teal', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO },
-  { to: '/sketches', label: "Sketch's", icono: 'sketch', color: 'teal', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO },
+  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO, prioridadMovil: 1 },
+  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', color: 'teal', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO, prioridadMovil: 2 },
+  { to: '/sketches', label: "Sketch's", icono: 'sketch', color: 'teal', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO, prioridadMovil: 3 },
   { to: '/developer', label: 'Developer', icono: 'developer', color: 'slate', permiso: 'sistema.borrar_pruebas' },
 ])
 

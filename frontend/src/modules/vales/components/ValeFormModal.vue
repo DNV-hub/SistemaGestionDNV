@@ -29,6 +29,7 @@ const mostrarSelectorSupervisor = computed(() => props.supervisoresActivos !== n
 const form = reactive({
   frente_id: props.frentesActivos[0]?.id ?? '',
   supervisor_id: '',
+  actividad: '',
   observaciones: '',
 })
 const lineas = ref([{ material_id: '', cantidad_solicitada: '' }])
@@ -76,6 +77,7 @@ async function onSubmit() {
     await attrs.onGuardar({
       frente_id: form.frente_id,
       supervisor_id: mostrarSelectorSupervisor.value ? form.supervisor_id : undefined,
+      actividad: form.actividad.trim() || null,
       observaciones: form.observaciones.trim() || null,
       lineas: lineasValidas.value.map((l) => ({
         material_id: l.material_id,
@@ -120,6 +122,11 @@ async function onSubmit() {
         </div>
         <button type="button" class="secundario agregar-linea" @click="agregarLinea">+ Agregar material</button>
       </div>
+
+      <label>
+        Actividad (opcional)
+        <input v-model="form.actividad" type="text" placeholder="Ej. Pie del activo" />
+      </label>
 
       <label>
         Observaciones (opcional)

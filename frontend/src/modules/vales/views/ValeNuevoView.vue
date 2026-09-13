@@ -56,6 +56,7 @@ async function enviar() {
       supervisor_id: esSupervisor.value ? auth.session.user.id : undefined,
       creado_por: esSupervisor.value ? null : auth.session.user.id,
       observaciones: borrador.observaciones.trim() || null,
+      actividad: borrador.actividad.trim() || null,
       lineas: borrador.lineas.map((l) => ({ material_id: l.material_id, cantidad_solicitada: Number(l.cantidad) })),
     })
     borrador.reiniciar()
@@ -123,6 +124,11 @@ async function enviar() {
           Agregar material
         </button>
       </div>
+
+      <label class="campo">
+        <span class="campo-label">Actividad (opcional)</span>
+        <input v-model="borrador.actividad" type="text" class="campo-input" placeholder="Ej. Pie del activo" />
+      </label>
 
       <label class="campo">
         <span class="campo-label">Observaciones (opcional)</span>

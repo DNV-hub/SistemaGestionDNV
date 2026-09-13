@@ -1,7 +1,11 @@
 import { supabase } from '../../../services/supabaseClient'
 
+// area/sector se agregan al embed de frentes solo para armar el mensaje de
+// WhatsApp del requerimiento (textoRequerimientoParaCompartir) — la
+// "Ubicación" del mensaje real que ya usa la obra combina ambos con el
+// código.
 const SELECT_VALE =
-  '*, frentes(id, codigo, nombre, estado, contrato_id), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre), vale_detalle(id)'
+  '*, frentes(id, codigo, nombre, estado, contrato_id, area, sector), usuarios!supervisor_id(id, nombre), creador:usuarios!creado_por(id, nombre), vale_detalle(id)'
 const SELECT_DETALLE = '*, materiales(id, codigo, descripcion, unidad, unidad_edp, tipo_conversion)'
 
 export async function listarVales() {
@@ -23,7 +27,7 @@ export async function obtenerVale(id) {
   return { ...vale, lineas }
 }
 
-export async function crearVale({ frente_id, supervisor_id, creado_por, observaciones, lineas }) {
+export async function crearVale({ frente_id, supervisor_id, creado_por, observaciones, actividad, lineas }) {
   const { data: vale, error: errorVale } = await supabase
     .from('vales')
     .insert({
@@ -31,6 +35,7 @@ export async function crearVale({ frente_id, supervisor_id, creado_por, observac
       supervisor_id,
       creado_por: creado_por ?? null,
       observaciones,
+      actividad: actividad || null,
     })
     .select(SELECT_VALE)
     .single()

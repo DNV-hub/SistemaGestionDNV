@@ -10,6 +10,7 @@ export const useValeNuevoStore = defineStore('valeNuevo', {
     frenteId: '',
     lineas: [], // [{ material_id, codigo, descripcion, unidad, cantidad, disponible }]
     observaciones: '',
+    actividad: '',
   }),
 
   actions: {
@@ -17,6 +18,7 @@ export const useValeNuevoStore = defineStore('valeNuevo', {
       this.frenteId = ''
       this.lineas = []
       this.observaciones = ''
+      this.actividad = ''
     },
 
     /** `material` viene de `vales.stockPorMaterial` — solo se puede agregar

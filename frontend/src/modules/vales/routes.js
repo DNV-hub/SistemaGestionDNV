@@ -21,14 +21,8 @@ export const valesRoutes = [
     component: () => import('./views/SelectorMaterialView.vue'),
     meta: { permiso: 'vales.crear', ocultarTabbar: true },
   },
-  // Accesos rápidos dentro de "Vales" (antes vivían en el panel de escritorio
+  // Acceso rápido dentro de "Vales" (antes vivía en el panel de escritorio
   // del supervisor, que en celular ya no tiene forma de alcanzarse).
-  {
-    path: '/vales/stock',
-    name: 'vales-stock',
-    component: () => import('./views/StockEnVivoView.vue'),
-    meta: { permiso: 'vales.ver_propios', ocultarTabbar: true },
-  },
   {
     path: '/vales/devolucion',
     name: 'vales-devolucion',
