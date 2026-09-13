@@ -44,7 +44,15 @@ function alConfirmarNuevo(payload) {
 }
 
 const materialSeleccionado = computed(() => props.materiales.find((m) => m.id === form.material_id))
-const tipoConversion = computed(() => materialSeleccionado.value?.tipo_conversion ?? 'ninguna')
+// Antes solo miraba materialSeleccionado (un material ya existente en el
+// catálogo) — un material recién creado en este mismo ingreso no tenía de
+// dónde sacar su tipo_conversion, así que nunca pedía ancho/largo en su
+// primer lote. Ahora también lo toma de materialNuevo, que ya lo trae desde
+// el buscador (ver MaterialIngresoBuscador.vue).
+const tipoConversion = computed(
+  () => materialSeleccionado.value?.tipo_conversion ?? materialNuevo.value?.tipo_conversion ?? 'ninguna'
+)
+const unidadActual = computed(() => materialSeleccionado.value?.unidad ?? materialNuevo.value?.unidad ?? null)
 
 // Vista previa del factor, para que el almacenero vea el m2/ml antes de
 // guardar y pueda notar si se equivocó de medida.
@@ -84,7 +92,7 @@ async function onSubmit() {
   try {
     let materialId = form.material_id
     if (materialNuevo.value) {
-      const [creado] = await attrs.onCrearMaterial([{ ...materialNuevo.value, tipo_conversion: 'ninguna' }])
+      const [creado] = await attrs.onCrearMaterial([materialNuevo.value])
       materialId = creado.id
     }
     await attrs.onGuardar({
@@ -139,7 +147,7 @@ async function onSubmit() {
         Cantidad
         <div class="cantidad-con-unidad">
           <input v-model="form.cantidad" type="number" step="0.001" min="0.001" required />
-          <span v-if="materialSeleccionado" class="unidad-badge">{{ materialSeleccionado.unidad }}</span>
+          <span v-if="unidadActual" class="unidad-badge">{{ unidadActual }}</span>
         </div>
       </label>
 
@@ -155,7 +163,7 @@ async function onSubmit() {
           </label>
         </div>
         <p v-if="factorPreview" class="factor-preview">
-          = {{ factorPreview.toFixed(2) }} m2 por {{ materialSeleccionado?.unidad ?? 'unidad' }} ({{ Number(form.cantidad || 0) * factorPreview }} m2 en total)
+          = {{ factorPreview.toFixed(2) }} m2 por {{ unidadActual ?? 'unidad' }} ({{ Number(form.cantidad || 0) * factorPreview }} m2 en total)
         </p>
       </template>
 

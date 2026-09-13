@@ -141,6 +141,11 @@ export const useAlmacenStore = defineStore('almacen', {
           descripcion: m.descripcion,
           unidad: m.unidad,
           tipo_conversion: m.tipo_conversion,
+          // stock_minimo_pct es NOT NULL en la base (default 20%): si esta
+          // fila no lo trae (ej. el importador masivo de ingresos, que
+          // todavía no pregunta esto), se omite y la base pone el estándar
+          // en vez de mandar null.
+          ...(m.stock_minimo_pct != null ? { stock_minimo_pct: m.stock_minimo_pct } : {}),
         }))
       )
       this.materialesActivos.push(...creados)

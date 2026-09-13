@@ -22,6 +22,14 @@ const materialElegido = ref(null) // material existente ya confirmado
 const creandoNuevo = ref(false)
 const nuevoUnidad = ref('')
 const nuevoCodigo = ref('')
+// Antes esto se fijaba en 'ninguna' sin preguntar y el almacenero recién
+// podía marcarlo desde Catálogo, en un ingreso posterior — así el primer
+// lote (justo el que trae la guía con las medidas reales) nunca pedía
+// ancho/largo. Se pregunta acá porque es quien tiene el material en mano.
+const nuevoTipoConversion = ref('ninguna')
+// % de stock mínimo (0.2 = 20%) — mismo criterio que en Catálogo, pero
+// puesto por quien sabe el tamaño real del lote que está entrando.
+const nuevoStockMinimoPct = ref(0.2)
 const confirmado = ref(false)
 
 const codigosExistentes = computed(() => {
@@ -90,6 +98,8 @@ function empezarNuevo() {
   creandoNuevo.value = true
   nuevoUnidad.value = ''
   nuevoCodigo.value = codigoSugerido.value
+  nuevoTipoConversion.value = 'ninguna'
+  nuevoStockMinimoPct.value = 0.2
   confirmado.value = false
 }
 
@@ -105,6 +115,8 @@ function confirmarNuevo() {
     descripcion: query.value.trim(),
     unidad: nuevoUnidad.value.trim(),
     codigo: nuevoCodigo.value,
+    tipo_conversion: nuevoTipoConversion.value,
+    stock_minimo_pct: Number(nuevoStockMinimoPct.value) || 0.2,
   })
 }
 </script>
@@ -158,6 +170,22 @@ function confirmarNuevo() {
         ¿Estás seguro de que este es el código correcto? Si no lo sabes, consulta a Planeamiento antes de guardar —
         el código solo se usa para el reporte de pagos, pero tiene que ser el que corresponde.
       </p>
+
+      <label>
+        ¿Necesita conversión de unidades? (rollos, barras, cables…)
+        <select v-model="nuevoTipoConversion" :disabled="confirmado">
+          <option value="ninguna">No, se maneja tal cual (UND, KG…)</option>
+          <option value="area">Sí, por área (ej. rollos de malla — pide ancho y largo)</option>
+          <option value="longitud">Sí, por longitud (ej. barras, cables — pide el largo)</option>
+        </select>
+        <span class="ayuda-codigo">Revisa la guía: si la marcas mal acá, hay que corregirla después desde Catálogo.</span>
+      </label>
+
+      <label>
+        % de stock mínimo
+        <input v-model="nuevoStockMinimoPct" type="number" step="0.01" min="0" max="1" placeholder="0.2" :disabled="confirmado" />
+        <span class="ayuda-codigo">Ej. 0.2 = 20% del tamaño de este lote. Se avisa cuando el stock baje de ahí.</span>
+      </label>
 
       <div v-if="!confirmado" class="acciones-nuevo">
         <button type="button" class="secundario" @click="cancelarNuevo">Cancelar</button>
