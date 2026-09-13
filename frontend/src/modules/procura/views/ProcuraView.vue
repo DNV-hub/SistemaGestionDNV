@@ -2,11 +2,34 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProcuraStore } from '../store/procura'
+import { descargarExcel } from '../../../utils/exportarExcel'
 
 const procura = useProcuraStore()
 const router = useRouter()
 
 const busqueda = ref('')
+
+/** Exporta el metrado vigente de TODOS los frentes en una sola hoja — el detalle de un solo frente se exporta desde su propia pantalla. */
+function exportarExcel() {
+  const filas = procura.metrados
+    .filter((m) => Number(m.cantidad_contractual) > 0 || Number(m.cantidad_procura) > 0)
+    .map((m) => {
+      const frente = procura.frentesActivos.find((f) => f.id === m.frente_id)
+      return {
+        'Frente código': frente?.codigo ?? '',
+        'Frente nombre': frente?.nombre ?? '',
+        Área: frente?.area ?? '',
+        Sector: frente?.sector ?? '',
+        Código: m.materiales?.codigo ?? '',
+        Material: m.materiales?.descripcion ?? '',
+        Unidad: m.unidad,
+        Contractual: m.cantidad_contractual,
+        Procura: m.cantidad_procura,
+        'Total previsto': Number(m.cantidad_contractual) + Number(m.cantidad_procura),
+      }
+    })
+  descargarExcel('procura_metrado_vigente.xlsx', [{ nombre: 'Metrado vigente', filas }])
+}
 
 onMounted(() => procura.cargar())
 
@@ -50,6 +73,7 @@ function abrir(frente) {
   <div class="procura">
     <header class="cabecera">
       <h1>Metrados Procura</h1>
+      <button type="button" class="secundario" @click="exportarExcel">Exportar Excel</button>
     </header>
 
     <div class="filtros">
@@ -107,10 +131,28 @@ function abrir(frente) {
 }
 .cabecera {
   margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 h1 {
   font-size: 1.25rem;
   margin: 0;
+  color: var(--color-text);
+}
+button {
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.secundario {
+  background: none;
+  border: 1px solid var(--color-border);
   color: var(--color-text);
 }
 .filtros {

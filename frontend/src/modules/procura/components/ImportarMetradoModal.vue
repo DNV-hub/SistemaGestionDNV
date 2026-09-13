@@ -58,12 +58,44 @@ async function confirmarImportacion() {
   <div class="overlay" @click.self="$emit('cerrar')">
     <div class="modal">
       <h2>Importar metrado masivo</h2>
-      <p class="ayuda">
-        Columnas esperadas: <strong>CODIGO</strong> (debe existir ya en el catálogo),
-        <strong>CANTIDAD CONTRACTUAL</strong> y <strong>CANTIDAD PROCURA</strong> (al menos una mayor a cero).
-        <strong>OBSERVACION</strong> es opcional. Si un material ya tiene metrado en este frente, se reemplaza por
-        una nueva versión (igual que editarlo a mano) — no se pierde el historial anterior.
-      </p>
+
+      <div class="formato">
+        <p class="formato-titulo">El archivo (.xlsx, .xls o .csv) debe traer estas columnas en la primera fila:</p>
+        <table class="tabla-formato">
+          <thead>
+            <tr>
+              <th>Columna</th>
+              <th>Obligatoria</th>
+              <th>Qué va ahí</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>CODIGO</code></td>
+              <td>Sí</td>
+              <td>El código tal como está en el catálogo de Materiales — si no existe, esa fila se omite.</td>
+            </tr>
+            <tr>
+              <td><code>CANTIDAD CONTRACTUAL</code> <span class="alias">(o <code>CONTRACTUAL</code>)</span></td>
+              <td rowspan="2" class="centrado">Al menos una de las dos</td>
+              <td>Cantidad prevista en el contrato para ese material en este frente.</td>
+            </tr>
+            <tr>
+              <td><code>CANTIDAD PROCURA</code> <span class="alias">(o <code>PROCURA</code>)</span></td>
+              <td>Cantidad que Procura tiene planeado conseguir.</td>
+            </tr>
+            <tr>
+              <td><code>OBSERVACION</code> <span class="alias">(o <code>OBSERVACIONES</code>)</span></td>
+              <td>No</td>
+              <td>Cualquier nota adicional para esa fila.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="formato-nota">
+          Si un material ya tiene metrado en este frente, importarlo de nuevo reemplaza los valores con una nueva
+          versión — igual que editarlo a mano. El historial anterior no se pierde.
+        </p>
+      </div>
 
       <label class="archivo">
         <input type="file" accept=".xlsx,.xls,.csv" @change="onArchivoSeleccionado" />
@@ -153,6 +185,62 @@ h2 {
 .ayuda {
   margin: 0;
   font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.formato {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--color-info-soft);
+  border-radius: var(--radius-control);
+  padding: 0.75rem 0.9rem;
+}
+.formato-titulo {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.tabla-formato {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  background: var(--color-surface);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.tabla-formato th,
+.tabla-formato td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: normal;
+}
+.tabla-formato th {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tabla-formato code {
+  background: var(--color-surface-2);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.78rem;
+}
+.tabla-formato .alias {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+.tabla-formato .centrado {
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.formato-nota {
+  margin: 0;
+  font-size: 0.75rem;
   color: var(--color-text-muted);
 }
 .archivo input {

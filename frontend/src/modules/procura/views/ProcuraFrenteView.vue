@@ -7,6 +7,7 @@ import BuscadorMaterial from '../../../components/BuscadorMaterial.vue'
 import ImportarMetradoModal from '../components/ImportarMetradoModal.vue'
 import EditarMetradoModal from '../components/EditarMetradoModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
+import { descargarExcel } from '../../../utils/exportarExcel'
 
 const ESTRUCTURA_IMPORT_MASIVO =
   'Estructura del Excel: columnas CODIGO, CANTIDAD CONTRACTUAL y CANTIDAD PROCURA (OBSERVACION es opcional). El código debe existir ya en el catálogo.'
@@ -189,6 +190,59 @@ function claseConsumo(pct) {
   if (pct >= 90) return 'riesgo'
   return 'normal'
 }
+
+/** Exporta la planilla vigente, el historial y (si el permiso lo permite) la comparación de este frente. */
+function exportarExcel() {
+  const hojas = [
+    {
+      nombre: 'Planilla vigente',
+      filas: filas.value.map((f) => ({
+        Código: f.materiales?.codigo ?? '',
+        Material: f.materiales?.descripcion ?? '',
+        Unidad: f.unidad,
+        Contractual: f.cantidad_contractual,
+        Procura: f.cantidad_procura,
+        'Total previsto': total(f),
+      })),
+    },
+    {
+      nombre: 'Historial',
+      filas: historialConDelta.value.map((h) => ({
+        Fecha: new Date(h.created_at).toLocaleString(),
+        Código: h.materiales?.codigo ?? '',
+        Material: h.materiales?.descripcion ?? '',
+        Unidad: h.unidad,
+        Versión: h.version,
+        Contractual: h.cantidad_contractual,
+        Procura: h.cantidad_procura,
+        'Δ Procura': h.deltaProcura ?? '',
+        Total: total(h),
+        Responsable: h.usuarios?.nombre ?? '',
+      })),
+    },
+  ]
+
+  if (puedeVerComparacion.value) {
+    hojas.push({
+      nombre: 'Comparación vs consumo',
+      filas: procura.comparacion.map((c) => ({
+        Código: procura.materialPorId(c.material_id)?.codigo ?? '',
+        Material: procura.materialPorId(c.material_id)?.descripcion ?? '',
+        Unidad: c.unidad,
+        Previsto: c.cantidad_prevista,
+        Reservado: c.cantidad_reservada,
+        Solicitado: c.cantidad_solicitada,
+        Entregado: c.cantidad_entregada,
+        Saldo: c.saldo,
+        '% Consumo': c.porcentaje_consumo,
+        Desviación: c.desviacion,
+      })),
+    })
+  }
+
+  const nombreFrente = (frente.value.codigo ? `${frente.value.codigo}_` : '') + frente.value.nombre
+  descargarExcel(`procura_${nombreFrente}.xlsx`, hojas)
+}
 </script>
 
 <template>
@@ -200,8 +254,11 @@ function claseConsumo(pct) {
 
     <template v-else-if="frente">
       <header class="cabecera">
-        <h1>{{ frente.codigo ? frente.codigo + ' — ' : '' }}{{ frente.nombre }}</h1>
-        <p class="subtitulo">{{ frente.area ?? 'Sin área asignada' }}</p>
+        <div>
+          <h1>{{ frente.codigo ? frente.codigo + ' — ' : '' }}{{ frente.nombre }}</h1>
+          <p class="subtitulo">{{ frente.area ?? 'Sin área asignada' }}</p>
+        </div>
+        <button type="button" class="secundario" @click="exportarExcel">Exportar Excel</button>
       </header>
 
       <p v-if="aviso" class="aviso">{{ aviso }}</p>
@@ -411,6 +468,10 @@ function claseConsumo(pct) {
 }
 .cabecera {
   margin-bottom: 0.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 h1 {
   font-size: 1.25rem;
