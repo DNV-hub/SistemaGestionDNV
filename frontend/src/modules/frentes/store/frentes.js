@@ -34,7 +34,12 @@ export const useFrentesStore = defineStore('frentes', {
     async crear(payload) {
       const frente = await crearFrente(payload)
       this.frentes.push(frente)
-      this.frentes.sort((a, b) => a.codigo.localeCompare(b.codigo))
+      // El código es opcional (puede venir null): ordenar con localeCompare
+      // directo rompía apenas se creaba un frente sin código — el insert ya
+      // había pasado, pero el error se disparaba después, en el navegador,
+      // y el modal se quedaba abierto mostrando "No se pudo guardar" de un
+      // frente que en realidad sí se guardó.
+      this.frentes.sort((a, b) => (a.codigo ?? '').localeCompare(b.codigo ?? ''))
       return frente
     },
 
