@@ -122,7 +122,12 @@ async function onSubmit() {
 
       <label>
         Código (opcional)
-        <input v-model="form.codigo" type="text" :disabled="!!frente" />
+        <!-- Antes se bloqueaba al editar (:disabled="!!frente") porque
+             corregirlo era cosa del catálogo de Frentes dentro de Catálogos
+             RDC. Ahora que ese catálogo quedó de solo lectura, esta es la
+             única pantalla que administra frentes — tiene que poder
+             corregirse acá, igual que el resto de los campos. -->
+        <input v-model="form.codigo" type="text" />
       </label>
 
       <label>
