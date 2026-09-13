@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { supabase } from '../services/supabaseClient'
+import { conTiempoLimite } from '../utils/conTiempoLimite'
 
 // El perfil y los permisos se guardan en el navegador para que la aplicación
 // se pueda usar sin red. Los supervisores del RDC trabajan en mina sin señal:
@@ -68,29 +69,47 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async init() {
-      const { data } = await supabase.auth.getSession()
-      this.session = data.session
+      // main.js espera a que init() termine ANTES de montar la app entera
+      // (ver el comentario de ahí) — así que si getSession() se cuelga
+      // (típico al volver de un rato largo sin señal: el token ya venció y
+      // el intento de renovarlo se queda esperando una red que recién está
+      // volviendo), la pantalla se queda en negro de verdad, sin ni
+      // siquiera el "Cargando…" de App.vue, porque App.vue todavía no
+      // existe. `conTiempoLimite` corta esa espera a los 8s en vez de
+      // dejarla colgada el minuto entero que reportó un usuario en iPhone.
+      let sesion = null
+      let seConsulto = false
+      try {
+        const { data } = await conTiempoLimite(supabase.auth.getSession(), 8000)
+        sesion = data.session
+        seConsulto = true
+      } catch {
+        // No se pudo confirmar a tiempo — se sigue como en el caso de
+        // "sin conexión" de abajo, con lo último que se sabía.
+      }
+      this.session = sesion
 
       if (this.session) {
         // Primero la copia local, para que la interfaz esté utilizable de
         // inmediato aunque no haya red; después se intenta refrescar.
         this.aplicarCache()
         await this.cargarPerfil()
-      } else if (!navigator.onLine) {
+      } else if (!seConsulto || !navigator.onLine) {
         // Esto es lo que resuelve "en Android, cada vez que vuelvo a la
         // app me manda al login": init() corre una sola vez, al cargar la
         // página — pero un navegador móvil descarta de memoria una pestaña
         // en segundo plano (pantalla apagada, cambio de app) y la recrea
         // de cero al volver, así que en la práctica init() se repite en
         // cada regreso. Si en ESE instante todavía no hay señal (típico
-        // recién despertando el teléfono), getSession() no puede confirmar
-        // si el token vencido se puede renovar y devuelve sesión nula —
-        // pero eso no significa que la sesión haya muerto de verdad, solo
-        // que todavía no se pudo preguntar. Sin este `else if`, esa duda se
-        // trataba como cierre de sesión real y mandaba al supervisor al
-        // login sin haber cerrado sesión nunca. Se entra con lo último que
-        // se sabía (el perfil en caché); en cuanto vuelva la señal, el
-        // listener de abajo corrige solo si la sesión sí venció de verdad.
+        // recién despertando el teléfono) o la consulta se cortó por
+        // tardanza, no se puede confirmar si el token vencido se puede
+        // renovar y "sesión nula" no significa que la sesión haya muerto
+        // de verdad, solo que todavía no se pudo preguntar. Sin este
+        // `else if`, esa duda se trataba como cierre de sesión real y
+        // mandaba al supervisor al login sin haber cerrado sesión nunca.
+        // Se entra con lo último que se sabía (el perfil en caché); en
+        // cuanto vuelva la señal, el listener de abajo corrige solo si la
+        // sesión sí venció de verdad.
         this.aplicarCache()
       }
       this.cargando = false
@@ -122,11 +141,23 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async cargarPerfil() {
-      const { data: usuario, error } = await supabase
-        .from('usuarios')
-        .select('*, roles(id, nombre)')
-        .eq('id', this.session.user.id)
-        .single()
+      // Misma protección que en init(): esta consulta también puede
+      // colgarse con la red recién recuperándose, y también la espera
+      // main.js antes de montar la app.
+      let usuario, error
+      try {
+        const resultado = await conTiempoLimite(
+          supabase.from('usuarios').select('*, roles(id, nombre)').eq('id', this.session.user.id).single(),
+          8000
+        )
+        usuario = resultado.data
+        error = resultado.error
+      } catch (e) {
+        // Se corta por tardanza: se trata igual que un fallo de red (sin
+        // código de PostgREST), nunca como "el perfil no existe".
+        usuario = null
+        error = { message: e?.message }
+      }
 
       if (error || !usuario) {
         // Distinguir "no se pudo preguntar" de "la respuesta fue que no
@@ -146,13 +177,22 @@ export const useAuthStore = defineStore('auth', {
 
       this.perfil = usuario
 
-      const { data: permisos, error: errorPermisos } = await supabase
-        .from('rol_permisos')
-        .select('permisos(codigo)')
-        .eq('rol_id', usuario.rol_id)
+      let permisos, errorPermisos
+      try {
+        const resultado = await conTiempoLimite(
+          supabase.from('rol_permisos').select('permisos(codigo)').eq('rol_id', usuario.rol_id),
+          8000
+        )
+        permisos = resultado.data
+        errorPermisos = resultado.error
+      } catch (e) {
+        permisos = null
+        errorPermisos = { message: e?.message }
+      }
 
-      // Mismo criterio: si los permisos no llegaron por falta de red, se
-      // mantienen los de la copia local en vez de dejar el menú vacío.
+      // Mismo criterio: si los permisos no llegaron por falta de red (o por
+      // tardanza), se mantienen los de la copia local en vez de dejar el
+      // menú vacío.
       if (errorPermisos && !errorPermisos.code) {
         const cache = leerCache()
         if (cache?.permisos?.length) {
