@@ -30,7 +30,12 @@ function estadoInicial() {
     // Planeamiento lo pase a 'activo' a mano, cuando el trabajo arranque
     // de verdad.
     estado: props.frente?.estado ?? 'planificado',
-    fecha_inicio: props.frente?.fecha_inicio ?? new Date().toISOString().slice(0, 10),
+    // Vacío por defecto en un frente nuevo, a propósito: "planificado"
+    // significa justamente que todavía no se sabe cuándo arranca. Ponerle
+    // la fecha de hoy acá haría que el trigger de la base lo pasara a
+    // 'activo' de inmediato, apenas se guarda — lo probó el usuario y es
+    // exactamente el bug que reportó.
+    fecha_inicio: props.frente?.fecha_inicio ?? '',
     fecha_cierre: props.frente?.fecha_cierre ?? '',
   }
 }
@@ -60,7 +65,7 @@ async function onSubmit() {
       codigo: form.codigo.trim() || null,
       contrato_id: form.contrato_id,
       estado: form.estado,
-      fecha_inicio: form.fecha_inicio,
+      fecha_inicio: form.fecha_inicio || null,
       fecha_cierre: form.fecha_cierre || null,
     })
   } catch (e) {
@@ -110,8 +115,11 @@ async function onSubmit() {
       </label>
 
       <label>
-        Fecha de inicio
-        <input v-model="form.fecha_inicio" type="date" required />
+        Fecha de inicio (opcional)
+        <input v-model="form.fecha_inicio" type="date" />
+        <span v-if="!form.fecha_inicio && (form.estado === 'planificado' || form.estado === 'proximo')" class="ayuda">
+          Déjala vacía mientras no se sepa cuándo arranca — eso es justo lo que significa "Planificado".
+        </span>
       </label>
 
       <label v-show="puedeEditarEstado">
