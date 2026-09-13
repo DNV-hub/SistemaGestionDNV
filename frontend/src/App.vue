@@ -130,31 +130,41 @@ const SOLO_CAMPO = ['Supervisor']
 // Consulta), las mismas tres pantallas se agrupan en un solo ítem "RDC" más
 // abajo, en Planeamiento — con pestañas propias arriba del contenido (ver
 // RdcTabs.vue) en vez de tres líneas sueltas mezcladas con Dashboard/Reportes.
+// `color` es solo estético (el fondo del ícono en la hoja "Más" del
+// celular, ver hoja-mas) — nada que ver con permisos ni con el sidebar de
+// escritorio, que sigue siendo monocromo.
+// `prioridadMovil` decide qué 4 módulos ganan un lugar fijo en la barra de
+// pestañas del celular (tabsMoviles, más abajo): cuanto más bajo el
+// número, más prioridad. Sin este campo, un módulo nunca compite por esos
+// 4 lugares — se queda directo en la hoja "Más". Se le puso número solo a
+// los 4 que de verdad importa fijar (Dashboard/RDC/Almacén/Vales); el
+// resto usa las 4 pestañas de Supervisor tal cual estaban (sin marcar
+// prioridad, no hace falta: ahí ya son exactamente 4 en total).
 const navPrincipal = computed(() => [
-  { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO },
-  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO },
-  { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO },
-  { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
+  { to: '/', label: 'Dashboard', icono: 'dashboard', color: 'amber', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 1 },
+  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO },
+  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', color: 'teal', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO },
+  { to: '/sketches', label: "Sketch's", icono: 'sketch', color: 'teal', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO },
+  { to: '/developer', label: 'Developer', icono: 'developer', color: 'slate', permiso: 'sistema.borrar_pruebas' },
 ])
 
 const navPlaneamiento = computed(() => [
-  { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
-  { to: '/frentes', label: 'Frentes', icono: 'frentes', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
-  { to: '/procura', label: 'Procura', icono: 'procura', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/rdc', label: 'RDC', icono: 'rdc', permiso: 'rdc.ver_propios', rolesExcluidos: SOLO_CAMPO },
+  { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', color: 'slate', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { to: '/frentes', label: 'Frentes', icono: 'frentes', color: 'violet', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { to: '/procura', label: 'Procura', icono: 'procura', color: 'blue', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/rdc', label: 'RDC', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 2 },
   // Planeamiento es quien saca los reportes generales del sistema (no solo
   // los del RDC) — vive acá y no en "Principal", junto al resto de lo que
   // administra ese rol.
-  { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
+  { to: '/reportes', label: 'Reportes', icono: 'reportes', color: 'slate', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
 ])
 
 const navAlmacen = computed(() => [
-  { to: '/almacen', label: 'Almacén', icono: 'almacen', permiso: 'stock.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/vales', label: 'Vales', icono: 'vales', permiso: 'vales.ver_propios', badge: badgeVales.value },
-  { to: '/reservas', label: 'Reservas', icono: 'reservas', permiso: 'reservas.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/kardex', label: 'Kardex', icono: 'kardex', permiso: 'kardex.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/alertas', label: 'Alertas', icono: 'alertas', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
+  { to: '/almacen', label: 'Almacén', icono: 'almacen', color: 'blue', permiso: 'stock.ver', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 3 },
+  { to: '/vales', label: 'Vales', icono: 'vales', color: 'amber', permiso: 'vales.ver_propios', badge: badgeVales.value, prioridadMovil: 4 },
+  { to: '/reservas', label: 'Reservas', icono: 'reservas', color: 'green', permiso: 'reservas.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/kardex', label: 'Kardex', icono: 'kardex', color: 'slate', permiso: 'kardex.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/alertas', label: 'Alertas', icono: 'alertas', color: 'pink', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
 ])
 
 // "Usuarios y roles" asigna qué rol tiene cada persona; "Roles y permisos"
@@ -176,15 +186,30 @@ function visibles(items) {
 }
 
 // En celular no entran todos los módulos en una barra: se muestran los 4
-// más usados como pestañas fijas (siguiendo el orden Principal → Planeamiento
-// → Almacén) y el resto queda dentro de "Más", junto con tema/usuarios/salir.
+// con más prioridad (prioridadMovil, ver arriba) como pestañas fijas — con
+// sort estable, quien no tiene prioridad marcada mantiene su orden natural
+// (Principal → Planeamiento → Almacén), que es justo lo que necesita
+// Supervisor: sus 4 módulos no tienen prioridad puesta y ya son exactamente
+// 4 en total, así que quedan igual que siempre. El resto va a la hoja "Más".
 const navTodos = computed(() => [
   ...visibles(navPrincipal.value),
   ...visibles(navPlaneamiento.value),
   ...visibles(navAlmacen.value),
 ])
-const tabsMoviles = computed(() => navTodos.value.slice(0, 4))
-const modulosExtra = computed(() => navTodos.value.slice(4))
+const tabsMoviles = computed(() =>
+  [...navTodos.value].sort((a, b) => (a.prioridadMovil ?? 99) - (b.prioridadMovil ?? 99)).slice(0, 4)
+)
+// Agrupados igual que el sidebar de escritorio (Principal/Planeamiento/
+// Almacén), para que la hoja "Más" se vea como un mini directorio de
+// módulos y no una lista plana — excluye lo que ya tiene pestaña fija, para
+// no mostrar dos veces el mismo acceso.
+function extrasDe(grupo) {
+  const enTabbar = new Set(tabsMoviles.value.map((i) => i.to))
+  return visibles(grupo).filter((item) => !enTabbar.has(item.to))
+}
+const extrasPrincipal = computed(() => extrasDe(navPrincipal.value))
+const extrasPlaneamiento = computed(() => extrasDe(navPlaneamiento.value))
+const extrasAlmacen = computed(() => extrasDe(navAlmacen.value))
 
 const inicialesUsuario = computed(() => {
   const nombre = auth.perfil?.nombre ?? ''
@@ -319,7 +344,8 @@ const inicialesUsuario = computed(() => {
     <div v-if="mostrarMas" class="hoja-backdrop" @click="mostrarMas = false"></div>
     <div v-if="mostrarMas" class="hoja-mas">
       <div class="hoja-manija"></div>
-      <div class="hoja-usuario">
+
+      <div class="hoja-perfil">
         <span class="avatar">{{ inicialesUsuario }}</span>
         <div class="usuario-info">
           <div class="usuario-nombre">{{ auth.perfil?.nombre }}</div>
@@ -327,19 +353,46 @@ const inicialesUsuario = computed(() => {
         </div>
       </div>
 
-      <router-link
-        v-for="item in modulosExtra"
-        :key="item.to"
-        :to="item.to"
-        class="hoja-item"
-        @click="mostrarMas = false"
-      >
-        <IconoNav :nombre="item.icono" />
-        <span>{{ item.label }}</span>
-        <span v-if="item.badge" class="badge-contador">{{ item.badge }}</span>
-      </router-link>
+      <div v-if="extrasPrincipal.length" class="hoja-grupo">
+        <p class="hoja-grupo-titulo">Principal</p>
+        <div class="mod-grid">
+          <router-link v-for="item in extrasPrincipal" :key="item.to" :to="item.to" class="mod-item" @click="mostrarMas = false">
+            <span class="mod-icono" :class="item.color">
+              <IconoNav :nombre="item.icono" />
+              <span v-if="item.badge" class="mod-badge">{{ item.badge }}</span>
+            </span>
+            <span class="mod-etiqueta">{{ item.label }}</span>
+          </router-link>
+        </div>
+      </div>
 
-      <hr v-if="modulosExtra.length" class="hoja-separador" />
+      <div v-if="extrasPlaneamiento.length" class="hoja-grupo">
+        <p class="hoja-grupo-titulo">Planeamiento</p>
+        <div class="mod-grid">
+          <router-link v-for="item in extrasPlaneamiento" :key="item.to" :to="item.to" class="mod-item" @click="mostrarMas = false">
+            <span class="mod-icono" :class="item.color">
+              <IconoNav :nombre="item.icono" />
+              <span v-if="item.badge" class="mod-badge">{{ item.badge }}</span>
+            </span>
+            <span class="mod-etiqueta">{{ item.label }}</span>
+          </router-link>
+        </div>
+      </div>
+
+      <div v-if="extrasAlmacen.length" class="hoja-grupo">
+        <p class="hoja-grupo-titulo">Almacén</p>
+        <div class="mod-grid">
+          <router-link v-for="item in extrasAlmacen" :key="item.to" :to="item.to" class="mod-item" @click="mostrarMas = false">
+            <span class="mod-icono" :class="item.color">
+              <IconoNav :nombre="item.icono" />
+              <span v-if="item.badge" class="mod-badge">{{ item.badge }}</span>
+            </span>
+            <span class="mod-etiqueta">{{ item.label }}</span>
+          </router-link>
+        </div>
+      </div>
+
+      <hr class="hoja-separador" />
 
       <button type="button" class="hoja-item" @click="tema.alternar">
         <IconoNav :nombre="tema.modo === 'dark' ? 'sol' : 'luna'" />
@@ -815,16 +868,108 @@ const inicialesUsuario = computed(() => {
     background: var(--sidebar-border);
     margin: 0.2rem auto 0.6rem;
   }
-  .hoja-usuario {
+  .hoja-perfil {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.3rem 0.4rem 0.75rem;
+    padding: 0.3rem 0.4rem 0.9rem;
+  }
+  .hoja-grupo {
+    margin-bottom: 0.9rem;
+  }
+  .hoja-grupo-titulo {
+    padding: 0 0.4rem;
+    margin: 0 0 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sidebar-text-muted);
+  }
+  .mod-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.9rem 0.5rem;
+  }
+  .mod-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    text-decoration: none;
+  }
+  .mod-icono {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  .mod-icono :deep(svg) {
+    width: 21px;
+    height: 21px;
+  }
+  .mod-etiqueta {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--sidebar-text);
+    text-align: center;
+    line-height: 1.2;
+  }
+  .mod-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--color-danger);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Colores decorativos de los íconos de módulo — no tienen significado
+     semántico (a diferencia de success/warning/danger en el resto del
+     Sistema), son solo para distinguir cada módulo a simple vista en la
+     hoja, como en el mockup. */
+  .mod-icono.amber {
+    background: var(--color-primary-soft);
+    color: var(--color-primary);
+  }
+  .mod-icono.violet {
+    background: rgba(139, 92, 246, 0.16);
+    color: #a78bfa;
+  }
+  .mod-icono.blue {
+    background: var(--color-info-soft);
+    color: var(--color-info);
+  }
+  .mod-icono.teal {
+    background: rgba(20, 184, 166, 0.16);
+    color: #2dd4bf;
+  }
+  .mod-icono.green {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+  }
+  .mod-icono.pink {
+    background: rgba(236, 72, 153, 0.16);
+    color: #f472b6;
+  }
+  .mod-icono.slate {
+    background: rgba(156, 163, 175, 0.16);
+    color: var(--sidebar-text-muted);
   }
   .hoja-separador {
     border: none;
     border-top: 1px solid var(--sidebar-border);
-    margin: 0.4rem 0;
+    margin: 0.4rem 0 0.6rem;
   }
   .hoja-item {
     display: flex;

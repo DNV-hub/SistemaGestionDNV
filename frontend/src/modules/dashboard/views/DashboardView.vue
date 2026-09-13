@@ -60,6 +60,24 @@ const ICONOS_PERSONAL = {
   Vigía: '<path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>',
 }
 const ICONO_EQUIPO = '<rect x="1.5" y="6" width="8" height="5.5" rx="1"/><path d="M9.5 8h2.3L14 10.2V11.5h-4.5"/>'
+const ICONO_GRUPO = '<circle cx="5" cy="5" r="2"/><circle cx="11" cy="5" r="2"/><path d="M1.5 14c0-2.2 1.6-4 3.5-4s3.5 1.8 3.5 4M8.5 14c0-2.2 1.6-4 3.5-4s3.5 1.8 3.5 4"/>'
+
+// En celular la tarjeta de cada frente no muestra el detalle de Personal/
+// Equipos siempre abierto (no entra en la pantalla) — arranca en dos
+// "píldoras" con el total, y se despliega la lista al tocarlas. En
+// escritorio esto no se usa: ahí las dos columnas van siempre visibles
+// (ver .fc-cols-desktop / .fc-cols-movil en el CSS).
+const detallesAbiertos = ref(new Set())
+function alternarDetalle(frenteId, tipo) {
+  const clave = `${frenteId}:${tipo}`
+  const copia = new Set(detallesAbiertos.value)
+  if (copia.has(clave)) copia.delete(clave)
+  else copia.add(clave)
+  detallesAbiertos.value = copia
+}
+function detalleAbierto(frenteId, tipo) {
+  return detallesAbiertos.value.has(`${frenteId}:${tipo}`)
+}
 
 // Colores estables por frente (por id, no por posición): para que un mismo
 // frente no cambie de color cada vez que la lista se reordena.
@@ -195,7 +213,8 @@ function etiquetaParalizado(updatedAt) {
             <div class="fc-sup-name">{{ f.supervisor }}</div>
             <div v-if="f.capataz" class="fc-sup-cap">Capataz {{ f.capataz }}</div>
 
-            <div class="fc-cols">
+            <!-- Escritorio: las dos columnas siempre visibles (hay lugar de sobra). -->
+            <div class="fc-cols fc-cols-desktop">
               <div class="fc-col">
                 <div class="fc-col-label">Personal ({{ totalPersonalFrente(f) }})</div>
                 <div v-for="categoria in PERSONAL_DIRECTO" :key="categoria" class="role-row">
@@ -217,6 +236,48 @@ function etiquetaParalizado(updatedAt) {
                   <span class="name">+ {{ equiposRestantes(f) }} más</span>
                   <span class="cnt"></span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Celular: dos píldoras con el total, se despliegan al tocarlas
+                 (no entran las dos columnas completas en una pantalla angosta). -->
+            <div class="fc-stats fc-cols-movil">
+              <button
+                type="button"
+                class="fc-stat"
+                :class="{ open: detalleAbierto(f.frente?.id, 'personal') }"
+                @click="alternarDetalle(f.frente?.id, 'personal')"
+              >
+                <svg viewBox="0 0 16 16" v-html="ICONO_GRUPO"></svg>
+                <span class="lbl">Personal</span>
+                <span class="num">{{ totalPersonalFrente(f) }}</span>
+                <svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3"/></svg>
+              </button>
+              <button
+                type="button"
+                class="fc-stat"
+                :class="{ open: detalleAbierto(f.frente?.id, 'equipos') }"
+                @click="alternarDetalle(f.frente?.id, 'equipos')"
+              >
+                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
+                <span class="lbl">Equipos</span>
+                <span class="num">{{ totalMaquinariaFrente(f) }}</span>
+                <svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3"/></svg>
+              </button>
+            </div>
+            <div v-if="detalleAbierto(f.frente?.id, 'personal')" class="fc-detail fc-cols-movil">
+              <div v-for="categoria in PERSONAL_DIRECTO" :key="categoria" class="fc-detail-row">
+                <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[categoria]"></svg>
+                <span class="lbl">{{ categoria }}</span>
+                <span class="cnt">{{ personalDe(f, categoria) }}</span>
+              </div>
+            </div>
+            <div v-if="detalleAbierto(f.frente?.id, 'equipos')" class="fc-detail fc-cols-movil">
+              <div v-if="!equiposAgrupados(f).length" class="eq-vacio">Sin equipos registrados</div>
+              <div v-for="eq in equiposAgrupados(f)" :key="eq.tipo" class="fc-detail-row">
+                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
+                <span class="lbl">{{ eq.tipo }}</span>
+                <span class="cnt">{{ eq.cantidad }}</span>
               </div>
             </div>
 
@@ -258,32 +319,34 @@ function etiquetaParalizado(updatedAt) {
           </div>
         </section>
 
-        <section v-if="permisos.rdcCampo && dashboard.frentesEnCampo.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Personal — Total en mina</div><div class="summary-num">{{ totalesPersonal.total }}</div></div>
-          <div class="summary-grid">
-            <div v-for="d in totalesPersonal.directos" :key="d.categoria" class="role-row">
-              <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[d.categoria]"></svg>
-              <span class="lbl">{{ d.categoria }}</span>
-              <span class="cnt">{{ d.total }}</span>
+        <div v-if="permisos.rdcCampo && dashboard.frentesEnCampo.length" class="totals-row">
+          <section class="card">
+            <div class="card-head compacto"><div class="card-title chico">Personal</div><div class="summary-num">{{ totalesPersonal.total }}</div></div>
+            <div class="summary-grid una-col">
+              <div v-for="d in totalesPersonal.directos" :key="d.categoria" class="role-row">
+                <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[d.categoria]"></svg>
+                <span class="lbl">{{ d.categoria }}</span>
+                <span class="cnt">{{ d.total }}</span>
+              </div>
+              <div v-if="totalesPersonal.otros" class="role-row">
+                <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>
+                <span class="lbl">Otros</span>
+                <span class="cnt">{{ totalesPersonal.otros }}</span>
+              </div>
             </div>
-            <div v-if="totalesPersonal.otros" class="role-row">
-              <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>
-              <span class="lbl">Otros</span>
-              <span class="cnt">{{ totalesPersonal.otros }}</span>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section v-if="permisos.rdcCampo && dashboard.frentesEnCampo.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Equipos — Total en mina</div><div class="summary-num">{{ totalesMaquinaria.total }}</div></div>
-          <div class="summary-grid una-col">
-            <div v-for="eq in totalesMaquinaria.lista" :key="eq.tipo" class="eq-row">
-              <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-              <span class="name">{{ eq.tipo }}</span>
-              <span class="cnt">{{ eq.cantidad }}</span>
+          <section class="card">
+            <div class="card-head compacto"><div class="card-title chico">Equipos</div><div class="summary-num">{{ totalesMaquinaria.total }}</div></div>
+            <div class="summary-grid una-col">
+              <div v-for="eq in totalesMaquinaria.lista" :key="eq.tipo" class="eq-row">
+                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
+                <span class="name">{{ eq.tipo }}</span>
+                <span class="cnt">{{ eq.cantidad }}</span>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
         <section v-if="permisos.stock && dashboard.stockCritico.length" class="card">
           <div class="card-head compacto"><div class="card-title chico">Materiales con stock crítico</div></div>
@@ -533,6 +596,108 @@ function etiquetaParalizado(updatedAt) {
   color: var(--color-text-muted);
 }
 
+/* Por defecto (escritorio) se ve la versión de dos columnas siempre
+   abiertas; la de píldoras colapsables es solo para celular angosto — se
+   invierte dentro del media query de abajo. Selector compuesto (no solo
+   ".fc-cols-movil") a propósito: así gana siempre por especificidad,
+   sin depender del orden en que aparecen las reglas en la hoja de estilos
+   frente al display:flex propio de .fc-stats/.fc-detail. */
+.fc-stats.fc-cols-movil,
+.fc-detail.fc-cols-movil {
+  display: none;
+}
+.fc-stats {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+.fc-stat {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-surface-2);
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.fc-stat svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.fc-stat .lbl {
+  flex: 1;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: left;
+}
+.fc-stat .num {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+.fc-stat .chev {
+  width: 10px;
+  height: 10px;
+  stroke: var(--color-text-muted);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+.fc-stat.open {
+  background: var(--color-primary-soft);
+}
+.fc-stat.open .chev {
+  transform: rotate(180deg);
+  stroke: var(--color-primary);
+}
+.fc-detail {
+  margin-top: 0.5rem;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
+  padding: 0.5rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.fc-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.fc-detail-row svg {
+  width: 13px;
+  height: 13px;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.fc-detail-row .lbl {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.fc-detail-row .cnt {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
 .fc-restriccion {
   margin-top: 0.6rem;
   display: flex;
@@ -663,6 +828,14 @@ function etiquetaParalizado(updatedAt) {
   stroke-linejoin: round;
 }
 
+.totals-row {
+  display: flex;
+  gap: 0.6rem;
+}
+.totals-row .card {
+  flex: 1;
+  min-width: 0;
+}
 .summary-num {
   font-size: 0.94rem;
   font-weight: 800;
@@ -773,8 +946,24 @@ function etiquetaParalizado(updatedAt) {
   }
 }
 @media (max-width: 640px) {
+  .dashboard {
+    padding: 1rem 0.85rem 1.25rem;
+  }
   .frentes-scroll {
     grid-template-columns: 1fr;
+    padding: 0 0.8rem 0.8rem;
+  }
+  /* Acá se invierte: la versión de dos columnas siempre abiertas no entra
+     cómoda en una pantalla angosta — se usan las píldoras colapsables. */
+  .fc-cols.fc-cols-desktop {
+    display: none;
+  }
+  .fc-stats.fc-cols-movil,
+  .fc-detail.fc-cols-movil {
+    display: flex;
+  }
+  .totals-row {
+    gap: 0.5rem;
   }
 }
 </style>
