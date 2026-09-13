@@ -1,36 +1,21 @@
 import { defineStore } from 'pinia'
 import {
-  contarAlertasActivas,
-  contarValesPendientes,
-  contarReservasActivas,
-  contarFrentesActivos,
   listarStockCritico,
-  listarFrentesSobreconsumo,
-  listarMaterialesSinMetrado,
-  listarMovimientosSemana,
-  listarStockPorCategoria,
-  listarUltimosMovimientos,
   listarAlertasCriticasRecientes,
-  listarValesPendientesRecientes,
   listarFrentesEnCampo,
+  listarFrentesProximos,
+  listarFrentesParalizados,
 } from '../services/dashboardService'
 
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
-    alertas: null,
-    valesPorAprobar: null,
-    reservasActivas: null,
-    frentesActivos: null,
-    stockCritico: [],
-    frentesSobreconsumo: [],
-    materialesSinMetrado: [],
-    movimientosSemana: [],
-    stockPorCategoria: [],
-    ultimosMovimientos: [],
-    alertasRecientes: [],
-    valesRecientes: [],
     frentesEnCampo: [],
+    frentesProximos: [],
+    frentesParalizados: [],
+    stockCritico: [],
+    alertasRecientes: [],
     cargando: false,
+    actualizadoEn: null,
   }),
 
   actions: {
@@ -43,60 +28,6 @@ export const useDashboardStore = defineStore('dashboard', {
       this.cargando = true
       const tareas = []
 
-      if (permisos.alertas) {
-        tareas.push(
-          contarAlertasActivas()
-            .then((v) => (this.alertas = v))
-            .catch(() => {}),
-          listarAlertasCriticasRecientes()
-            .then((v) => (this.alertasRecientes = v))
-            .catch(() => {})
-        )
-      }
-      if (permisos.vales) {
-        tareas.push(
-          contarValesPendientes()
-            .then((v) => (this.valesPorAprobar = v))
-            .catch(() => {}),
-          listarValesPendientesRecientes()
-            .then((v) => (this.valesRecientes = v))
-            .catch(() => {})
-        )
-      }
-      if (permisos.reservas) {
-        tareas.push(
-          contarReservasActivas()
-            .then((v) => (this.reservasActivas = v))
-            .catch(() => {})
-        )
-      }
-      if (permisos.frentes) {
-        tareas.push(
-          contarFrentesActivos()
-            .then((v) => (this.frentesActivos = v))
-            .catch(() => {})
-        )
-      }
-      if (permisos.stock) {
-        tareas.push(
-          listarStockCritico()
-            .then((v) => (this.stockCritico = v))
-            .catch(() => {}),
-          listarStockPorCategoria()
-            .then((v) => (this.stockPorCategoria = v))
-            .catch(() => {})
-        )
-      }
-      if (permisos.kardex) {
-        tareas.push(
-          listarMovimientosSemana()
-            .then((v) => (this.movimientosSemana = v))
-            .catch(() => {}),
-          listarUltimosMovimientos()
-            .then((v) => (this.ultimosMovimientos = v))
-            .catch(() => {})
-        )
-      }
       if (permisos.rdcCampo) {
         tareas.push(
           listarFrentesEnCampo()
@@ -104,18 +35,33 @@ export const useDashboardStore = defineStore('dashboard', {
             .catch(() => {})
         )
       }
-      if (permisos.procura) {
+      if (permisos.frentes) {
         tareas.push(
-          listarFrentesSobreconsumo()
-            .then((v) => (this.frentesSobreconsumo = v))
+          listarFrentesProximos()
+            .then((v) => (this.frentesProximos = v))
             .catch(() => {}),
-          listarMaterialesSinMetrado()
-            .then((v) => (this.materialesSinMetrado = v))
+          listarFrentesParalizados()
+            .then((v) => (this.frentesParalizados = v))
+            .catch(() => {})
+        )
+      }
+      if (permisos.stock) {
+        tareas.push(
+          listarStockCritico()
+            .then((v) => (this.stockCritico = v))
+            .catch(() => {})
+        )
+      }
+      if (permisos.alertas) {
+        tareas.push(
+          listarAlertasCriticasRecientes()
+            .then((v) => (this.alertasRecientes = v))
             .catch(() => {})
         )
       }
 
       await Promise.all(tareas)
+      this.actualizadoEn = new Date()
       this.cargando = false
     },
   },
