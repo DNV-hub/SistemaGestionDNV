@@ -135,7 +135,6 @@ const navPrincipal = computed(() => [
   { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO },
   { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO },
   { to: '/sketches', label: "Sketch's", icono: 'sketch', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO },
-  { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
   { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
 ])
 
@@ -144,6 +143,10 @@ const navPlaneamiento = computed(() => [
   { to: '/frentes', label: 'Frentes', icono: 'frentes', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
   { to: '/procura', label: 'Procura', icono: 'procura', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/rdc', label: 'RDC', icono: 'rdc', permiso: 'rdc.ver_propios', rolesExcluidos: SOLO_CAMPO },
+  // Planeamiento es quien saca los reportes generales del sistema (no solo
+  // los del RDC) — vive acá y no en "Principal", junto al resto de lo que
+  // administra ese rol.
+  { to: '/reportes', label: 'Reportes', icono: 'reportes', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
 ])
 
 const navAlmacen = computed(() => [
