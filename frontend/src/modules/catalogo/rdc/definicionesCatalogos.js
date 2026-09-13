@@ -14,8 +14,13 @@ export const CATALOGOS_RDC = [
   // Sectores y Frentes NO son catálogos propios del RDC (a diferencia de los
   // siete de abajo): son las mismas tablas `sectores`/`frentes` que ya usa
   // el resto del Sistema (Vales, Kardex, Procura, Almacén) desde la
-  // migración 20260911170000 — una sola fuente, editable desde acá y visible
-  // también en el módulo Frentes.
+  // migración 20260911170000 — una sola fuente. Sectores no tiene pantalla
+  // propia en ningún otro lado, así que se administra desde acá. Frentes SÍ
+  // la tiene (el módulo Frentes, para Planeamiento) — a propósito de que el
+  // usuario pidió no tener dos pantallas que editen lo mismo, acá queda
+  // `soloLectura` (ver TablaCatalogo.vue): se ve para poder elegir un
+  // frente al administrar Prefijos/Partidas EDT/Pernos, pero cualquier alta,
+  // baja o cambio se hace en /frentes.
   {
     clave: 'sectores',
     etiqueta: 'Sectores',
@@ -30,11 +35,9 @@ export const CATALOGOS_RDC = [
     clave: 'frentes',
     etiqueta: 'Frentes',
     tabla: 'frentes',
-    // `frentes` no tiene columna `activo`: su ciclo de vida es `estado`
-    // (activo / paralizado / cerrado), así que se administra como una
-    // columna de selección más, no con el checkbox especial de activo.
     campoActivo: null,
     ordenarPor: 'nombre',
+    soloLectura: true,
     columnas: [
       { clave: 'nombre', etiqueta: 'Nombre', tipo: 'texto', requerido: true },
       { clave: 'sector_id', etiqueta: 'Sector', tipo: 'seleccion', opciones: 'sectores', requerido: true },
@@ -162,6 +165,8 @@ export const OPCIONES_FIJAS = {
     { value: 3, label: '3 — Complementarias' },
   ],
   estadoFrente: [
+    { value: 'planificado', label: 'Planificado' },
+    { value: 'proximo', label: 'Próximo' },
     { value: 'activo', label: 'Activo' },
     { value: 'paralizado', label: 'Paralizado' },
     { value: 'cerrado', label: 'Cerrado' },

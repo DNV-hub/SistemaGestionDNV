@@ -152,6 +152,7 @@ async function alEliminar(id) {
         :campo-activo="definicionActiva.campoActivo"
         :opciones="fuentesOpciones"
         :nueva-fila-base="nuevaFilaBase"
+        :solo-lectura="!!definicionActiva.soloLectura"
         :al-crear="alCrear"
         :al-actualizar="alActualizar"
         :al-eliminar="alEliminar"

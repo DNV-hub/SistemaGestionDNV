@@ -19,9 +19,14 @@ const props = defineProps({
   campoActivo: { type: String, default: null },
   opciones: { type: Object, default: () => ({}) },
   nuevaFilaBase: { type: Object, default: () => ({}) },
-  alCrear: { type: Function, required: true },
-  alActualizar: { type: Function, required: true },
-  alEliminar: { type: Function, required: true },
+  alCrear: { type: Function, default: null },
+  alActualizar: { type: Function, default: null },
+  alEliminar: { type: Function, default: null },
+  // Para un catálogo que ya se administra desde su propio módulo (Frentes,
+  // por ejemplo): acá solo se ve, para no tener dos pantallas distintas que
+  // editen lo mismo y puedan desincronizarse. Sin fila nueva, sin inputs,
+  // sin borrar — una tabla plana nomás.
+  soloLectura: { type: Boolean, default: false },
 })
 
 const error = ref('')
@@ -82,6 +87,17 @@ async function guardarCampo(fila, clave) {
   }
 }
 
+// Solo para el modo de lectura: el valor plano de una celda 'seleccion' es
+// un id/código, no lo que hay que mostrarle a alguien — se busca su
+// etiqueta en las mismas opciones que usa el modo editable.
+function valorLegible(fila, columna) {
+  const valor = fila[columna.clave]
+  if (columna.tipo === 'seleccion') {
+    return (props.opciones[columna.opciones] ?? []).find((o) => o.value === valor)?.label ?? valor ?? '—'
+  }
+  return valor ?? '—'
+}
+
 const eliminandoIds = reactive(new Set())
 async function eliminar(fila) {
   const etiqueta = fila.nombre ?? fila.codigo ?? fila.tipo ?? 'esta fila'
@@ -100,6 +116,10 @@ async function eliminar(fila) {
 
 <template>
   <div class="tabla-catalogo">
+    <p v-if="soloLectura" class="aviso-solo-lectura">
+      Solo lectura. Para crear, editar o borrar, ve al módulo <router-link to="/frentes">Frentes</router-link> —
+      administrarlo también desde acá haría fácil que las dos pantallas terminen diciendo cosas distintas.
+    </p>
     <p v-if="error" class="error">{{ error }}</p>
 
     <div class="scroll">
@@ -108,10 +128,19 @@ async function eliminar(fila) {
           <tr>
             <th v-for="c in columnas" :key="c.clave">{{ c.etiqueta }}</th>
             <th v-if="campoActivo">Activo</th>
-            <th></th>
+            <th v-if="!soloLectura"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody v-if="soloLectura">
+          <tr v-for="fila in filas" :key="fila.id">
+            <td v-for="c in columnas" :key="c.clave">{{ valorLegible(fila, c) }}</td>
+            <td v-if="campoActivo">{{ fila[campoActivo] ? 'Sí' : 'No' }}</td>
+          </tr>
+          <tr v-if="!filas.length">
+            <td :colspan="columnas.length + (campoActivo ? 1 : 0)" class="vacio">Todavía no hay filas.</td>
+          </tr>
+        </tbody>
+        <tbody v-else>
           <tr class="fila-nueva">
             <td v-for="c in columnas" :key="c.clave">
               <input
@@ -279,5 +308,17 @@ select:disabled {
   color: var(--color-danger);
   font-size: 0.85rem;
   padding: 0.5rem 0;
+}
+.aviso-solo-lectura {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--color-info-soft);
+  color: var(--color-text);
+  border-radius: var(--radius-control);
+  font-size: 0.85rem;
+}
+.aviso-solo-lectura a {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 </style>
