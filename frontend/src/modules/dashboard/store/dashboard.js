@@ -12,6 +12,7 @@ import {
   listarUltimosMovimientos,
   listarAlertasCriticasRecientes,
   listarValesPendientesRecientes,
+  listarFrentesEnCampo,
 } from '../services/dashboardService'
 
 export const useDashboardStore = defineStore('dashboard', {
@@ -28,6 +29,7 @@ export const useDashboardStore = defineStore('dashboard', {
     ultimosMovimientos: [],
     alertasRecientes: [],
     valesRecientes: [],
+    frentesEnCampo: [],
     cargando: false,
   }),
 
@@ -92,6 +94,13 @@ export const useDashboardStore = defineStore('dashboard', {
             .catch(() => {}),
           listarUltimosMovimientos()
             .then((v) => (this.ultimosMovimientos = v))
+            .catch(() => {})
+        )
+      }
+      if (permisos.rdcCampo) {
+        tareas.push(
+          listarFrentesEnCampo()
+            .then((v) => (this.frentesEnCampo = v))
             .catch(() => {})
         )
       }

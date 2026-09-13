@@ -24,6 +24,7 @@ const permisos = computed(() => ({
   stock: auth.tienePermiso('stock.ver'),
   kardex: auth.tienePermiso('kardex.ver'),
   procura: auth.tienePermiso('procura.ver_comparacion'),
+  rdcCampo: auth.tienePermiso('rdc.ver_todos'),
 }))
 
 if (!esSupervisor.value) dashboard.cargar(permisos.value)
@@ -123,6 +124,59 @@ function ratioStock(item) {
 function claseStock(item) {
   return Number(item.cantidad_disponible) <= 0 ? 'Agotado' : 'Crítico'
 }
+
+// Mismas 5 categorías de mano de obra directa que ya usa el RDC (rdcRepository.js) —
+// el orden es el que se ve en el formulario y en el Excel, así que se repite acá.
+const PERSONAL_DIRECTO = ['Capataz', 'Operario', 'Oficial', 'Peón', 'Vigía']
+
+function totalCategoria(categoria) {
+  return dashboard.frentesEnCampo.reduce(
+    (acc, f) => acc + f.personal.filter((p) => p.categoria === categoria).reduce((s, p) => s + p.cantidad, 0),
+    0
+  )
+}
+
+/** Totales "Total en mina": las 5 directas con su propio número, y todo lo
+ * demás (indirecta: ingeniero residente, topógrafo, etc., que solo aplican
+ * a algunos sectores) junto en "Otros" — son roles minoritarios y variables,
+ * desglosarlos acá sería ruido, no dato útil. */
+const totalesPersonal = computed(() => {
+  const directos = PERSONAL_DIRECTO.map((categoria) => ({ categoria, total: totalCategoria(categoria) }))
+  const totalDirecto = directos.reduce((s, d) => s + d.total, 0)
+  const totalGeneral = dashboard.frentesEnCampo.reduce(
+    (acc, f) => acc + f.personal.reduce((s, p) => s + p.cantidad, 0),
+    0
+  )
+  return { directos, otros: totalGeneral - totalDirecto, total: totalGeneral }
+})
+
+/** "Operario 5 · Oficial 2 · Peón 8" — solo las categorías con gente, en el
+ * mismo orden fijo, para que la tarjeta de cada frente no salte de forma. */
+function resumenPersonal(fila) {
+  return PERSONAL_DIRECTO.map((categoria) => {
+    const cantidad = fila.personal.filter((p) => p.categoria === categoria).reduce((s, p) => s + p.cantidad, 0)
+    return cantidad > 0 ? `${categoria} ${cantidad}` : null
+  })
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function totalPersonalFrente(fila) {
+  return fila.personal.reduce((s, p) => s + p.cantidad, 0)
+}
+
+/** "Jumbo (1) · Scaler (2)" — agrupa por tipo de máquina, no por fila (varias
+ * filas del mismo tipo, ej. dos Jumbos identificados por separado, deben
+ * verse como una sola línea con cantidad 2). */
+function resumenMaquinaria(fila) {
+  const porTipo = new Map()
+  for (const m of fila.maquinaria) porTipo.set(m.tipo, (porTipo.get(m.tipo) ?? 0) + m.cantidad)
+  return [...porTipo.entries()].map(([tipo, cantidad]) => `${tipo} (${cantidad})`).join(' · ')
+}
+
+function totalMaquinariaFrente(fila) {
+  return fila.maquinaria.reduce((s, m) => s + m.cantidad, 0)
+}
 </script>
 
 <template>
@@ -160,6 +214,59 @@ function claseStock(item) {
           <span v-if="t.detalle" class="detalle" :class="t.color">{{ t.detalle }}</span>
         </button>
       </div>
+
+      <section v-if="permisos.rdcCampo" class="panel panel-campo">
+        <div class="panel-cabecera">
+          <div>
+            <h2>Frentes en campo</h2>
+            <p class="ayuda">
+              Según el reporte diario que mandó cada supervisor (de hoy o de ayer, si todavía no llegó el de hoy) —
+              no según el estado del catálogo de Frentes.
+            </p>
+          </div>
+          <span class="chip-vivo">en vivo</span>
+        </div>
+
+        <p v-if="!dashboard.frentesEnCampo.length" class="ayuda">Ningún frente tiene reporte diario de ayer ni de hoy todavía.</p>
+
+        <template v-else>
+          <div class="total-mina">
+            <div class="total-mina-pieza total-mina-general">
+              <span class="valor">{{ totalesPersonal.total }}</span>
+              <span class="etiqueta">Total en mina</span>
+            </div>
+            <div v-for="d in totalesPersonal.directos" :key="d.categoria" class="total-mina-pieza">
+              <span class="valor">{{ d.total }}</span>
+              <span class="etiqueta">{{ d.categoria }}</span>
+            </div>
+            <div v-if="totalesPersonal.otros" class="total-mina-pieza">
+              <span class="valor">{{ totalesPersonal.otros }}</span>
+              <span class="etiqueta">Otros</span>
+            </div>
+          </div>
+
+          <div class="grid-frentes-campo">
+            <div v-for="f in dashboard.frentesEnCampo" :key="f.frente?.id" class="tarjeta-frente-campo">
+              <div class="tfc-cabecera">
+                <span class="tfc-nombre">{{ f.frente?.codigo ? f.frente.codigo + ' — ' : '' }}{{ f.frente?.nombre ?? '—' }}</span>
+                <span class="tfc-fecha" :class="{ ayer: !f.esHoy }">{{ f.esHoy ? 'Hoy' : 'Sin reporte hoy (ayer)' }}</span>
+              </div>
+              <div class="tfc-personas">
+                <span>{{ f.supervisor }}</span>
+                <span v-if="f.capataz" class="tfc-capataz">· cap. {{ f.capataz }}</span>
+              </div>
+              <div class="tfc-linea">
+                <span class="tfc-etiqueta">Personal ({{ totalPersonalFrente(f) }})</span>
+                <span class="tfc-detalle">{{ resumenPersonal(f) || '—' }}</span>
+              </div>
+              <div v-if="f.maquinaria.length" class="tfc-linea">
+                <span class="tfc-etiqueta">Equipos ({{ totalMaquinariaFrente(f) }})</span>
+                <span class="tfc-detalle">{{ resumenMaquinaria(f) }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
 
       <div class="fila-principal">
         <section v-if="permisos.kardex" class="panel panel-grande">
@@ -392,6 +499,102 @@ function claseStock(item) {
 }
 .tile .detalle.warning {
   color: var(--color-warning);
+}
+.panel-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.panel-campo .panel-cabecera {
+  align-items: flex-start;
+}
+.panel-campo .ayuda {
+  margin: 0;
+}
+.total-mina {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 0.9rem 1rem;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-control);
+}
+.total-mina-pieza {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.total-mina-pieza .valor {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.total-mina-pieza .etiqueta {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+.total-mina-general .valor {
+  color: var(--color-primary);
+}
+.grid-frentes-campo {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.85rem;
+}
+.tarjeta-frente-campo {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.tfc-cabecera {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.tfc-nombre {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+.tfc-fecha {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-success);
+  white-space: nowrap;
+}
+.tfc-fecha.ayer {
+  color: var(--color-warning);
+}
+.tfc-personas {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.tfc-capataz {
+  color: var(--color-text-muted);
+}
+.tfc-linea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  font-size: 0.8rem;
+}
+.tfc-etiqueta {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.tfc-detalle {
+  color: var(--color-text);
 }
 .fila-principal {
   display: grid;
