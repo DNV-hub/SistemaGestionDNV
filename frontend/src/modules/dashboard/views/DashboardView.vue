@@ -27,9 +27,16 @@ const saludo = computed(() => {
   return 'Buenas noches'
 })
 
-const fechaLegible = computed(() =>
-  new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-)
+// Solo la primera letra en mayúscula (el día de la semana) — el resto
+// queda en minúscula tal como lo arma toLocaleDateString, que es lo
+// correcto en español ("domingo, 13 de setiembre de 2026"). Antes había un
+// text-transform:capitalize en el CSS que ponía mayúscula a CADA palabra,
+// incluido el conector "de" ("13 De Setiembre De 2026") — se ve mal y no
+// es cómo se escribe en español.
+const fechaLegible = computed(() => {
+  const texto = new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+})
 
 // "Actualizado hace X min", igual que un feed en vivo — se recalcula solo
 // cada 30s mientras la pantalla sigue abierta, sin volver a pedir nada.
@@ -401,7 +408,6 @@ function etiquetaParalizado(updatedAt) {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--color-text);
-  text-transform: capitalize;
 }
 .greet span {
   font-weight: 400;
@@ -937,9 +943,32 @@ function etiquetaParalizado(updatedAt) {
   text-transform: capitalize;
 }
 
+/* El layout de dos paneles con scroll independiente (uno para "Frentes en
+   campo", otro para la columna derecha) solo tiene sentido en escritorio,
+   con el sidebar fijo y el viewport completo a la vista. Apenas el grid
+   pasa a una sola columna, esa idea deja de aplicar: acá abajo se apaga
+   del todo (alto automático, sin recortar nada) y la página entera pasa a
+   desplazarse de una — la misma pantalla que ya usa el resto del Sistema
+   en celular. Sin esto, cualquier tarjeta que no entrara en el alto fijo
+   quedaba cortada (le pasó a "Próximos frentes"/"Paralizados") y Alertas,
+   al ser la última, quedaba directamente inalcanzable debajo de la barra
+   de pestañas flotante — y esto solo iba a empeorar a medida que se
+   agreguen más tarjetas, no es una excepción de hoy.
+   */
 @media (max-width: 980px) {
+  .dashboard {
+    height: auto;
+  }
   .grid {
     grid-template-columns: 1fr;
+    flex: none;
+  }
+  .card {
+    overflow: visible;
+  }
+  .frentes-scroll {
+    flex: none;
+    overflow-y: visible;
   }
   .side-col {
     overflow-y: visible;
@@ -948,6 +977,11 @@ function etiquetaParalizado(updatedAt) {
 @media (max-width: 640px) {
   .dashboard {
     padding: 1rem 0.85rem 1.25rem;
+  }
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
   }
   .frentes-scroll {
     grid-template-columns: 1fr;
