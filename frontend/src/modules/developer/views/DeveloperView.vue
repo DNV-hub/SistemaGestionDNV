@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { listarUsuarios } from '../../usuarios/services/usuariosService'
+import { listarUsuarios, actualizarUsuario } from '../../usuarios/services/usuariosService'
 import {
   listarValesParaBorrar,
   borrarVale,
@@ -41,6 +41,35 @@ onMounted(async () => {
     cargando.value = false
   }
 })
+
+const supervisores = computed(() => usuarios.value.filter((u) => u.roles?.nombre === 'Supervisor'))
+const guardandoHerencia = ref(new Set())
+
+/** rdc_heredar_reporte_completo: para esta cuenta puntual, un reporte nuevo
+ * del RDC clona el anterior COMPLETO (metrados, elementos, bitácora, stand
+ * by, programación, observaciones, restricciones, redline incluidos), no
+ * solo sector/frente/supervisor/capataz/cuadrilla/equipo como el resto —
+ * ver crearBorradorDesde() en rdcRepository.js para por qué esto no es un
+ * comportamiento global. Se guarda al toque, como el resto del panel. */
+async function alternarHerenciaCompleta(usuario) {
+  if (guardandoHerencia.value.has(usuario.id)) return
+  guardandoHerencia.value = new Set(guardandoHerencia.value).add(usuario.id)
+  error.value = ''
+  try {
+    const actualizado = await actualizarUsuario(usuario.id, {
+      rdc_heredar_reporte_completo: !usuario.rdc_heredar_reporte_completo,
+    })
+    const idx = usuarios.value.findIndex((u) => u.id === usuario.id)
+    if (idx !== -1) usuarios.value[idx] = actualizado
+  } catch (e) {
+    console.error(e)
+    error.value = `No se pudo cambiar la herencia de reporte de ${usuario.nombre}: ${e.message ?? e}`
+  } finally {
+    const restante = new Set(guardandoHerencia.value)
+    restante.delete(usuario.id)
+    guardandoHerencia.value = restante
+  }
+}
 
 const usuariosPorRol = computed(() => {
   const grupos = new Map()
@@ -198,6 +227,42 @@ async function borrarReportesSeleccionados() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Heredar reporte RDC completo</h2>
+        <p class="ayuda">
+          Por defecto, un reporte nuevo del RDC solo arrastra sector/frente/supervisor/capataz/cuadrilla/equipo del
+          anterior — el trabajo del día (metrados, elementos, bitácora, stand by, programación, observaciones...)
+          siempre arranca en blanco, porque cambia a diario. Activa esto solo para una cuenta cuya rutina se repita
+          casi entera día a día: su próximo reporte va a clonar el anterior completo, listo para editar en vez de
+          partir de cero.
+        </p>
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Supervisor</th>
+              <th>Hereda reporte completo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in supervisores" :key="u.id">
+              <td>{{ u.nombre }}</td>
+              <td>
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    :checked="u.rdc_heredar_reporte_completo"
+                    :disabled="guardandoHerencia.has(u.id)"
+                    @change="alternarHerenciaCompleta(u)"
+                  />
+                  {{ u.rdc_heredar_reporte_completo ? 'Sí' : 'No' }}
+                </label>
+              </td>
+            </tr>
+            <tr v-if="!supervisores.length"><td colspan="2" class="vacio">No hay supervisores activos.</td></tr>
+          </tbody>
+        </table>
       </section>
 
       <section class="tarjeta peligro-total">
@@ -390,6 +455,19 @@ button.peligro:disabled {
 .vacio {
   text-align: center;
   color: var(--color-text-muted);
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+.switch input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 .aviso {
   color: var(--color-success);
