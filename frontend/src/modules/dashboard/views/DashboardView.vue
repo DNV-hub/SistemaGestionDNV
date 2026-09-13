@@ -335,7 +335,7 @@ function etiquetaParalizado(updatedAt) {
   flex-wrap: wrap;
 }
 .greet {
-  font-size: 0.92rem;
+  font-size: 1.05rem;
   font-weight: 600;
   color: var(--color-text);
   text-transform: capitalize;
@@ -348,7 +348,7 @@ function etiquetaParalizado(updatedAt) {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.72rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-success);
   white-space: nowrap;
@@ -387,15 +387,15 @@ function etiquetaParalizado(updatedAt) {
   padding-bottom: 0.4rem;
 }
 .card-title {
-  font-size: 0.88rem;
+  font-size: 1.02rem;
   font-weight: 700;
   color: var(--color-text);
 }
 .card-title.chico {
-  font-size: 0.8rem;
+  font-size: 0.94rem;
 }
 .card-desc {
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   color: var(--color-text-muted);
   margin-top: 0.15rem;
 }
@@ -432,7 +432,7 @@ function etiquetaParalizado(updatedAt) {
   flex-shrink: 0;
 }
 .fc-code {
-  font-size: 0.95rem;
+  font-size: 1.1rem;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--color-text);
@@ -442,7 +442,7 @@ function etiquetaParalizado(updatedAt) {
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--color-success);
@@ -462,13 +462,13 @@ function etiquetaParalizado(updatedAt) {
   box-shadow: 0 0 0 3px var(--color-warning-soft);
 }
 .fc-sup-name {
-  font-size: 0.72rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--color-text);
   margin-top: 0.3rem;
 }
 .fc-sup-cap {
-  font-size: 0.65rem;
+  font-size: 0.78rem;
   color: var(--color-text-muted);
   margin-top: 0.05rem;
 }
@@ -483,7 +483,7 @@ function etiquetaParalizado(updatedAt) {
   min-width: 0;
 }
 .fc-col-label {
-  font-size: 0.6rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: var(--color-text-muted);
   letter-spacing: 0.05em;
@@ -495,12 +495,12 @@ function etiquetaParalizado(updatedAt) {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.1rem 0;
+  padding: 0.12rem 0;
 }
 .role-row svg,
 .eq-row svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   stroke: var(--color-text-muted);
   stroke-width: 1.8;
   fill: none;
@@ -510,26 +510,26 @@ function etiquetaParalizado(updatedAt) {
 }
 .role-row .lbl {
   flex: 1;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 .role-row .cnt,
 .eq-row .cnt {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--color-text);
 }
 .eq-row .name {
   flex: 1;
   min-width: 0;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .eq-vacio {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
@@ -555,7 +555,7 @@ function etiquetaParalizado(updatedAt) {
   margin-top: 1px;
 }
 .fc-restriccion-text {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--color-danger);
   line-height: 1.35;
 }
@@ -599,12 +599,12 @@ function etiquetaParalizado(updatedAt) {
   flex-shrink: 0;
 }
 .prox-date .d {
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   font-weight: 800;
   line-height: 1;
 }
 .prox-date .m {
-  font-size: 0.44rem;
+  font-size: 0.56rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -613,7 +613,7 @@ function etiquetaParalizado(updatedAt) {
   min-width: 0;
 }
 .mini-name {
-  font-size: 0.7rem;
+  font-size: 0.84rem;
   font-weight: 700;
   color: var(--color-text);
   white-space: nowrap;
@@ -621,12 +621,12 @@ function etiquetaParalizado(updatedAt) {
   text-overflow: ellipsis;
 }
 .mini-sub {
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   color: var(--color-text-muted);
   margin-top: 0.05rem;
 }
 .mini-chip {
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-weight: 700;
   padding: 0.12rem 0.45rem;
   border-radius: var(--radius-pill);
@@ -664,7 +664,7 @@ function etiquetaParalizado(updatedAt) {
 }
 
 .summary-num {
-  font-size: 0.8rem;
+  font-size: 0.94rem;
   font-weight: 800;
   color: var(--color-primary);
 }
@@ -687,12 +687,12 @@ function etiquetaParalizado(updatedAt) {
   gap: 0.6rem;
 }
 .mat-num {
-  font-size: 1.4rem;
+  font-size: 1.55rem;
   font-weight: 800;
   color: var(--color-primary);
 }
 .mat-label {
-  font-size: 0.68rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
   line-height: 1.25;
 }
@@ -707,7 +707,7 @@ function etiquetaParalizado(updatedAt) {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
 }
 .mat-list-row .n {
   color: var(--color-text);
@@ -753,12 +753,12 @@ function etiquetaParalizado(updatedAt) {
   color: var(--color-info);
 }
 .alerta-title {
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--color-text);
 }
 .alerta-sub {
-  font-size: 0.6rem;
+  font-size: 0.72rem;
   color: var(--color-text-muted);
   margin-top: 0.05rem;
   text-transform: capitalize;
