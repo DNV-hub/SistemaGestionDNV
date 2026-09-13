@@ -118,13 +118,22 @@ async function onSubmit() {
         Estado
         <select v-model="form.estado">
           <option value="planificado">Planificado (aún no inició)</option>
+          <!-- "Próximo" no se elige a mano: sale solo en cuanto se le pone una
+               fecha de inicio futura (ver la ayuda de abajo), y por eso acá
+               aparece deshabilitada — solo está para que el desplegable
+               pueda MOSTRAR ese valor cuando ya es lo que tiene guardado. -->
+          <option value="proximo" disabled>Próximo (automático, ver fecha de inicio)</option>
           <option value="activo">Activo</option>
           <option value="paralizado">Paralizado</option>
           <option value="cerrado">Cerrado</option>
         </select>
         <span v-if="form.estado === 'planificado'" class="ayuda">
-          Mientras siga en "Planificado", no va a aparecer en el Reporte Diario de Campo ni en el selector de Vales
-          — pásalo a "Activo" cuando el trabajo arranque de verdad.
+          Mientras no tenga fecha de inicio, no va a aparecer en el Reporte Diario de Campo ni en el selector de
+          Vales. Ponle una fecha de inicio para que pase a "Próximo" solo — y en cuanto llegue esa fecha, a "Activo"
+          solo también, sin que haga falta volver a entrar acá.
+        </span>
+        <span v-else-if="form.estado === 'proximo'" class="ayuda">
+          Tiene fecha de inicio programada — va a pasar a "Activo" solo el día que llegue esa fecha.
         </span>
       </label>
 

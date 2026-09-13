@@ -302,6 +302,10 @@ button {
   background: var(--color-info-soft);
   color: var(--color-info);
 }
+.badge.proximo {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
 .badge.activo {
   background: var(--color-success-soft);
   color: var(--color-success);
