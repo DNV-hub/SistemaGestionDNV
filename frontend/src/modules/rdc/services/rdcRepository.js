@@ -205,6 +205,25 @@ export async function marcarSyncBorrador(id, { errorSupabase }) {
   await db.reportes.update(id, { errorSupabase })
 }
 
+/** Igual que `marcarSyncBorrador`, para el resultado de sincronizar un
+ * reporte ya FINALIZADO (los dos destinos, Supabase y SharePoint): un
+ * update PARCIAL que solo toca los campos de estado de envío, nunca
+ * `estado` ni el contenido del formulario ni `actualizadoEn`.
+ *
+ * Es crítico que sea parcial y no un `guardar()` de objeto completo: el
+ * ciclo de sync arma su resultado a partir de una copia del reporte que
+ * pudo leer minutos antes (reintentos, red lenta, una cola larga de
+ * reportes por subir) — si mientras tanto el supervisor terminó de
+ * llenarlo y lo finalizó, un guardado de objeto completo con esa copia
+ * vieja resucitaría el reporte como Borrador por encima de lo que el
+ * supervisor acaba de hacer. Pasó de verdad: un reporte llegó a
+ * SharePoint (estado_sharepoint quedó "enviado") pero el campo `estado`
+ * en Supabase volvió a decir "Borrador", porque el guardado final de ese
+ * ciclo pisó el objeto entero con la snapshot vieja. */
+export async function marcarSyncFinalizado(id, campos) {
+  await db.reportes.update(id, campos)
+}
+
 export const obtener = (id) => db.reportes.get(id)
 
 /** Historial local, del más reciente al más antiguo. */

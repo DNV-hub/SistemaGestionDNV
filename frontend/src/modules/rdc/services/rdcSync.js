@@ -1,5 +1,5 @@
 import { ENVIO, ESTADO } from './rdcDb'
-import { guardar, pendientes, adoptar, marcarSyncBorrador } from './rdcRepository'
+import { pendientes, adoptar, marcarSyncBorrador, marcarSyncFinalizado, obtener } from './rdcRepository'
 import { subirReporte, marcarEnvioSharepoint, obtenerActualizadoEnRemoto, obtenerReporteCompleto } from './rdcService'
 import { construirWorkbook, workbookABase64, nombreArchivo } from './rdcExcel'
 
@@ -43,7 +43,18 @@ export async function sincronizar({ catalogos } = {}) {
   const resumen = { enviados: 0, fallidos: 0, omitidos: 0 }
 
   try {
-    for (const reporte of await pendientes()) {
+    for (const referencia of await pendientes()) {
+      // Siempre se relee la copia MÁS FRESCA de IndexedDB antes de decidir
+      // qué hacer — nunca la snapshot de `pendientes()`, que pudo quedar
+      // vieja si esta vuelta del loop tardó en llegar (reintentos, red
+      // lenta, una cola larga de reportes por subir) y mientras tanto el
+      // supervisor editó o finalizó este mismo reporte. Sin esto, un ciclo
+      // que arrancó cuando el reporte todavía era Borrador podía terminar
+      // subiéndolo así DESPUÉS de que ya se hubiera finalizado y enviado a
+      // SharePoint — pisando el estado real con uno viejo (pasó de
+      // verdad, ver el comentario de marcarSyncFinalizado()).
+      const reporte = (await obtener(referencia.id)) ?? referencia
+
       // Un borrador solo viaja a Supabase, nunca a SharePoint — ese envío es
       // el entregable final (el Excel que ya usa la obra), no algo que
       // generar de nuevo cada pocos minutos mientras el supervisor todavía
@@ -165,7 +176,20 @@ export async function sincronizar({ catalogos } = {}) {
         }
       }
 
-      await guardar(actual)
+      // Update parcial, no un guardado del objeto `actual` completo: solo
+      // toca los campos de estado de envío, nunca `estado` ni el resto del
+      // contenido — así, si el supervisor editó el reporte MIENTRAS se
+      // subía, esto no le pisa nada.
+      await marcarSyncFinalizado(reporte.id, {
+        estadoSupabase: actual.estadoSupabase,
+        errorSupabase: actual.errorSupabase,
+        estadoSharepoint: actual.estadoSharepoint,
+        sharepointNombreArchivo: actual.sharepointNombreArchivo,
+        sharepointEnviadoAt: actual.sharepointEnviadoAt,
+        sharepointError: actual.sharepointError,
+        sharepointIntentos: actual.sharepointIntentos,
+        ultimoIntentoEn: actual.ultimoIntentoEn,
+      })
       if (huboFallo) resumen.fallidos++
       else resumen.enviados++
     }
