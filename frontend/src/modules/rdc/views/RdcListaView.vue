@@ -76,6 +76,12 @@ const propioSupervisorId = computed(
 )
 
 function esBorradorPropio(item) {
+  // Quien tiene rdc.editar_todos (Planeamiento, Administrador) puede borrar
+  // CUALQUIER borrador, propio o ajeno — es lo que permite limpiar un
+  // reporte de prueba que alguien creó suplantando a un supervisor, algo
+  // que de otro modo queda invisible desde la propia cuenta (el reporte
+  // quedó con creado_por del supervisor, no de quien lo creó de verdad).
+  if (auth.tienePermiso('rdc.editar_todos')) return true
   if (item.esLocal) return true
   return item.raw.creado_por === auth.perfil?.id || item.raw.supervisor_id === propioSupervisorId.value
 }
