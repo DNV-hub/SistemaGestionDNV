@@ -252,9 +252,15 @@ function centrarEnHoy() {
 watch(() => dashboard.mapaActividad, centrarEnHoy, { immediate: true })
 
 // ---- Celular: últimos 14 días, sin scroll horizontal ----------------------
+// El ancho de cada celda NO puede depender de cuántos días se muestran: a
+// inicio de mes (p. ej. día 9) hay menos de 14 días y, con `repeat(N, 1fr)`,
+// las celdas se estiraban para llenar todo el ancho. La grilla siempre tiene
+// 14 columnas del mismo ancho; si hay menos días, el resto queda vacío.
+const COLUMNAS_MOVIL = 14
+const plantillaColsMovil = `78px repeat(${COLUMNAS_MOVIL}, minmax(0, 1fr))`
 const dias14 = computed(() => {
   const fin = esMesActual.value ? HOY.getDate() : diasEnMes.value
-  const ini = Math.max(1, fin - 13)
+  const ini = Math.max(1, fin - (COLUMNAS_MOVIL - 1))
   return Array.from({ length: fin - ini + 1 }, (_, i) => ini + i)
 })
 const filasMovil = computed(() => grupos.value.flatMap((g) => g.frentes))
@@ -275,7 +281,7 @@ const mostrarLeyenda = ref(false)
     <p v-if="dashboard.cargandoMapaActividad" class="mm-aviso">Cargando…</p>
     <p v-else-if="!filasMovil.length" class="mm-aviso">No hay frentes para mostrar.</p>
     <template v-else>
-      <div class="mm-grid mm-dias" :style="{ gridTemplateColumns: `78px repeat(${dias14.length}, minmax(0, 1fr))` }">
+      <div class="mm-grid mm-dias" :style="{ gridTemplateColumns: plantillaColsMovil }">
         <span></span>
         <div v-for="d in dias14" :key="d" class="mm-dia" :class="{ dom: esDomingo(d) }">
           {{ letraDia(d) }}<br /><b>{{ d }}</b>
@@ -285,7 +291,7 @@ const mostrarLeyenda = ref(false)
         v-for="f in filasMovil"
         :key="f.id"
         class="mm-grid mm-fila"
-        :style="{ gridTemplateColumns: `78px repeat(${dias14.length}, minmax(0, 1fr))` }"
+        :style="{ gridTemplateColumns: plantillaColsMovil }"
       >
         <b class="mm-n" :title="f.nombre">{{ f.nombre }}</b>
         <button
