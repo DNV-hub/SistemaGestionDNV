@@ -2,39 +2,39 @@
 import { computed } from 'vue'
 import { useRdcStore } from '../store/rdc'
 import { nuevoId } from '../services/rdcRepository'
-import { partidasEjecutadas } from '../services/rdcCalculos'
 
 const rdc = useRdcStore()
 const reporte = computed(() => rdc.actual)
 const guardar = () => rdc.guardar()
 
-/** Lo que se puede programar para mañana sale de dos lados: las partidas del
- * presupuesto del frente (EDT) y lo que ya se ejecutó hoy, que suele ser lo
- * que se continúa. */
-const opcionesPartida = computed(() => {
-  const edt = (rdc.catalogos?.partidasEdt ?? []).filter((p) => p.frente_id === reporte.value?.frenteId).map((p) => p.nombre)
-  const hoy = partidasEjecutadas(reporte.value).map((p) => p.nombre)
-  return [...new Set([...hoy, ...edt])]
-})
-
-const programadas = computed(() => reporte.value.programacion.filter((p) => p.tipo === 'programada'))
-const noProgramadas = computed(() => reporte.value.programacion.filter((p) => p.tipo === 'no_programada'))
-
-function agregar(tipo) {
-  reporte.value.programacion.push({
-    id: nuevoId(),
-    tipo,
-    etiqueta: '',
-    descripcion: '',
-    orden: reporte.value.programacion.length + 1,
+/** Programación y actividades no programadas son texto libre (igual que en
+ * la versión celular): una línea de texto = una fila de `programacion`, así
+ * el WhatsApp y el Excel siguen listándolas una por una. Lo ya escrito con el
+ * formato anterior (partida + detalle) se muestra unido con « — ». */
+function textoLibre(tipo) {
+  return computed({
+    get: () =>
+      reporte.value.programacion
+        .filter((p) => p.tipo === tipo)
+        .map((p) => (tipo === 'programada' ? [p.etiqueta, p.descripcion] : [p.descripcion, p.etiqueta]).filter((x) => x?.trim()).join(' — '))
+        .join('\n'),
+    set: (valor) => {
+      const previas = reporte.value.programacion.filter((p) => p.tipo === tipo)
+      const otras = reporte.value.programacion.filter((p) => p.tipo !== tipo)
+      const lineas = valor.split('\n').map((l) => l.trim()).filter(Boolean)
+      const nuevas = lineas.map((linea, i) => ({
+        id: previas[i]?.id ?? nuevoId(),
+        tipo,
+        etiqueta: tipo === 'programada' ? linea : '',
+        descripcion: tipo === 'programada' ? '' : linea,
+        orden: 0,
+      }))
+      reporte.value.programacion = [...otras, ...nuevas].map((p, i) => ({ ...p, orden: i + 1 }))
+    },
   })
-  guardar()
 }
-
-function quitar(id) {
-  reporte.value.programacion = reporte.value.programacion.filter((p) => p.id !== id)
-  guardar()
-}
+const textoProgramadas = textoLibre('programada')
+const textoNoProgramadas = textoLibre('no_programada')
 </script>
 
 <template>
@@ -42,27 +42,16 @@ function quitar(id) {
     <div class="rx-two" style="margin-bottom: 20px">
     <div class="card" style="flex: 1 1 320px; min-width: 0; margin-bottom: 0">
       <div class="card-title"><i class="ti ti-calendar-plus" />Programación · día siguiente</div>
-      <div v-for="p in programadas" :key="p.id" class="fila-prog">
-        <select v-model="p.etiqueta" @change="guardar">
-          <option value="">— Partida —</option>
-          <option v-for="o in opcionesPartida" :key="o" :value="o">{{ o }}</option>
-        </select>
-        <input v-model="p.descripcion" type="text" placeholder="Detalle (opcional)" @change="guardar" />
-        <button type="button" class="del-btn" aria-label="Quitar" @click="quitar(p.id)">×</button>
+      <div class="field">
+        <textarea v-model="textoProgramadas" placeholder="Qué se va a trabajar mañana (una actividad por línea)…" @change="guardar" />
       </div>
-      <p v-if="!programadas.length" class="empty-msg">Todavía no programaste nada.</p>
-      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregar('programada')">Agregar partida</button>
     </div>
 
     <div class="card" style="flex: 1 1 320px; min-width: 0; margin-bottom: 0">
       <div class="card-title"><i class="ti ti-circle-plus" />Actividades no programadas</div>
-      <div v-for="p in noProgramadas" :key="p.id" class="fila-prog">
-        <input v-model="p.descripcion" type="text" placeholder="Actividad" @change="guardar" />
-        <input v-model="p.etiqueta" type="text" placeholder="Nota (opcional)" @change="guardar" />
-        <button type="button" class="del-btn" aria-label="Quitar" @click="quitar(p.id)">×</button>
+      <div class="field">
+        <textarea v-model="textoNoProgramadas" placeholder="Actividades que se hicieron y no estaban programadas (una por línea)…" @change="guardar" />
       </div>
-      <p v-if="!noProgramadas.length" class="empty-msg">Nada por ahora.</p>
-      <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregar('no_programada')">Agregar actividad</button>
     </div>
     </div>
 
