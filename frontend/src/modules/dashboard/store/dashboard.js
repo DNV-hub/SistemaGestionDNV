@@ -4,6 +4,7 @@ import {
   listarFrentesProximos,
   listarFrentesParalizados,
   listarMapaActividad,
+  listarMapaActividadRango,
 } from '../services/dashboardService'
 
 const hoy = new Date()
@@ -25,6 +26,9 @@ export const useDashboardStore = defineStore('dashboard', {
     mapaActividadAnio: hoy.getFullYear(),
     mapaActividadMes: hoy.getMonth() + 1,
     mapaActividad: { frentes: [], reportes: [] },
+    // Cola del mes anterior: solo a inicio de mes (hoy < día 14), para que el
+    // mapa del celular siga mostrando 14 días completos.
+    mapaActividadPrevio: { frentes: [], reportes: [] },
     cargandoMapaActividad: false,
     // Número de la última consulta del mapa: si el usuario cambia de mes
     // varias veces seguidas, solo cuenta la respuesta de la ÚLTIMA — una
@@ -104,9 +108,20 @@ export const useDashboardStore = defineStore('dashboard', {
       const solicitud = ++this.solicitudMapaActividad
       this.cargandoMapaActividad = true
       try {
-        const datos = await listarMapaActividad(this.mapaActividadAnio, this.mapaActividadMes)
+        const hoy = new Date()
+        const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const necesitaMesAnterior =
+          this.mapaActividadAnio === hoy.getFullYear() && this.mapaActividadMes === hoy.getMonth() + 1 && hoy.getDate() < 14
+        const pedidoPrevio = necesitaMesAnterior
+          ? listarMapaActividadRango(
+              iso(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 13)),
+              iso(new Date(hoy.getFullYear(), hoy.getMonth(), 0)),
+            ).catch(() => null)
+          : Promise.resolve(null)
+        const [datos, previo] = await Promise.all([listarMapaActividad(this.mapaActividadAnio, this.mapaActividadMes), pedidoPrevio])
         if (solicitud !== this.solicitudMapaActividad) return
         this.mapaActividad = datos
+        this.mapaActividadPrevio = previo ?? { frentes: [], reportes: [] }
         this.actualizadoEn = new Date()
       } finally {
         if (solicitud === this.solicitudMapaActividad) this.cargandoMapaActividad = false

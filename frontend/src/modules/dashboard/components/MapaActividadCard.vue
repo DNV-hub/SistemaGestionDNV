@@ -91,7 +91,7 @@ const grupos = computed(() => {
 // se agrupan acá para no recorrer todo `reportes` en cada celda.
 const reportesPorCelda = computed(() => {
   const mapa = new Map()
-  for (const r of dashboard.mapaActividad.reportes) {
+  for (const r of [...(dashboard.mapaActividadPrevio?.reportes ?? []), ...dashboard.mapaActividad.reportes]) {
     const clave = `${r.frente_id}::${r.fecha}`
     if (!mapa.has(clave)) mapa.set(clave, [])
     mapa.get(clave).push(r)
@@ -126,7 +126,10 @@ function hashId(id) {
 // un color fijado a mano (rdc_supervisores.color) lo usa tal cual.
 const supervisoresDelMes = computed(() => {
   const nombres = new Map()
-  for (const r of dashboard.mapaActividad.reportes) {
+  const reportesParaColor = esMovil.value
+    ? [...(dashboard.mapaActividadPrevio?.reportes ?? []), ...dashboard.mapaActividad.reportes]
+    : dashboard.mapaActividad.reportes
+  for (const r of reportesParaColor) {
     if (r.supervisor_id && !nombres.has(r.supervisor_id)) {
       nombres.set(r.supervisor_id, { nombre: r.supervisor, colorFijo: r.supervisor_color ?? null })
     }
@@ -155,7 +158,7 @@ const supervisoresDelMes = computed(() => {
 // leyenda) y en paralelo se guarda en rdc_supervisores. `null` = volver al
 // color automático.
 async function cambiarColor(supervisorId, nuevoColor) {
-  for (const r of dashboard.mapaActividad.reportes) {
+  for (const r of [...(dashboard.mapaActividadPrevio?.reportes ?? []), ...dashboard.mapaActividad.reportes]) {
     if (r.supervisor_id === supervisorId) r.supervisor_color = nuevoColor
   }
   try {
@@ -258,11 +261,45 @@ watch(() => dashboard.mapaActividad, centrarEnHoy, { immediate: true })
 // 14 columnas del mismo ancho; si hay menos días, el resto queda vacío.
 const COLUMNAS_MOVIL = 14
 const plantillaColsMovil = `78px repeat(${COLUMNAS_MOVIL}, minmax(0, 1fr))`
+// Siempre 14 días reales terminando en hoy (mes actual) o en el último día
+// del mes visible; a inicio de mes incluye los últimos del mes anterior.
+const isoDe = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const dias14 = computed(() => {
-  const fin = esMesActual.value ? HOY.getDate() : diasEnMes.value
-  const ini = Math.max(1, fin - (COLUMNAS_MOVIL - 1))
-  return Array.from({ length: fin - ini + 1 }, (_, i) => ini + i)
+  const fin = esMesActual.value
+    ? new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate())
+    : new Date(dashboard.mapaActividadAnio, dashboard.mapaActividadMes, 0)
+  return Array.from({ length: COLUMNAS_MOVIL }, (_, i) => {
+    const d = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate() - (COLUMNAS_MOVIL - 1 - i))
+    return { iso: isoDe(d), dia: d.getDate(), mes: d.getMonth() + 1, anio: d.getFullYear(), letra: LETRAS_DIA[d.getDay()], dom: d.getDay() === 0 }
+  })
 })
+const reportesDeCeldaM = (frenteId, c) => reportesPorCelda.value.get(`${frenteId}::${c.iso}`) ?? []
+function estiloCeldaM(frenteId, c) {
+  const reps = reportesDeCeldaM(frenteId, c)
+  if (!reps.length) return { background: c.iso >= hoyIso ? 'var(--fu)' : 'var(--em)' }
+  if (reps.length === 1) return { background: colorSupervisor(reps[0].supervisor_id) }
+  const [x, y] = reps
+  return { background: `linear-gradient(135deg, ${colorSupervisor(x.supervisor_id)} 50%, ${colorSupervisor(y.supervisor_id)} 50%)` }
+}
+function etiquetaCeldaM(f, c) {
+  const reps = reportesDeCeldaM(f.id, c)
+  const fecha = `${c.dia} ${MESES_ABREV[c.mes - 1]}`
+  if (reps.length) return `${f.nombre} · ${fecha} · ${reps.map((r) => r.supervisor).join(' / ')}`
+  if (c.iso === hoyIso) return `${f.nombre} · ${fecha} · el reporte llega mañana`
+  if (c.iso > hoyIso) return `${f.nombre} · ${fecha}`
+  return `${f.nombre} · ${fecha} · sin reporte`
+}
+function onClickCeldaM(f, c) {
+  const reps = reportesDeCeldaM(f.id, c)
+  if (!reps.length) {
+    celdaAbierta.value = null
+    return
+  }
+  const clave = `${f.id}::${c.iso}`
+  celdaAbierta.value = celdaAbierta.value?.clave === clave
+    ? null
+    : { clave, frenteNombre: f.nombre, fecha: `${c.dia} ${MESES_ABREV[c.mes - 1]} ${c.anio}`, reportes: reps }
+}
 const filasMovil = computed(() => grupos.value.flatMap((g) => g.frentes))
 const mostrarLeyenda = ref(false)
 </script>
@@ -283,8 +320,8 @@ const mostrarLeyenda = ref(false)
     <template v-else>
       <div class="mm-grid mm-dias" :style="{ gridTemplateColumns: plantillaColsMovil }">
         <span></span>
-        <div v-for="d in dias14" :key="d" class="mm-dia" :class="{ dom: esDomingo(d) }">
-          {{ letraDia(d) }}<br /><b>{{ d }}</b>
+        <div v-for="c in dias14" :key="c.iso" class="mm-dia" :class="{ dom: c.dom }">
+          {{ c.letra }}<br /><b>{{ c.dia }}</b>
         </div>
       </div>
       <div
@@ -295,13 +332,13 @@ const mostrarLeyenda = ref(false)
       >
         <b class="mm-n" :title="f.nombre">{{ f.nombre }}</b>
         <button
-          v-for="d in dias14"
-          :key="d"
+          v-for="c in dias14"
+          :key="c.iso"
           type="button"
           class="mm-celda"
-          :style="estiloCelda(f.id, d)"
-          :aria-label="etiquetaCelda(f, d)"
-          @click="onClickCelda(f, d)"
+          :style="estiloCeldaM(f.id, c)"
+          :aria-label="etiquetaCeldaM(f, c)"
+          @click="onClickCeldaM(f, c)"
         ></button>
       </div>
       <div class="mm-pie">

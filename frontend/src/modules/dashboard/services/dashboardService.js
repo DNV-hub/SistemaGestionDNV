@@ -84,6 +84,12 @@ export async function listarMapaActividad(anio, mes) {
   const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
   const ultimoDia = new Date(anio, mes, 0).getDate()
   const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`
+  return listarMapaActividadRango(desde, hasta)
+}
+
+/** Mismo mapa pero por rango de fechas ISO (YYYY-MM-DD) — lo usa el celular
+ * para completar sus 14 días con los últimos del mes anterior a inicio de mes. */
+export async function listarMapaActividadRango(desde, hasta) {
   const { data, error } = await supabase.rpc('fn_dashboard_mapa_actividad', { p_desde: desde, p_hasta: hasta })
   if (error) throw error
   return data
