@@ -32,8 +32,14 @@ const puedeEnviar = computed(
 const puedeEditarLineas = computed(
   () => esDueno.value && vale.value?.estado === 'Borrador' && auth.tienePermiso('vales.editar_propio')
 )
+// Si ya se entregó algo, no se cancela el vale entero: se cierran las líneas
+// que faltan ("No entregar").
 const puedeCancelar = computed(
-  () => auth.tienePermiso('vales.cancelar') && vale.value && !ESTADOS_FINALES.includes(vale.value.estado)
+  () =>
+    auth.tienePermiso('vales.cancelar') &&
+    vale.value &&
+    !ESTADOS_FINALES.includes(vale.value.estado) &&
+    !(vale.value.lineas ?? []).some((l) => Number(l.cantidad_entregada) > 0)
 )
 const puedeAprobarRechazar = computed(() => auth.tienePermiso('vales.aprobar_rechazar'))
 const puedeRegistrarEntrega = computed(() => auth.tienePermiso('salidas.registrar_entrega'))
@@ -73,15 +79,23 @@ async function agregarLinea() {
 }
 
 async function quitarLinea(linea) {
-  if (!confirm(`¿Quitar "${linea.materiales?.codigo}" del vale?`)) return
+  if (!confirm(`¿Quitar "${linea.materiales?.descripcion}" del vale?`)) return
   await vales.eliminarLinea(vale.value.id, linea.id)
 }
 
 async function rechazar(linea) {
-  if (!confirm(`¿Rechazar la línea "${linea.materiales?.codigo}"?`)) return
+  if (!confirm(`¿Rechazar la línea "${linea.materiales?.descripcion}"?`)) return
   aviso.value = ''
   await vales.rechazarLinea(linea.id)
   aviso.value = 'Línea rechazada.'
+}
+
+async function rechazarDesdeModal() {
+  const linea = lineaEnAprobacion.value
+  aviso.value = ''
+  await vales.rechazarLinea(linea.id)
+  lineaEnAprobacion.value = null
+  aviso.value = `"${linea.materiales?.descripcion}" no se entregará — línea rechazada.`
 }
 
 async function aprobar(payload) {
@@ -109,15 +123,38 @@ async function abrirEntrega(linea) {
 const mensajeEntrega = ref('')
 const copiado = ref(false)
 
+// Líneas aprobadas que todavía esperan entrega (o el resto).
+const LINEAS_ABIERTAS = ['Aprobado', 'Reservado', 'Parcialmente entregado']
+const puedeCerrarLinea = computed(() => puedeAprobarRechazar.value || puedeRegistrarEntrega.value || auth.tienePermiso('vales.cancelar'))
+const textoCerrar = (l) => (Number(l.cantidad_entregada) > 0 ? 'Cerrar con lo entregado' : 'No entregar')
+
+/** Libera la reserva y cierra la línea (ver fn_vale_cerrar_linea). */
+async function cerrarLinea(linea) {
+  const motivo = prompt(`${textoCerrar(linea)}: "${linea.materiales?.descripcion}". Motivo:`, '')
+  if (motivo === null) return
+  if (!motivo.trim()) {
+    aviso.value = 'Indica el motivo.'
+    return
+  }
+  aviso.value = ''
+  try {
+    await vales.cerrarLinea(linea, motivo.trim())
+    aviso.value = `"${linea.materiales?.descripcion}" quedó cerrado.`
+  } catch (e) {
+    aviso.value = `No se pudo cerrar la línea${e?.message ? ': ' + e.message : '.'}`
+  }
+}
+
 async function registrarEntrega(payload) {
   const { linea, reserva } = entregaEnProgreso.value
   await vales.registrarEntrega({ linea, reserva, ...payload, usuario_id: auth.session.user.id })
   copiado.value = false
+  const cantidadTotal = payload.asignaciones.reduce((acc, a) => acc + Number(a.cantidad), 0)
   mensajeEntrega.value = textoEntregaParaCompartir({
     vale: vale.value,
     material: linea.materiales?.descripcion ?? '—',
     unidad: linea.materiales?.unidad ?? '',
-    cantidad: payload.cantidad,
+    cantidad: cantidadTotal,
     almacen: reserva.almacenes?.nombre,
     supervisorNombre: vale.value?.usuarios?.nombre,
     registradoPor: auth.perfil?.nombre,
@@ -182,7 +219,7 @@ function situacion(linea) {
   const umbral = vales.alertasUmbralSobreconsumo
 
   const stock = {
-    texto: disponible > 0 ? `Stock: ${disponible}` : 'Sin stock',
+    texto: disponible > 0 ? `Stock: ${formatearNumero(disponible)} ${linea.materiales?.unidad ?? ''}` : 'Sin stock',
     nivel: disponible <= 0 ? 'danger' : disponible < linea.cantidad_solicitada ? 'warning' : 'ok',
   }
 
@@ -190,24 +227,78 @@ function situacion(linea) {
     return { stock, procura: { texto: 'No contemplado en Procura', nivel: 'warning' }, saldo: null }
   }
 
-  const pct = procura.porcentaje_consumo
+  const unidad = procura.unidad ?? ''
+  const unidadMaterial = linea.materiales?.unidad ?? ''
+  const factor = procura.factor ?? 1
+  // "Equivalente en la unidad del material" solo tiene sentido si de verdad
+  // son unidades distintas (factor != 1) — mismo criterio que la alerta del
+  // formulario de Nuevo vale (ValeFormModal.vue): repetir el mismo número en
+  // dos formatos cuando ya coinciden confunde más de lo que aclara.
+  const enMaterial = (valorEdp) => (factor && factor !== 1 ? Math.ceil(valorEdp / factor) : null)
+
+  const previsto = Number(procura.cantidad_prevista)
+  const saldoRestante = Number(procura.saldo)
+  const consumido = previsto - saldoRestante
+  // Se calcula acá mismo en vez de confiar en procura.porcentaje_consumo:
+  // ese campo puede venir null, y un saldo ya negativo (consumido > previsto)
+  // es "danger" siempre, sin depender de ningún porcentaje.
+  const pct = previsto > 0 ? (consumido / previsto) * 100 : null
+
+  // Un saldo negativo no es "queda -104 UND" (nadie lee un negativo como
+  // "ya no queda y además te pasaste") — es sobreconsumo, y se nombra así.
+  const ultimoTramo =
+    saldoRestante < 0
+      ? `Sobreconsumo de ${formatearNumero(-saldoRestante)} ${unidad}`
+      : `Queda ${formatearNumero(saldoRestante)} ${unidad}`
   const procuraChip = {
-    texto: pct === null ? `Previsto: ${procura.cantidad_prevista}` : `Procura: ${pct}% consumido`,
-    nivel: pct !== null && pct >= umbral ? 'danger' : pct !== null && pct >= umbral * 0.8 ? 'warning' : 'ok',
+    texto: `Previsto ${formatearNumero(previsto)} ${unidad} · Ya se sacó ${formatearNumero(consumido)} ${unidad} · ${ultimoTramo}`,
+    nivel: saldoRestante < 0 || (pct !== null && pct >= umbral) ? 'danger' : pct !== null && pct >= umbral * 0.8 ? 'warning' : 'ok',
   }
 
+  // procura.saldo está en la unidad del EDP (ej. ML), pero cantidad_solicitada
+  // está en la unidad física del material (ej. UND de un perno de 3m) — hay
+  // que convertir antes de comparar, o nunca se detecta el exceso (un perno
+  // de 3m pedido "de más" comparaba 1 UND contra un saldo en ML y siempre
+  // parecía estar dentro, aunque en ML sí se pasara).
+  const cantidadEnUnidadEdp = Number(linea.cantidad_solicitada) * factor
+  const exceso = cantidadEnUnidadEdp - saldoRestante
+  // El "= X ML" solo se agrega si de verdad convierte a algo distinto
+  // (factor != 1) — con factor 1 era literalmente el mismo número dos
+  // veces ("pide 300 UND = 300 UND"), puro ruido.
+  const pideTexto =
+    factor !== 1
+      ? `${formatearNumero(linea.cantidad_solicitada)} ${unidadMaterial} = ${formatearNumero(cantidadEnUnidadEdp)} ${unidad}`
+      : `${formatearNumero(cantidadEnUnidadEdp)} ${unidad}`
+  // Este aviso es una PREGUNTA para quien todavía tiene que decidir ("si
+  // apruebo esto, ¿me paso?") — una vez que la línea ya se aprobó, su propia
+  // cantidad ya quedó sumada al consumo real (por eso "Ya se sacó"/"Queda"
+  // de arriba bajaron), así que volver a restar esos mismos UND del saldo
+  // ya reducido los contaba dos veces y mostraba un exceso inflado que no
+  // existe. Pendiente es el único estado donde la pregunta todavía aplica.
   const saldo =
-    procura.saldo < Number(linea.cantidad_solicitada)
-      ? { texto: `Excede el saldo de Procura (saldo: ${procura.saldo})`, nivel: 'danger' }
+    linea.estado === 'Pendiente' && exceso > 0
+      ? {
+          texto:
+            `Este vale pide ${pideTexto} — te pasarías por ${formatearNumero(exceso)} ${unidad}` +
+            (enMaterial(exceso) ? ` (≈${formatearNumero(enMaterial(exceso))} ${unidadMaterial})` : ''),
+          nivel: 'danger',
+        }
       : null
 
   return { stock, procura: procuraChip, saldo }
+}
+
+// Quien entra por el módulo Almacén (todo rol con /almacen, o sea no
+// Supervisor) vuelve a la pestaña Vales de Almacén, no al módulo viejo.
+const vuelveAAlmacen = computed(() => auth.nombreRol !== 'Supervisor' && auth.tienePermiso('stock.ver'))
+function volver() {
+  router.push(vuelveAAlmacen.value ? { path: '/almacen', query: { tab: 'vales' } } : '/vales')
 }
 </script>
 
 <template>
   <div class="detalle">
-    <button class="volver" @click="router.push('/vales')">&larr; Volver a Vales</button>
+    <button class="volver" @click="volver">&larr; {{ vuelveAAlmacen ? 'Volver a Almacén' : 'Volver a Vales' }}</button>
 
     <p v-if="vales.cargando">Cargando…</p>
     <p v-else-if="vales.error" class="error">{{ vales.error }}</p>
@@ -274,7 +365,7 @@ function situacion(linea) {
         <tbody>
           <template v-for="l in vale.lineas" :key="l.id">
             <tr>
-              <td>{{ l.materiales?.codigo }} — {{ l.materiales?.descripcion }}</td>
+              <td>{{ l.materiales?.descripcion }}</td>
               <td>{{ l.materiales?.unidad }}</td>
               <td class="num">{{ formatearNumero(l.cantidad_solicitada) }}</td>
               <td class="num">{{ formatearNumero(l.cantidad_aprobada) }}</td>
@@ -282,17 +373,27 @@ function situacion(linea) {
               <td>
                 <span class="badge-linea" :class="l.estado.toLowerCase().replace(/\s+/g, '-')">{{ l.estado }}</span>
               </td>
-              <td class="acciones-fila">
-                <template v-if="puedeAprobarRechazar && l.estado === 'Pendiente'">
-                  <button class="mini" @click="lineaEnAprobacion = l">Aprobar</button>
-                  <button class="mini peligro" @click="rechazar(l)">Rechazar</button>
-                </template>
-                <button v-else-if="puedeEditarLineas && l.estado === 'Pendiente'" class="mini peligro" @click="quitarLinea(l)">
-                  Quitar
-                </button>
-                <button v-if="puedeRegistrarEntrega && LINEAS_CON_SALDO.includes(l.estado)" class="mini" @click="abrirEntrega(l)">
-                  Registrar entrega
-                </button>
+              <td class="td-acciones">
+                <div class="acciones-fila">
+                  <template v-if="puedeAprobarRechazar && l.estado === 'Pendiente'">
+                    <button class="mini" @click="lineaEnAprobacion = l">Aprobar</button>
+                    <button class="mini peligro" @click="rechazar(l)">Rechazar</button>
+                  </template>
+                  <button v-else-if="puedeEditarLineas && l.estado === 'Pendiente'" class="mini peligro" @click="quitarLinea(l)">
+                    Quitar
+                  </button>
+                  <button v-if="puedeRegistrarEntrega && LINEAS_CON_SALDO.includes(l.estado)" class="mini" @click="abrirEntrega(l)">
+                    Registrar entrega
+                  </button>
+                  <button
+                    v-if="puedeCerrarLinea && LINEAS_ABIERTAS.includes(l.estado)"
+                    class="mini peligro"
+                    title="Libera la reserva y cierra la línea"
+                    @click="cerrarLinea(l)"
+                  >
+                    {{ textoCerrar(l) }}
+                  </button>
+                </div>
               </td>
             </tr>
             <tr class="fila-situacion">
@@ -300,6 +401,7 @@ function situacion(linea) {
                 <span class="chip" :class="situacion(l).stock.nivel">{{ situacion(l).stock.texto }}</span>
                 <span class="chip" :class="situacion(l).procura.nivel">{{ situacion(l).procura.texto }}</span>
                 <span v-if="situacion(l).saldo" class="chip" :class="situacion(l).saldo.nivel">{{ situacion(l).saldo.texto }}</span>
+                <span v-if="l.motivo_cierre && ['Cancelado', 'Entregado'].includes(l.estado)" class="chip">Motivo: {{ l.motivo_cierre }}</span>
               </td>
             </tr>
           </template>
@@ -322,6 +424,7 @@ function situacion(linea) {
       :linea="lineaEnAprobacion"
       :almacenes-activos="vales.almacenesActivos"
       @aprobar="aprobar"
+      @rechazar="rechazarDesdeModal"
       @cerrar="lineaEnAprobacion = null"
     />
 
@@ -444,18 +547,24 @@ button.mini {
   gap: 0.4rem;
 }
 .fila-situacion td {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
   padding: 0 0.75rem 0.6rem;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
+  /* Mismo fondo que el resto de la tabla (.tabla ya usa --color-surface):
+     con --color-surface-2 esta fila se veía de un tono distinto al de la
+     fila de datos justo arriba. */
+  background: var(--color-surface);
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.15rem 0.5rem;
+  padding: 0.15rem 0.6rem;
   border-radius: var(--radius-pill);
   font-size: 0.72rem;
   font-weight: 600;
-  margin-right: 0.4rem;
+  white-space: nowrap;
 }
 .chip.ok {
   background: var(--color-success-soft);

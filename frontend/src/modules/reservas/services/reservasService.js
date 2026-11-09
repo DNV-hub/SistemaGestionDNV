@@ -16,6 +16,17 @@ export async function listarReservas(filtros = {}) {
   return data
 }
 
+/** Cuántas reservas siguen vigentes (Activa o Parcial): material apartado que
+ * todavía no se entregó del todo ni se liberó. */
+export async function contarReservasVigentes() {
+  const { count, error } = await supabase
+    .from('reservas')
+    .select('id', { count: 'exact', head: true })
+    .in('estado', ['Activa', 'Parcial'])
+  if (error) throw error
+  return count ?? 0
+}
+
 export async function liberarReserva({ reserva_id, motivo, usuario_id }) {
   const { error } = await supabase.rpc('fn_liberar_reserva', {
     p_reserva_id: reserva_id,

@@ -102,7 +102,7 @@ async function enviar() {
         <div v-for="l in borrador.lineas" :key="l.material_id" class="tarjeta-mat">
           <div class="tarjeta-mat-main">
             <div class="tarjeta-mat-nombre">{{ l.descripcion }}</div>
-            <div class="tarjeta-mat-codigo">{{ l.codigo }} · de {{ l.disponible }} disponibles</div>
+            <div class="tarjeta-mat-codigo">De {{ l.disponible }} disponibles</div>
           </div>
           <input
             v-model.number="l.cantidad"
@@ -163,6 +163,8 @@ async function enviar() {
   --text-2: #667085;
   --text-3: #98a2b3;
   --amber: #f5a800;
+  --amber-soft: #fff7e5;
+  --amber-ink: #b45309;
   --gray-bg: #f2f4f7;
   --err: #dc2626;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
@@ -172,6 +174,24 @@ async function enviar() {
   height: calc(100dvh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
+}
+/* Modo oscuro: mismo criterio que el resto del módulo (ver el comentario
+   largo en ValesView.vue/rdc-tema.css) — redefine estas mismas variables
+   con los tokens del Sistema. `color-scheme: light` se queda igual, sigue
+   evitando que el navegador reinvente los controles nativos por su cuenta;
+   acá los colores ya quedan puestos a mano. */
+:root[data-theme='dark'] .vale-nuevo {
+  --bg: var(--color-bg);
+  --card: var(--color-surface);
+  --border-lista: var(--color-border);
+  --text: var(--color-text);
+  --text-2: var(--color-text-muted);
+  --text-3: #6b7280;
+  --amber: var(--color-primary);
+  --amber-soft: var(--color-primary-soft);
+  --amber-ink: var(--color-primary);
+  --gray-bg: var(--color-surface-2);
+  --err: var(--color-danger);
 }
 .appbar {
   height: 56px;
@@ -336,8 +356,8 @@ async function enviar() {
   height: 48px;
   border-radius: 11px;
   border: 1.5px dashed var(--amber);
-  background: #fff7e5;
-  color: #b45309;
+  background: var(--amber-soft);
+  color: var(--amber-ink);
   font-size: 14.5px;
   font-weight: 600;
   display: flex;

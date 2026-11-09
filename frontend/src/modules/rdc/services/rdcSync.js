@@ -1,6 +1,7 @@
+import { textoCrudo } from '../../../utils/mensajeError'
 import { ENVIO, ESTADO } from './rdcDb'
-import { pendientes, adoptar, marcarSyncBorrador, marcarSyncFinalizado, obtener } from './rdcRepository'
-import { subirReporte, marcarEnvioSharepoint, obtenerActualizadoEnRemoto, obtenerReporteCompleto } from './rdcService'
+import { pendientes, adoptar, marcarSyncBorrador, marcarSyncFinalizado, obtener, idsBorradoresLocales, quitarBorradoresLocales } from './rdcRepository'
+import { subirReporte, marcarEnvioSharepoint, obtenerActualizadoEnRemoto, obtenerReporteCompleto, idsArchivadosEnRemoto } from './rdcService'
 import { construirWorkbook, workbookABase64, nombreArchivo } from './rdcExcel'
 
 // Servicio de sincronización: recorre la cola de reportes cerrados y los envía
@@ -30,6 +31,17 @@ function toca(intentos, ultimoIntentoEn) {
 
 let sincronizando = false
 
+/** Un borrador que se borró desde otro dispositivo sigue vivo en este: se
+ * seguía resubiendo al servidor y, peor, sus pernos y paños contaban como
+ * "ya reportados en otro reporte" y bloqueaban registrarlos en el reporte
+ * real. Se quita de acá. Devuelve cuántos quitó; sin conexión no hace nada. */
+export async function depurarBorradoresArchivados() {
+  if (!navigator.onLine) return 0
+  const archivados = await idsArchivadosEnRemoto(await idsBorradoresLocales())
+  await quitarBorradoresLocales(archivados)
+  return archivados.length
+}
+
 /** Envía lo que esté pendiente. Devuelve un resumen de lo que pasó.
  *
  * Nunca lanza: la sincronización corre en segundo plano mientras el supervisor
@@ -43,6 +55,11 @@ export async function sincronizar({ catalogos } = {}) {
   const resumen = { enviados: 0, fallidos: 0, omitidos: 0 }
 
   try {
+    try {
+      await depurarBorradoresArchivados()
+    } catch (e) {
+      console.error('No se pudo depurar borradores archivados', e)
+    }
     for (const referencia of await pendientes()) {
       // Siempre se relee la copia MÁS FRESCA de IndexedDB antes de decidir
       // qué hacer — nunca la snapshot de `pendientes()`, que pudo quedar
@@ -95,7 +112,7 @@ export async function sincronizar({ catalogos } = {}) {
           // lista lo muestre y se pueda diagnosticar sin herramientas de
           // desarrollador.
           console.error('No se pudo sincronizar un borrador de RDC', e)
-          await marcarSyncBorrador(reporte.id, { errorSupabase: e.message ?? String(e) }).catch(() => {})
+          await marcarSyncBorrador(reporte.id, { errorSupabase: textoCrudo(e) }).catch(() => {})
           resumen.fallidos++
         }
         continue
@@ -117,7 +134,7 @@ export async function sincronizar({ catalogos } = {}) {
           actual.errorSupabase = null
         } catch (e) {
           actual.estadoSupabase = ENVIO.ERROR
-          actual.errorSupabase = e.message ?? String(e)
+          actual.errorSupabase = textoCrudo(e)
           huboFallo = true
         }
       }
@@ -153,7 +170,7 @@ export async function sincronizar({ catalogos } = {}) {
           actual.sharepointIntentos = intentos
         } catch (e) {
           actual.estadoSharepoint = ENVIO.ERROR
-          actual.sharepointError = e.message ?? String(e)
+          actual.sharepointError = textoCrudo(e)
           actual.sharepointIntentos = intentos
           huboFallo = true
         }

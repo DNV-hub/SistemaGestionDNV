@@ -3,6 +3,7 @@ import {
   listarFrentes,
   listarMaterialesActivos,
   listarSalidasReporte,
+  listarDevolucionesReporte,
   listarSalidasEdp,
   listarComparacionGeneral,
 } from '../services/reportesService'
@@ -33,6 +34,10 @@ export const useReportesStore = defineStore('reportes', {
 
     async obtenerSalidasPorFrente(filtros) {
       return listarSalidasReporte(filtros)
+    },
+
+    async obtenerDevolucionesPorFrente(filtros) {
+      return listarDevolucionesReporte(filtros)
     },
 
     async obtenerSalidasEdp(filtros) {

@@ -1,17 +1,24 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useReservasStore } from '../store/reservas'
 import { useAuthStore } from '../../../store/auth'
-import LiberarReservaModal from '../components/LiberarReservaModal.vue'
 
 const reservas = useReservasStore()
 const auth = useAuthStore()
 
 const filtros = reactive({ soloActivas: true, almacenId: '', frenteId: '' })
-const reservaEnLiberacion = ref(null)
 const aviso = ref('')
 
-const puedeLiberar = computed(() => auth.tienePermiso('reservas.liberar_manual'))
+// Solo de consulta: lo que se hace con una reserva (entregar, no entregar) se
+// decide en la ficha del vale. Quien opera Almacén la abre ahí; el resto, en
+// el detalle de siempre.
+const enlaceVale = (r) => {
+  const id = r.vale_detalle?.vale_id
+  if (!id) return null
+  return auth.tienePermiso('stock.ver') && auth.nombreRol !== 'Supervisor'
+    ? { path: '/almacen', query: { tab: 'vales', vale: id } }
+    : `/vales/${id}`
+}
 
 function buscar() {
   reservas.buscar({
@@ -27,13 +34,6 @@ function diasDeAntiguedad(fecha) {
 
 function esProlongada(r) {
   return ['Activa', 'Parcial'].includes(r.estado) && diasDeAntiguedad(r.created_at) >= reservas.diasReservaProlongada
-}
-
-async function liberar(motivo) {
-  aviso.value = ''
-  await reservas.liberar({ reserva_id: reservaEnLiberacion.value.id, motivo, usuario_id: auth.session.user.id })
-  reservaEnLiberacion.value = null
-  aviso.value = 'Reserva liberada.'
 }
 
 onMounted(async () => {
@@ -85,7 +85,7 @@ onMounted(async () => {
           <th>Pendiente</th>
           <th>Antigüedad</th>
           <th>Estado</th>
-          <th v-if="puedeLiberar"></th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -93,7 +93,7 @@ onMounted(async () => {
           <td>{{ r.vale_detalle?.vales?.numero ?? '—' }}</td>
           <td>{{ r.frentes?.codigo ? r.frentes.codigo + ' — ' : '' }}{{ r.frentes?.nombre }}</td>
           <td>{{ r.almacenes?.nombre ?? '—' }}</td>
-          <td>{{ r.materiales?.codigo }} — {{ r.materiales?.descripcion }}</td>
+          <td>{{ r.materiales?.descripcion }}</td>
           <td>{{ r.cantidad }} {{ r.materiales?.unidad }}</td>
           <td>{{ r.cantidad_entregada }}</td>
           <td>{{ r.cantidad - r.cantidad_entregada }}</td>
@@ -101,14 +101,8 @@ onMounted(async () => {
           <td>
             <span class="badge" :class="r.estado.toLowerCase()">{{ r.estado }}</span>
           </td>
-          <td v-if="puedeLiberar">
-            <button
-              v-if="['Activa', 'Parcial'].includes(r.estado)"
-              class="mini"
-              @click="reservaEnLiberacion = r"
-            >
-              Liberar
-            </button>
+          <td>
+            <router-link v-if="enlaceVale(r)" :to="enlaceVale(r)" class="mini">Abrir vale</router-link>
           </td>
         </tr>
         <tr v-if="!reservas.reservas.length">
@@ -116,13 +110,6 @@ onMounted(async () => {
         </tr>
       </tbody>
     </table>
-
-    <LiberarReservaModal
-      v-if="reservaEnLiberacion"
-      :reserva="reservaEnLiberacion"
-      @confirmar="liberar"
-      @cerrar="reservaEnLiberacion = null"
-    />
   </div>
 </template>
 
@@ -162,7 +149,8 @@ select {
   color: var(--color-text-muted);
   margin: 0 0 1rem;
 }
-button.mini {
+button.mini,
+a.mini {
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
   border: none;
@@ -171,6 +159,8 @@ button.mini {
   color: var(--color-primary-ink);
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
 }
 .tabla {
   width: 100%;

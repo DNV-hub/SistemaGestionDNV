@@ -8,20 +8,33 @@ const procura = useProcuraStore()
 const router = useRouter()
 
 const busqueda = ref('')
+// Por defecto se ven TODOS los frentes sin importar su estado — cargar un
+// metrado no depende de que el frente esté activo ahora mismo (ver pedido
+// del usuario: un frente paralizado o planificado también necesita poder
+// cargar/corregir su metrado). Este filtro es solo para acotar la vista
+// cuando hace falta, nunca el motivo por el que algo deja de aparecer acá.
+const filtroEstado = ref('')
+const OPCIONES_ESTADO = [
+  { value: '', etiqueta: 'Todos los estados' },
+  { value: 'activo', etiqueta: 'Activo' },
+  { value: 'proximo', etiqueta: 'Próximo' },
+  { value: 'planificado', etiqueta: 'Planificado' },
+  { value: 'paralizado', etiqueta: 'Paralizado' },
+  { value: 'cerrado', etiqueta: 'Cerrado' },
+]
 
 /** Exporta el metrado vigente de TODOS los frentes en una sola hoja — el detalle de un solo frente se exporta desde su propia pantalla. */
 function exportarExcel() {
   const filas = procura.metrados
     .filter((m) => Number(m.cantidad_contractual) > 0 || Number(m.cantidad_procura) > 0)
     .map((m) => {
-      const frente = procura.frentesActivos.find((f) => f.id === m.frente_id)
+      const frente = procura.frentes.find((f) => f.id === m.frente_id)
       return {
         'Frente código': frente?.codigo ?? '',
         'Frente nombre': frente?.nombre ?? '',
         Área: frente?.area ?? '',
         Sector: frente?.sector ?? '',
-        Código: m.materiales?.codigo ?? '',
-        Material: m.materiales?.descripcion ?? '',
+        'Nombre EDP': m.nombres_edp?.nombre ?? '',
         Unidad: m.unidad,
         Contractual: m.cantidad_contractual,
         Procura: m.cantidad_procura,
@@ -35,13 +48,14 @@ onMounted(() => procura.cargar())
 
 const bloquesFiltrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
-  if (!q) return procura.bloques
   return procura.bloques.filter(
     (f) =>
-      (f.codigo ?? '').toLowerCase().includes(q) ||
-      f.nombre.toLowerCase().includes(q) ||
-      (f.area ?? '').toLowerCase().includes(q) ||
-      (f.sector ?? '').toLowerCase().includes(q)
+      (!filtroEstado.value || f.estado === filtroEstado.value) &&
+      (!q ||
+        (f.codigo ?? '').toLowerCase().includes(q) ||
+        f.nombre.toLowerCase().includes(q) ||
+        (f.area ?? '').toLowerCase().includes(q) ||
+        (f.sector ?? '').toLowerCase().includes(q))
   )
 })
 
@@ -78,6 +92,9 @@ function abrir(frente) {
 
     <div class="filtros">
       <input v-model="busqueda" type="search" placeholder="Buscar por código, frente, área o sector…" />
+      <select v-model="filtroEstado" class="filtro-estado">
+        <option v-for="op in OPCIONES_ESTADO" :key="op.value" :value="op.value">{{ op.etiqueta }}</option>
+      </select>
     </div>
 
     <p v-if="procura.error" class="error">{{ procura.error }}</p>
@@ -157,6 +174,9 @@ button {
 }
 .filtros {
   margin-bottom: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .filtros input {
   width: 320px;
@@ -164,6 +184,14 @@ button {
   padding: 0.5rem 0.65rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
+}
+.filtro-estado {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface);
 }
 
 .grupo-contrato {
@@ -276,6 +304,14 @@ button {
   border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 600;
+}
+.badge.planificado {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+.badge.proximo {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .badge.activo {
   background: var(--color-success-soft);

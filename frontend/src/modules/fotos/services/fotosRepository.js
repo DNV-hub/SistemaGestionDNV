@@ -1,6 +1,6 @@
 import { db, ENVIO } from './fotosDb'
 
-export const nuevoId = () => crypto.randomUUID()
+const nuevoId = () => crypto.randomUUID()
 
 /** Un envío por categoría: fecha, frente, quién lo tomó y las fotos ya
  * comprimidas (nombreArchivo + contenidoArchivo en base64), listas para
@@ -38,8 +38,6 @@ export async function guardar(envio) {
   return plano
 }
 
-export const obtener = (id) => db.envios.get(id)
-
 export async function listar() {
   const todos = await db.envios.toArray()
   return todos.sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))
@@ -47,6 +45,3 @@ export async function listar() {
 
 export const pendientes = () => db.envios.where('estado').notEqual(ENVIO.ENVIADO).toArray()
 
-export async function eliminar(id) {
-  await db.envios.delete(id)
-}

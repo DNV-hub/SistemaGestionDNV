@@ -11,6 +11,8 @@ export const useTemaStore = defineStore('tema', {
   actions: {
     aplicar() {
       document.documentElement.setAttribute('data-theme', this.modo)
+      // La barra del navegador/PWA (Android e iPhone) toma el color del fondo.
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', this.modo === 'dark' ? '#0e0f12' : '#f6f6f4')
     },
 
     alternar() {

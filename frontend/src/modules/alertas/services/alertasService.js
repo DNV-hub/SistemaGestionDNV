@@ -1,7 +1,7 @@
 import { supabase } from '../../../services/supabaseClient'
 
 const SELECT_ALERTA =
-  '*, materiales(id, codigo, descripcion), frentes(id, codigo, nombre), almacenes(id, codigo, nombre), vales(id, numero), usuarios(id, nombre)'
+  '*, materiales(id, codigo, descripcion), frentes(id, codigo, nombre), almacenes(id, codigo, nombre), vales(id, numero), rdc_reportes(id, fecha), usuarios(id, nombre)'
 
 /** filtros: { estado, tipo, nivel, frenteId } */
 export async function listarAlertas(filtros = {}) {

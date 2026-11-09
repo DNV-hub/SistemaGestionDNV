@@ -33,7 +33,7 @@ const filtrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
   const disponibles = vales.stockPorMaterial.filter((m) => !yaAgregados.value.has(m.id))
   if (!q) return disponibles
-  return disponibles.filter((m) => m.codigo.toLowerCase().includes(q) || m.descripcion.toLowerCase().includes(q))
+  return disponibles.filter((m) => m.descripcion.toLowerCase().includes(q))
 })
 
 // Sin búsqueda activa: "usados recientemente" (localStorage) primero, y
@@ -82,7 +82,6 @@ function elegir(material) {
           <div v-for="m in recientes" :key="m.id" class="row" @click="elegir(m)">
             <div class="row-main">
               <div class="row-name">{{ m.descripcion }}</div>
-              <div class="row-code">{{ m.codigo }}</div>
             </div>
             <div class="row-stock">
               <span class="row-numero">{{ m.disponible }}</span>
@@ -98,7 +97,6 @@ function elegir(material) {
         <div v-for="m in restoDelStock" :key="m.id" class="row" @click="elegir(m)">
           <div class="row-main">
             <div class="row-name">{{ m.descripcion }}</div>
-            <div class="row-code">{{ m.codigo }}</div>
           </div>
           <div class="row-stock">
             <span class="row-numero">{{ m.disponible }}</span>
@@ -130,6 +128,19 @@ function elegir(material) {
   display: flex;
   flex-direction: column;
   color: var(--text);
+}
+/* Modo oscuro: mismo criterio que el resto del módulo (ver el comentario
+   largo en ValesView.vue/rdc-tema.css) — redefine estas mismas variables
+   con los tokens del Sistema. */
+:root[data-theme='dark'] .selector-material {
+  --bg: var(--color-bg);
+  --card: var(--color-surface);
+  --border-lista: var(--color-border);
+  --text: var(--color-text);
+  --text-2: var(--color-text-muted);
+  --text-3: #6b7280;
+  --amber: var(--color-primary);
+  --gray-bg: var(--color-surface-2);
 }
 .appbar {
   height: 60px;
@@ -206,7 +217,7 @@ function elegir(material) {
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-lista);
   cursor: pointer;
 }
 .row-main {

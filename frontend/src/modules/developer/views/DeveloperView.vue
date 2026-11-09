@@ -2,13 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { listarUsuarios, actualizarUsuario } from '../../usuarios/services/usuariosService'
 import {
-  listarValesParaBorrar,
-  borrarVale,
-  listarReportesRdcParaBorrar,
-  borrarReporteRdc,
   suplantarUsuario,
   reiniciarIngresos,
   reiniciarDevoluciones,
+  vaciarCatalogo,
 } from '../services/developerService'
 
 const cargando = ref(true)
@@ -16,24 +13,18 @@ const error = ref('')
 const aviso = ref('')
 
 const usuarios = ref([])
-const vales = ref([])
-const reportes = ref([])
 
-const valesSeleccionados = ref(new Set())
-const reportesSeleccionados = ref(new Set())
-const borrando = ref(false)
 const suplantando = ref(false)
 const reiniciandoIngresos = ref(false)
 const reiniciandoDevoluciones = ref(false)
+const vaciandoCatalogo = ref(false)
 
 onMounted(async () => {
   cargando.value = true
   error.value = ''
   try {
-    const [u, v, r] = await Promise.all([listarUsuarios(), listarValesParaBorrar(), listarReportesRdcParaBorrar()])
+    const u = await listarUsuarios()
     usuarios.value = u.filter((x) => x.estado === 'activo')
-    vales.value = v
-    reportes.value = r
   } catch (e) {
     console.error(e)
     error.value = `No se pudo cargar la información: ${e.message ?? e}`
@@ -71,20 +62,19 @@ async function alternarHerenciaCompleta(usuario) {
   }
 }
 
+// El rol Developer no entra acá: "ver como" existe para probar cómo ve el
+// sistema otro rol — no tiene sentido suplantar a otra cuenta Developer
+// (hoy es, de hecho, la propia cuenta de quien está mirando esta lista).
 const usuariosPorRol = computed(() => {
   const grupos = new Map()
   for (const u of usuarios.value) {
     const rol = u.roles?.nombre ?? '—'
+    if (rol === 'Developer') continue
     if (!grupos.has(rol)) grupos.set(rol, [])
     grupos.get(rol).push(u)
   }
   return [...grupos.entries()].sort(([a], [b]) => a.localeCompare(b))
 })
-
-function alternar(set, id) {
-  if (set.has(id)) set.delete(id)
-  else set.add(id)
-}
 
 async function verComo(usuario) {
   if (!confirm(`¿Ver el sistema como ${usuario.nombre} (${usuario.roles?.nombre})? Vas a salir de tu cuenta Developer y entrar como esa cuenta.`)) return
@@ -152,51 +142,30 @@ async function reiniciarTodasLasDevoluciones() {
   }
 }
 
-async function borrarValesSeleccionados() {
-  if (!valesSeleccionados.value.size) return
-  if (!confirm(`¿Borrar ${valesSeleccionados.value.size} vale(s)? No se puede deshacer.`)) return
-  borrando.value = true
-  aviso.value = ''
-  error.value = ''
-  const fallidos = []
-  for (const id of valesSeleccionados.value) {
-    try {
-      await borrarVale(id)
-    } catch (e) {
-      fallidos.push({ id, mensaje: e.message ?? String(e) })
-    }
+async function vaciarCatalogoCompleto() {
+  const primeraConfirmacion = confirm(
+    'Esto revisa TODOS los materiales activos del catálogo: los que no tengan stock, vales ni movimientos se borran ' +
+      'de verdad; los que ya tienen historial registrado quedan desactivados (no se pierde ese historial). Para ' +
+      'cuando vas a resubir el catálogo entero por Excel. No se puede deshacer.\n\n¿Seguro?'
+  )
+  if (!primeraConfirmacion) return
+  const segundaConfirmacion = prompt('Para confirmar, escribí BORRAR TODO (en mayúsculas):')
+  if (segundaConfirmacion !== 'BORRAR TODO') {
+    aviso.value = ''
+    return
   }
-  vales.value = await listarValesParaBorrar()
-  valesSeleccionados.value = new Set()
-  borrando.value = false
-  if (fallidos.length) {
-    error.value = `${fallidos.length} vale(s) no se pudieron borrar: ${fallidos.map((f) => f.mensaje).join(' · ')}`
-  } else {
-    aviso.value = 'Vale(s) borrado(s).'
-  }
-}
 
-async function borrarReportesSeleccionados() {
-  if (!reportesSeleccionados.value.size) return
-  if (!confirm(`¿Borrar ${reportesSeleccionados.value.size} reporte(s) del RDC? No se puede deshacer.`)) return
-  borrando.value = true
-  aviso.value = ''
+  vaciandoCatalogo.value = true
   error.value = ''
-  const fallidos = []
-  for (const id of reportesSeleccionados.value) {
-    try {
-      await borrarReporteRdc(id)
-    } catch (e) {
-      fallidos.push({ id, mensaje: e.message ?? String(e) })
-    }
-  }
-  reportes.value = await listarReportesRdcParaBorrar()
-  reportesSeleccionados.value = new Set()
-  borrando.value = false
-  if (fallidos.length) {
-    error.value = `${fallidos.length} reporte(s) no se pudieron borrar: ${fallidos.map((f) => f.mensaje).join(' · ')}`
-  } else {
-    aviso.value = 'Reporte(s) borrado(s).'
+  aviso.value = ''
+  try {
+    const { eliminados, desactivados } = await vaciarCatalogo()
+    aviso.value = `Catálogo vaciado: ${eliminados} materiales eliminados, ${desactivados} desactivados por tener historial. Ya podés resubir el Excel.`
+  } catch (e) {
+    console.error(e)
+    error.value = `No se pudo vaciar el catálogo: ${e.message ?? e}`
+  } finally {
+    vaciandoCatalogo.value = false
   }
 }
 </script>
@@ -247,8 +216,8 @@ async function borrarReportesSeleccionados() {
           </thead>
           <tbody>
             <tr v-for="u in supervisores" :key="u.id">
-              <td>{{ u.nombre }}</td>
-              <td>
+              <td class="td-titulo">{{ u.nombre }}</td>
+              <td data-label="Hereda reporte completo">
                 <label class="switch">
                   <input
                     type="checkbox"
@@ -289,66 +258,16 @@ async function borrarReportesSeleccionados() {
         </button>
       </section>
 
-      <section class="tarjeta">
-        <h2>Borrar vales de prueba</h2>
+      <section class="tarjeta peligro-total">
+        <h2>Vaciar el catálogo</h2>
         <p class="ayuda">
-          No deja borrar un vale que ya tuvo una entrega física real (eso quedó en kardex, no es una prueba) — para
-          esos casos hay que revertirlos con Devoluciones.
+          Para cuando hay que resubir el catálogo entero por Excel: borra de verdad los materiales sin movimientos y
+          desactiva (sin perder el historial) los que ya tienen stock, vales o kardex. Después de esto, reimportar el
+          Excel vuelve a crear los códigos que quedaron desactivados como materiales nuevos.
         </p>
-        <button class="peligro" :disabled="!valesSeleccionados.size || borrando" @click="borrarValesSeleccionados">
-          {{ borrando ? 'Borrando…' : `Borrar ${valesSeleccionados.size || ''} seleccionado(s)` }}
+        <button class="peligro" :disabled="vaciandoCatalogo" @click="vaciarCatalogoCompleto">
+          {{ vaciandoCatalogo ? 'Vaciando…' : 'Vaciar todo el catálogo' }}
         </button>
-        <table class="tabla">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Número</th>
-              <th>Fecha</th>
-              <th>Frente</th>
-              <th>Supervisor</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="v in vales" :key="v.id">
-              <td><input type="checkbox" :checked="valesSeleccionados.has(v.id)" @change="alternar(valesSeleccionados, v.id)" /></td>
-              <td>{{ v.numero }}</td>
-              <td>{{ v.fecha }}</td>
-              <td>{{ v.frentes?.codigo ?? '—' }}</td>
-              <td>{{ v.usuarios?.nombre ?? '—' }}</td>
-              <td>{{ v.estado }}</td>
-            </tr>
-            <tr v-if="!vales.length"><td colspan="6" class="vacio">No hay vales.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Borrar reportes del RDC de prueba</h2>
-        <button class="peligro" :disabled="!reportesSeleccionados.size || borrando" @click="borrarReportesSeleccionados">
-          {{ borrando ? 'Borrando…' : `Borrar ${reportesSeleccionados.size || ''} seleccionado(s)` }}
-        </button>
-        <table class="tabla">
-          <thead>
-            <tr>
-              <th></th>
-              <th>Fecha</th>
-              <th>Frente</th>
-              <th>Supervisor</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in reportes" :key="r.id">
-              <td><input type="checkbox" :checked="reportesSeleccionados.has(r.id)" @change="alternar(reportesSeleccionados, r.id)" /></td>
-              <td>{{ r.fecha }}</td>
-              <td>{{ r.frentes?.nombre ?? '—' }}</td>
-              <td>{{ r.rdc_supervisores?.nombre ?? '—' }}</td>
-              <td>{{ r.estado }}</td>
-            </tr>
-            <tr v-if="!reportes.length"><td colspan="5" class="vacio">No hay reportes.</td></tr>
-          </tbody>
-        </table>
       </section>
     </template>
   </div>
@@ -435,6 +354,30 @@ button.peligro:disabled {
   opacity: 0.55;
   cursor: default;
 }
+button.secundario {
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.6rem;
+}
+button.secundario:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.acciones-papelera {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.nota {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin: 0 0 0.6rem;
+}
 .tabla {
   width: 100%;
   border-collapse: collapse;
@@ -477,5 +420,76 @@ button.peligro:disabled {
   color: var(--color-danger);
   font-size: 0.9rem;
   white-space: pre-wrap;
+}
+
+/* Celular: cada fila de tabla pasa a tarjeta (mismo patrón que ya usan
+   Almacén y Catálogo) — una tabla de 5-6 columnas angosta era imposible de
+   leer con scroll horizontal. El checkbox de selección queda arriba a la
+   derecha de la tarjeta en vez de perderse como una columna más. */
+@media (max-width: 760px) {
+  .developer {
+    padding: 1.25rem 1rem;
+  }
+  .tarjeta {
+    padding: 0.9rem 1rem;
+  }
+  .tabla {
+    display: block;
+  }
+  .tabla thead {
+    display: none;
+  }
+  .tabla tbody {
+    display: block;
+  }
+  .tabla tbody tr {
+    display: block;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    margin-bottom: 0.6rem;
+    padding: 0.75rem 0.85rem;
+  }
+  .tabla td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--color-border);
+    text-align: right;
+    font-size: 0.85rem;
+  }
+  .tabla td:last-child {
+    border-bottom: none;
+  }
+  .tabla td[data-label]::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    text-align: left;
+  }
+  .tabla .td-titulo {
+    display: block;
+    font-weight: 700;
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.55rem;
+    margin-bottom: 0.15rem;
+  }
+  .tabla .td-check {
+    justify-content: flex-end;
+    border-bottom: none;
+    padding: 0 0 0.4rem;
+  }
+  .tabla .vacio {
+    display: block;
+    text-align: center;
+    padding: 1rem 0;
+  }
 }
 </style>

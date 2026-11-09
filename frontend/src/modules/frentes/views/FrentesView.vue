@@ -1,12 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useFrentesStore } from '../store/frentes'
 import { useAuthStore } from '../../../store/auth'
 import FrenteFormModal from '../components/FrenteFormModal.vue'
 import BotonIcono from '../../../components/BotonIcono.vue'
+import { descargarExcel } from '../../../utils/exportarExcel'
+import { usarCabeceraPlaneamiento } from '../../planeamiento/composables/useCabeceraPlaneamiento'
 
 const frentes = useFrentesStore()
 const auth = useAuthStore()
+const router = useRouter()
 
 const busqueda = ref('')
 const mostrarModal = ref(false)
@@ -19,41 +23,118 @@ const puedeEditar = computed(
   () => auth.tienePermiso('frentes.editar') || auth.tienePermiso('frentes.cerrar')
 )
 const mostrarAcciones = computed(() => puedeEditar.value)
+const puedeGestionarSectores = computed(() => auth.tienePermiso('rdc.catalogos_gestionar'))
+
+onMounted(() => frentes.cargar())
+
+function exportarFrentes() {
+  descargarExcel(`frentes_${new Date().toISOString().slice(0, 10)}.xlsx`, [
+    {
+      nombre: 'Frentes',
+      filas: frentesFiltrados.value.map((f) => ({
+        CODIGO: f.codigo ?? '',
+        NOMBRE: f.nombre,
+        SECTOR: f.sector,
+        AREA: f.area,
+        ESTADO: ETIQUETA_ESTADO[f.estado] ?? f.estado,
+        'TIPO RD': f.tipo_rd ?? '',
+        INICIO: f.fecha_inicio ?? '',
+        FIN: f.fecha_cierre ?? '',
+      })),
+    },
+  ])
+}
+
+usarCabeceraPlaneamiento(
+  () => ({ texto: 'Nuevo frente', visible: puedeCrear.value, ejecutar: abrirCrear }),
+  () => [
+    ...(puedeGestionarSectores.value
+      ? [{ texto: 'Sectores (ir a Catálogo)', ejecutar: () => router.push('/planeamiento/catalogo/sectores') }]
+      : []),
+    { texto: 'Exportar frentes', ejecutar: exportarFrentes },
+  ]
+)
+
+// Chips de estado: "Próximos" agrupa planificado+proximo (ambos son "todavía
+// no arrancó", la única diferencia es si ya tiene fecha puesta) — el mockup
+// solo pide 4 chips + Todos, no 5, y esos dos estados son justo la misma
+// idea para quien está mirando la lista.
+const ESTADO_CHIP = {
+  planificado: 'proximo',
+  proximo: 'proximo',
+  activo: 'activo',
+  paralizado: 'paralizado',
+  cerrado: 'cerrado',
+}
+const CHIPS = [
+  { clave: 'todos', etiqueta: 'Todos' },
+  { clave: 'activo', etiqueta: 'Activos' },
+  { clave: 'paralizado', etiqueta: 'Paralizados' },
+  { clave: 'proximo', etiqueta: 'Próximos' },
+  { clave: 'cerrado', etiqueta: 'Finalizados' },
+]
+const chipActivo = ref('todos')
+
+const conteosChip = computed(() => {
+  const c = { todos: frentes.frentes.length, activo: 0, paralizado: 0, proximo: 0, cerrado: 0 }
+  for (const f of frentes.frentes) c[ESTADO_CHIP[f.estado] ?? 'cerrado']++
+  return c
+})
 
 const frentesFiltrados = computed(() => {
   const q = busqueda.value.trim().toLowerCase()
-  if (!q) return frentes.frentes
-  return frentes.frentes.filter(
-    (f) =>
+  return frentes.frentes.filter((f) => {
+    if (chipActivo.value !== 'todos' && (ESTADO_CHIP[f.estado] ?? 'cerrado') !== chipActivo.value) return false
+    if (!q) return true
+    return (
       (f.codigo ?? '').toLowerCase().includes(q) ||
       f.nombre.toLowerCase().includes(q) ||
       f.area.toLowerCase().includes(q) ||
       f.sector.toLowerCase().includes(q)
-  )
+    )
+  })
 })
 
-// Agrupación puramente visual (sin pestañas): por contrato primero, y
-// dentro de cada contrato por sector — cada sector se dibuja como un
-// "corchete" gris (fieldset) que envuelve sus tarjetas.
-const gruposPorContrato = computed(() =>
-  frentes.contratos.map((contrato) => {
-    const deEsteContrato = frentesFiltrados.value.filter((f) => f.contrato_id === contrato.id)
-    const porSector = new Map()
-    for (const f of deEsteContrato) {
-      if (!porSector.has(f.sector)) porSector.set(f.sector, [])
-      porSector.get(f.sector).push(f)
-    }
-    const sectores = [...porSector.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([sector, lista]) => ({
-        sector,
-        frentes: lista.sort((a, b) => a.nombre.localeCompare(b.nombre)),
-      }))
-    return { contrato, sectores, total: deEsteContrato.length }
-  })
-)
+// Frentes agrupados por Área (orden alfabético; dentro, por código).
+const gruposPorArea = computed(() => {
+  const mapa = new Map()
+  for (const f of frentesFiltrados.value) {
+    const area = (f.area ?? '').trim() || 'Sin área'
+    if (!mapa.has(area)) mapa.set(area, [])
+    mapa.get(area).push(f)
+  }
+  return [...mapa.entries()]
+    .sort((a, b) => (a[0] === 'Sin área') - (b[0] === 'Sin área') || a[0].localeCompare(b[0], 'es'))
+    .map(([area, lista]) => ({
+      area,
+      frentes: [...lista].sort((x, y) => (x.codigo ?? x.nombre).localeCompare(y.codigo ?? y.nombre, 'es', { numeric: true })),
+    }))
+})
 
-onMounted(() => frentes.cargar())
+const ETIQUETA_ESTADO = {
+  planificado: 'Planificado',
+  proximo: 'Próximo',
+  activo: 'Activo',
+  paralizado: 'Paralizado',
+  cerrado: 'Cerrado',
+}
+
+function fechaCorta(f) {
+  return f ? new Date(`${f}T00:00:00`).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' }) : '—'
+}
+
+function tieneProcuraDe(f) {
+  return frentes.frentesConProcura.has(f.id)
+}
+function pernosPendientesDe(f) {
+  return frentes.pernosPendientes.get(f.id) ?? 0
+}
+function alertasDe(f) {
+  return frentes.alertasPorFrente.get(f.id) ?? 0
+}
+function sinPendientes(f) {
+  return pernosPendientesDe(f) === 0 && alertasDe(f) === 0
+}
 
 function abrirCrear() {
   frenteEnEdicion.value = null
@@ -102,58 +183,87 @@ async function eliminar(frente) {
 </script>
 
 <template>
-  <div class="frentes">
-    <header class="cabecera">
-      <h1>Frentes</h1>
-      <button v-if="puedeCrear" @click="abrirCrear">+ Nuevo frente</button>
-    </header>
-
-    <div class="filtros">
-      <input v-model="busqueda" type="search" placeholder="Buscar por código, frente, área o sector…" />
+  <div class="pl-col">
+    <div class="pl-filters">
+      <div class="chips" role="group" aria-label="Estado del frente">
+        <button
+          v-for="c in CHIPS"
+          :key="c.clave"
+          type="button"
+          class="pl-seg"
+          :class="{ on: chipActivo === c.clave }"
+          :aria-pressed="chipActivo === c.clave"
+          @click="chipActivo = c.clave"
+        >
+          {{ c.etiqueta }}<span class="n">{{ conteosChip[c.clave] }}</span>
+        </button>
+      </div>
+      <label class="pl-search buscador-der">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+        <input v-model="busqueda" type="search" placeholder="Buscar frente" aria-label="Buscar frente" />
+      </label>
     </div>
 
     <p v-if="aviso" class="aviso">{{ aviso }}</p>
     <p v-if="frentes.error" class="error">{{ frentes.error }}</p>
-
     <p v-if="frentes.cargando">Cargando frentes…</p>
 
     <template v-else>
       <p v-if="!frentesFiltrados.length" class="vacio">No hay frentes para mostrar.</p>
 
-      <section v-for="grupo in gruposPorContrato" v-else :key="grupo.contrato.id" class="grupo-contrato">
-        <h2 class="titulo-contrato">{{ grupo.contrato.nombre }}</h2>
-        <p v-if="!grupo.total" class="vacio-contrato">Todavía no hay frentes en este contrato.</p>
+      <section v-for="g in gruposPorArea" v-else :key="g.area" class="grupo-area">
+        <h2 class="area-titulo">{{ g.area }}<span class="n">{{ g.frentes.length }}</span></h2>
+      <div class="tarjetas">
+        <article v-for="f in g.frentes" :key="f.id" class="tarjeta">
+          <!-- "Enlace extendido": cubre toda la tarjeta por debajo de todo
+               lo demás, así cualquier click fuera de los botones de acción
+               abre la ficha — sin anidar un <button> dentro de un <a>
+               (HTML inválido) ni agregar un botón "Abrir ficha" aparte. -->
+          <router-link :to="`/frentes/${f.id}`" class="tarjeta-link" :aria-label="`Abrir ficha de ${f.nombre}`" />
 
-        <fieldset v-for="gs in grupo.sectores" :key="gs.sector" class="corchete">
-          <legend>{{ gs.sector }}</legend>
-          <div class="tarjetas">
-            <article
-              v-for="f in gs.frentes"
-              :key="f.id"
-              class="tarjeta"
-              :class="{ cerrado: f.estado === 'cerrado', planificado: f.estado === 'planificado' }"
-            >
-              <header class="tarjeta-cabecera">
-                <span class="tarjeta-nombre">{{ f.nombre }}</span>
-                <span class="badge" :class="f.estado">{{ f.estado }}</span>
-              </header>
-              <p class="tarjeta-meta">
-                <span v-if="f.codigo" class="tarjeta-codigo">{{ f.codigo }}</span>
-                <span>{{ f.area }}</span>
-              </p>
-              <p class="tarjeta-fechas">
-                Desde {{ f.fecha_inicio }}<span v-if="f.fecha_cierre"> · Cerrado {{ f.fecha_cierre }}</span>
-              </p>
-              <div class="tarjeta-acciones">
-                <BotonIcono v-if="puedeCrear" variante="copiar" titulo="Copiar frente" @click="abrirCopiar(f)" />
-                <template v-if="mostrarAcciones">
-                  <BotonIcono variante="editar" titulo="Editar" @click="abrirEditar(f)" />
-                  <BotonIcono variante="eliminar" titulo="Eliminar" @click="eliminar(f)" />
-                </template>
-              </div>
-            </article>
+          <header class="tarjeta-cabecera">
+            <span class="tarjeta-nombre">{{ f.nombre }}</span>
+            <span class="estado-frente" :class="f.estado">
+              <span class="sd"></span>{{ ETIQUETA_ESTADO[f.estado] ?? f.estado }}
+            </span>
+          </header>
+
+          <div class="pills">
+            <span class="pill">{{ f.sector }}</span>
+            <span v-if="f.tipo_rd" class="pill pill-info">RD {{ f.tipo_rd }}</span>
           </div>
-        </fieldset>
+
+          <div class="capsulas">
+            <span v-if="tieneProcuraDe(f)" class="cap cap-procura">Procura</span>
+            <span v-if="f.rdc_control_pernos" class="cap cap-pernos">Pernos</span>
+          </div>
+
+          <div class="fechas">
+            <div>
+              <div class="fecha-etiqueta">INICIO</div>
+              <div class="fecha-valor">{{ fechaCorta(f.fecha_inicio) }}</div>
+            </div>
+            <div>
+              <div class="fecha-etiqueta">FIN</div>
+              <div class="fecha-valor">{{ fechaCorta(f.fecha_cierre) }}</div>
+            </div>
+          </div>
+
+          <div class="franja-pendientes">
+            <span v-if="pernosPendientesDe(f)" class="pend ambar">{{ pernosPendientesDe(f) }} pernos pendientes</span>
+            <span v-if="alertasDe(f)" class="pend rojo">{{ alertasDe(f) }} alertas</span>
+            <span v-if="sinPendientes(f)" class="pend-texto">Sin pendientes</span>
+          </div>
+
+          <div v-if="puedeCrear || mostrarAcciones" class="tarjeta-acciones">
+            <BotonIcono v-if="puedeCrear" variante="copiar" titulo="Copiar frente" @click="abrirCopiar(f)" />
+            <template v-if="mostrarAcciones">
+              <BotonIcono variante="editar" titulo="Editar" @click="abrirEditar(f)" />
+              <BotonIcono variante="eliminar" titulo="Eliminar" @click="eliminar(f)" />
+            </template>
+          </div>
+        </article>
+      </div>
       </section>
     </template>
 
@@ -162,141 +272,106 @@ async function eliminar(frente) {
       :frente="frenteEnEdicion"
       :plantilla="plantillaParaCopia"
       :contratos="frentes.contratos"
+      :sectores="frentes.sectores"
       :puede-editar-estado="auth.tienePermiso('frentes.cerrar') || auth.tienePermiso('frentes.editar')"
       @guardar="guardar"
       @cerrar="cerrarModal"
     />
+
   </div>
 </template>
 
 <style scoped>
-.frentes {
-  padding: 1.5rem 2rem;
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
-.cabecera {
+.buscador-der {
+  max-width: 360px;
+  margin-left: auto;
+}
+
+.grupo-area + .grupo-area {
+  margin-top: 28px;
+}
+.area-titulo {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-h1 {
-  font-size: 1.25rem;
-  margin: 0;
-  color: var(--color-text);
-}
-.filtros {
-  margin-bottom: 1.25rem;
-}
-.filtros input {
-  width: 320px;
-  max-width: 100%;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-}
-button {
-  padding: 0.55rem 1rem;
-  border: none;
-  border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.grupo-contrato {
-  margin-bottom: 1.75rem;
-}
-.titulo-contrato {
-  margin: 0 0 0.75rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.vacio-contrato {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-/* El "corchete": un fieldset sin caja completa, solo el contorno con la
-   etiqueta del sector cortando el borde — agrupa las tarjetas sin ser una
-   pestaña ni un panel funcional, es puramente visual. */
-.corchete {
-  border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-card);
-  padding: 0.9rem 0.85rem 0.85rem;
-  margin: 0 0 1rem;
-  min-width: 0;
-}
-.corchete legend {
-  padding: 0 0.5rem;
-  margin-left: 0.4rem;
-  font-size: 11px;
-  font-weight: 700;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  color: var(--color-text);
+}
+.area-titulo .n {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-2);
   color: var(--color-text-muted);
 }
-
 .tarjetas {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 .tarjeta {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 12px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  padding: 0.85rem;
+  border-radius: 14px;
+  padding: 18px;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.tarjeta.cerrado {
-  opacity: 0.65;
+.tarjeta:hover,
+.tarjeta:focus-within {
+  border-color: var(--color-primary);
+  background: var(--color-surface-2);
+  box-shadow: 0 0 0 1px var(--color-primary), 0 8px 24px rgba(245, 165, 36, 0.12);
+  transform: translateY(-2px);
 }
-.tarjeta.planificado {
-  border-style: dashed;
+.tarjeta-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+.tarjeta-link:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 .tarjeta-cabecera {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 10px;
 }
 .tarjeta-nombre {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 16px;
   color: var(--color-text);
-  font-size: 0.92rem;
+  line-height: 1.3;
 }
-.tarjeta-meta {
-  margin: 0;
-  display: flex;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-.tarjeta-codigo {
+.badge,
+.pill,
+.pend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--color-text);
-}
-.tarjeta-fechas {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-.tarjeta-acciones {
-  display: flex;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
-}
-.badge {
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-pill);
-  font-size: 0.72rem;
-  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .badge.planificado {
   background: var(--color-info-soft);
@@ -311,12 +386,108 @@ button {
   color: var(--color-success);
 }
 .badge.paralizado {
-  background: var(--color-warning-soft);
+  background: var(--color-warning-soft, #fff7e5);
   color: var(--color-warning);
 }
 .badge.cerrado {
   background: var(--color-neutral-soft);
   color: var(--color-text-muted);
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+.pill-info {
+  color: var(--color-info);
+  background: var(--color-info-soft);
+}
+.estado-frente {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.estado-frente .sd {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #b5b8be;
+}
+.estado-frente.activo { color: var(--color-success); }
+.estado-frente.activo .sd { background: #22c55e; }
+.estado-frente.paralizado { color: var(--color-warning); }
+.estado-frente.paralizado .sd { background: #f59e0b; }
+.estado-frente.planificado { color: var(--color-info); }
+.estado-frente.planificado .sd { background: #3b82f6; }
+.estado-frente.proximo { color: var(--color-primary); }
+.estado-frente.proximo .sd { background: var(--color-primary); }
+.capsulas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 26px;
+}
+.cap {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cap-procura { background: var(--cap-procura-bg); color: var(--cap-procura-fg); }
+.cap-pernos { background: var(--cap-pernos-bg); color: var(--cap-pernos-fg); }
+.fechas {
+  display: flex;
+  gap: 32px;
+}
+.fecha-etiqueta {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #8d929b;
+}
+.fecha-valor {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.franja-pendientes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.pend.ambar {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.pend.rojo {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.pend-texto {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.tarjeta-acciones {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  margin-top: -0.4rem;
 }
 .vacio {
   text-align: center;

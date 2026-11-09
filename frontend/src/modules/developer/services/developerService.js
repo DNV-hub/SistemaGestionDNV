@@ -5,36 +5,6 @@ import { supabase } from '../../../services/supabaseClient'
 // sistema.suplantar_usuario en el servidor (RPC y Edge Function) — este
 // archivo es solo el cliente, no repite la validación.
 
-export async function listarValesParaBorrar() {
-  const { data, error } = await supabase
-    .from('vales')
-    .select('id, numero, fecha, estado, frentes(codigo, nombre), usuarios!supervisor_id(nombre)')
-    .order('created_at', { ascending: false })
-    .limit(500)
-  if (error) throw error
-  return data
-}
-
-export async function borrarVale(id) {
-  const { error } = await supabase.rpc('fn_borrar_vale_prueba', { p_vale_id: id })
-  if (error) throw error
-}
-
-export async function listarReportesRdcParaBorrar() {
-  const { data, error } = await supabase
-    .from('rdc_reportes')
-    .select('id, fecha, estado, frentes(nombre), rdc_supervisores(nombre)')
-    .order('fecha', { ascending: false })
-    .limit(500)
-  if (error) throw error
-  return data
-}
-
-export async function borrarReporteRdc(id) {
-  const { error } = await supabase.rpc('fn_borrar_reporte_rdc_prueba', { p_reporte_id: id })
-  if (error) throw error
-}
-
 /** Borra TODOS los ingresos (y su kardex) y repone el stock físico a 0 —
  * para cuando el ingreso inicial se cargó mal y hay que reingresar todo de
  * cero. Se niega en el servidor si ya hay salidas o stock reservado. */
@@ -52,6 +22,15 @@ export async function reiniciarDevoluciones() {
   const { data, error } = await supabase.rpc('fn_reiniciar_devoluciones')
   if (error) throw error
   return { devolucionesBorradas: data?.devoluciones_borradas ?? 0 }
+}
+
+/** Vacía el catálogo antes de resubirlo por Excel: borra de verdad los
+ * materiales sin movimientos y desactiva (sin perder historial) los que ya
+ * tienen stock, vales o kardex. */
+export async function vaciarCatalogo() {
+  const { data, error } = await supabase.rpc('fn_vaciar_catalogo')
+  if (error) throw error
+  return { eliminados: data?.eliminados ?? 0, desactivados: data?.desactivados ?? 0 }
 }
 
 // ---------------------------------------------------------------------------

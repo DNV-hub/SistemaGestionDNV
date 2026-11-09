@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useReportesStore } from '../store/reportes'
 import { descargarExcel } from '../../../utils/exportarExcel'
 import { formatearNumero } from '../../../utils/formatearNumero'
+import { armarReporteSalidas, descargarReporteSalidas } from '../utils/salidasFrente'
 
 const reportes = useReportesStore()
 
@@ -18,36 +19,21 @@ onMounted(() => reportes.cargarFiltros())
 // ---------------------------------------------------------------------------
 const filtrosSalidas = reactive({ frenteId: '', desde: '', hasta: '' })
 const filasSalidas = ref(null)
+// Una fila por entrega (con su fecha y quién la pidió), para la hoja de detalle
+// del Excel; la tabla de pantalla sigue agrupada por frente + material.
+const detalleSalidas = ref([])
 
 async function generarSalidas() {
   error.value = ''
   generando.value = true
   try {
-    const salidas = await reportes.obtenerSalidasPorFrente({
+    const { filas, detalle } = await armarReporteSalidas(reportes, {
       frenteId: filtrosSalidas.frenteId || null,
       desde: filtrosSalidas.desde || null,
       hasta: filtrosSalidas.hasta || null,
     })
-
-    const porGrupo = new Map()
-    for (const s of salidas) {
-      const clave = `${s.frentes?.id}:${s.materiales?.id}`
-      if (!porGrupo.has(clave)) {
-        porGrupo.set(clave, {
-          frenteCodigo: s.frentes?.codigo ?? '—',
-          frenteNombre: s.frentes?.nombre ?? '—',
-          contrato: s.contratos?.nombre ?? '—',
-          codigo: s.materiales?.codigo ?? '—',
-          descripcion: s.materiales?.descripcion ?? '—',
-          unidad: s.materiales?.unidad ?? '',
-          cantidad: 0,
-        })
-      }
-      porGrupo.get(clave).cantidad += Number(s.cantidad)
-    }
-    filasSalidas.value = [...porGrupo.values()].sort(
-      (a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.codigo.localeCompare(b.codigo)
-    )
+    filasSalidas.value = filas
+    detalleSalidas.value = detalle
   } catch (e) {
     console.error(e)
     error.value = 'No se pudo generar el reporte.'
@@ -57,19 +43,7 @@ async function generarSalidas() {
 }
 
 function exportarSalidas() {
-  descargarExcel(`salidas_por_frente_${filtrosSalidas.desde || 'inicio'}_${filtrosSalidas.hasta || 'hoy'}.xlsx`, [
-    {
-      nombre: 'Salidas por frente',
-      filas: filasSalidas.value.map((f) => ({
-        Frente: `${f.frenteCodigo} — ${f.frenteNombre}`,
-        Contrato: f.contrato,
-        Código: f.codigo,
-        Material: f.descripcion,
-        Unidad: f.unidad,
-        'Cantidad entregada': f.cantidad,
-      })),
-    },
-  ])
+  descargarReporteSalidas({ filas: filasSalidas.value, detalle: detalleSalidas.value }, filtrosSalidas)
 }
 
 // ---------------------------------------------------------------------------
@@ -84,17 +58,14 @@ async function generarComparacion() {
   try {
     const comparacion = await reportes.obtenerComparacionGeneral()
     const frentesPorId = new Map(reportes.frentes.map((f) => [f.id, f]))
-    const materialesPorId = new Map(reportes.materialesActivos.map((m) => [m.id, m]))
 
     filasComparacion.value = comparacion
       .map((c) => {
         const frente = frentesPorId.get(c.frente_id)
-        const material = materialesPorId.get(c.material_id)
         return {
           frenteCodigo: frente?.codigo ?? '—',
           frenteNombre: frente?.nombre ?? '—',
-          codigo: material?.codigo ?? '—',
-          descripcion: material?.descripcion ?? '—',
+          nombreEdp: c.nombre_edp ?? '—',
           unidad: c.unidad,
           previsto: c.cantidad_prevista,
           reservado: c.cantidad_reservada,
@@ -106,7 +77,7 @@ async function generarComparacion() {
           excedido: c.porcentaje_consumo !== null && c.porcentaje_consumo >= 100,
         }
       })
-      .sort((a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.codigo.localeCompare(b.codigo))
+      .sort((a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.nombreEdp.localeCompare(b.nombreEdp))
   } catch (e) {
     console.error(e)
     error.value = 'No se pudo generar el reporte.'
@@ -121,8 +92,7 @@ function exportarComparacion() {
       nombre: 'Procura vs consumo',
       filas: filasComparacion.value.map((f) => ({
         Frente: `${f.frenteCodigo} — ${f.frenteNombre}`,
-        Código: f.codigo,
-        Material: f.descripcion,
+        'Nombre EDP': f.nombreEdp,
         Unidad: f.unidad,
         Previsto: f.previsto,
         Reservado: f.reservado,
@@ -158,21 +128,29 @@ async function generarEdp() {
       hasta: filtrosEdp.hasta || null,
     })
 
-    // El código de catálogo es SOLO una clasificación para este reporte:
-    // varios materiales del almacén (ej. "Cable 15mm rojo" y "Cable 15mm
-    // verde", cada uno su propia fila de stock) pueden compartir código
-    // (CA.15) y acá sí van consolidados en una sola línea — pero eso nunca
-    // toca ni fusiona las filas reales de stock, que siguen siendo
-    // independientes por material.
+    // El nombre EDP es la clasificación de este reporte: varios materiales
+    // del almacén (ej. "Cable 15mm rojo" y "Cable 15mm verde", cada uno su
+    // propia fila de stock) pueden compartir nombre EDP y acá sí van
+    // consolidados en una sola línea — pero eso nunca toca ni fusiona las
+    // filas reales de stock, que siguen siendo independientes por material.
+    // Sin nombre EDP configurado, NO se agrupa por código — el código es
+    // opcional y no es identidad de nada (memoria
+    // catalogo-codigo-no-es-identidad) — se usa la descripción real del
+    // material, así que cada material sin nombre EDP queda en su propia
+    // línea en vez de fusionarse con cualquier otro que tampoco tenga uno.
     const porGrupo = new Map()
     for (const s of salidas) {
-      const clave = `${s.frentes?.id}:${s.materiales?.codigo ?? '—'}`
+      const supervisor = s.vale_detalle?.vales?.usuarios?.nombre ?? '—'
+      const nombreEdp = s.materiales?.nombres_edp?.nombre ?? null
+      const identidadEdp = nombreEdp ?? s.materiales?.descripcion ?? '—'
+      const clave = `${s.frentes?.id}:${identidadEdp}:${supervisor}`
       if (!porGrupo.has(clave)) {
         porGrupo.set(clave, {
           frenteCodigo: s.frentes?.codigo ?? '—',
           frenteNombre: s.frentes?.nombre ?? '—',
-          codigo: s.materiales?.codigo ?? '—',
-          descripcionEdp: null, // se resuelve abajo: nombre EDP configurado si hay, si no el código
+          supervisor,
+          descripcionEdp: nombreEdp ?? '—',
+          descripcion: identidadEdp,
           unidadEdp: s.materiales?.unidad_edp || '—',
           unidadAlmacen: s.materiales?.unidad ?? '',
           cantidadAlmacen: 0,
@@ -180,16 +158,12 @@ async function generarEdp() {
         })
       }
       const grupo = porGrupo.get(clave)
-      if (!grupo.descripcionEdp && s.materiales?.nombres_edp?.nombre) grupo.descripcionEdp = s.materiales.nombres_edp.nombre
       grupo.cantidadAlmacen += Number(s.cantidad)
       grupo.cantidadEdp += Number(s.cantidad_edp)
     }
-    for (const grupo of porGrupo.values()) {
-      grupo.descripcion = grupo.descripcionEdp ?? grupo.codigo
-      grupo.descripcionEdp = grupo.descripcionEdp ?? '—'
-    }
     filasEdp.value = [...porGrupo.values()].sort(
-      (a, b) => a.frenteCodigo.localeCompare(b.frenteCodigo) || a.codigo.localeCompare(b.codigo)
+      (a, b) =>
+        a.frenteCodigo.localeCompare(b.frenteCodigo) || a.descripcion.localeCompare(b.descripcion) || a.supervisor.localeCompare(b.supervisor)
     )
   } catch (e) {
     console.error(e)
@@ -205,7 +179,7 @@ function exportarEdp() {
       nombre: 'EDP',
       filas: filasEdp.value.map((f) => ({
         Frente: `${f.frenteCodigo} — ${f.frenteNombre}`,
-        Código: f.codigo,
+        Supervisor: f.supervisor,
         Material: f.descripcion,
         'Descripción EDP': f.descripcionEdp,
         [`Cantidad (${f.unidadAlmacen})`]: f.cantidadAlmacen,
@@ -254,23 +228,25 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
             <tr>
               <th>Frente</th>
               <th>Contrato</th>
-              <th>Código</th>
               <th>Material</th>
               <th>Unidad</th>
-              <th>Cantidad entregada</th>
+              <th>Entregado</th>
+              <th>Devuelto</th>
+              <th>Neto (consumo real)</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(f, i) in filasSalidas" :key="i">
               <td>{{ f.frenteCodigo }} — {{ f.frenteNombre }}</td>
               <td>{{ f.contrato }}</td>
-              <td>{{ f.codigo }}</td>
               <td class="col-descripcion">{{ f.descripcion }}</td>
               <td>{{ f.unidad }}</td>
-              <td class="num">{{ formatearNumero(f.cantidad) }}</td>
+              <td class="num">{{ formatearNumero(f.entregado) }}</td>
+              <td class="num">{{ f.devuelto ? formatearNumero(f.devuelto) : '—' }}</td>
+              <td class="num neto">{{ formatearNumero(f.neto) }}</td>
             </tr>
             <tr v-if="!filasSalidas.length">
-              <td colspan="6" class="vacio">No hay salidas para estos filtros.</td>
+              <td colspan="8" class="vacio">No hay salidas para estos filtros.</td>
             </tr>
           </tbody>
         </table>
@@ -296,8 +272,7 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
           <thead>
             <tr>
               <th>Frente</th>
-              <th>Código</th>
-              <th>Material</th>
+              <th>Nombre EDP</th>
               <th>Unidad</th>
               <th>Previsto</th>
               <th>Reservado</th>
@@ -311,8 +286,7 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
           <tbody>
             <tr v-for="(f, i) in filasComparacion" :key="i" :class="{ excedido: f.excedido }">
               <td>{{ f.frenteCodigo }} — {{ f.frenteNombre }}</td>
-              <td>{{ f.codigo }}</td>
-              <td class="col-descripcion">{{ f.descripcion }}</td>
+              <td class="col-descripcion">{{ f.nombreEdp }}</td>
               <td>{{ f.unidad }}</td>
               <td class="num">{{ formatearNumero(f.previsto) }}</td>
               <td class="num">{{ formatearNumero(f.reservado) }}</td>
@@ -325,7 +299,7 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
               </td>
             </tr>
             <tr v-if="!filasComparacion.length">
-              <td colspan="11" class="vacio">No hay datos de Procura todavía.</td>
+              <td colspan="10" class="vacio">No hay datos de Procura todavía.</td>
             </tr>
           </tbody>
         </table>
@@ -355,7 +329,7 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
           <thead>
             <tr>
               <th>Frente</th>
-              <th>Código</th>
+              <th>Supervisor</th>
               <th>Material</th>
               <th>Descripción EDP</th>
               <th>Cantidad Almacén</th>
@@ -365,14 +339,14 @@ const hayFilasEdp = computed(() => filasEdp.value?.length)
           <tbody>
             <tr v-for="(f, i) in filasEdp" :key="i">
               <td>{{ f.frenteCodigo }} — {{ f.frenteNombre }}</td>
-              <td>{{ f.codigo }}</td>
+              <td>{{ f.supervisor }}</td>
               <td class="col-descripcion">{{ f.descripcion }}</td>
               <td>{{ f.descripcionEdp }}</td>
               <td class="num">{{ formatearNumero(f.cantidadAlmacen) }} {{ f.unidadAlmacen }}</td>
               <td class="num">{{ formatearNumero(f.cantidadEdp, { decimales: 2 }) }} {{ f.unidadEdp }}</td>
             </tr>
             <tr v-if="!filasEdp.length">
-              <td colspan="6" class="vacio">No hay salidas con conversión de unidades para estos filtros.</td>
+              <td colspan="7" class="vacio">No hay salidas con conversión de unidades para estos filtros.</td>
             </tr>
           </tbody>
         </table>
@@ -482,6 +456,10 @@ th {
 td.col-descripcion {
   white-space: normal;
   min-width: 200px;
+}
+td.neto {
+  font-weight: 700;
+  color: var(--color-text);
 }
 tr.excedido td {
   background: var(--color-danger-soft);

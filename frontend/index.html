@@ -10,12 +10,11 @@
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="theme-color" content="#111315" />
-    <!-- maximum-scale=1 + user-scalable=no: pedido explícito — que no se
-         pueda hacer pinch-zoom en ninguna pantalla. Los input/select/
-         textarea ya están todos en 16px o más (ver rdc-tema.css/
-         complementos.css) precisamente para que iOS no dispare su propio
-         zoom automático al enfocarlos, que era lo que esto tapaba antes. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Sin maximum-scale ni user-scalable=no (accesibilidad: el usuario puede
+         hacer zoom). Los input/select/textarea están en 16px o más para que
+         iOS no haga zoom automático al enfocarlos. interactive-widget hace
+         que en Android el teclado reduzca el área visible en vez de taparla. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- Android/Chrome instala directo desde el manifest.webmanifest (que
          genera vite-plugin-pwa), pero iOS/Safari todavía necesita estas
          etiquetas clásicas para abrir "Agregar a inicio" en modo standalone

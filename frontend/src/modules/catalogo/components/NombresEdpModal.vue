@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, useAttrs } from 'vue'
+import ModalFormulario from '../../../components/ModalFormulario.vue'
 
 defineProps({
   nombresEdp: { type: Array, default: () => [] },
@@ -35,108 +36,66 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="overlay" @click.self="$emit('cerrar')">
-    <div class="modal">
-      <h2>Nombres EDP</h2>
-      <p class="ayuda">
-        Nombres con los que el cliente identifica los materiales en el EDP (Estado de Pago),
-        independientes de la descripción interna de Almacén.
-      </p>
+  <ModalFormulario
+    titulo="Nombres EDP"
+    subtitulo="Nombres con los que el cliente identifica los materiales en el EDP (Estado de Pago), independientes de la descripción de Almacén."
+    ancho="600px"
+    texto-guardar="Cerrar"
+    solo-cerrar
+    @cerrar="$emit('cerrar')"
+  >
+    <ul class="lista">
+      <li v-for="n in nombresEdp" :key="n.id">{{ n.nombre }}</li>
+      <li v-if="!nombresEdp.length" class="vacio">Todavía no hay nombres EDP.</li>
+    </ul>
 
-      <ul class="lista">
-        <li v-for="n in nombresEdp" :key="n.id">{{ n.nombre }}</li>
-        <li v-if="!nombresEdp.length" class="vacio">Todavía no hay nombres EDP.</li>
-      </ul>
-
-      <form class="form" @submit.prevent="onSubmit">
-        <label>
-          Nuevo nombre EDP
-          <input v-model="form.nombre" type="text" placeholder="Nombre según el EDP" required />
-        </label>
-        <p v-if="error" class="error">{{ error }}</p>
-        <button type="submit" :disabled="guardando">
-          {{ guardando ? 'Guardando…' : 'Agregar nombre EDP' }}
-        </button>
-      </form>
-
-      <button type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
-    </div>
-  </div>
+    <form class="agregar-fila una" @submit.prevent="onSubmit">
+      <div class="mf-campo">
+        <span class="mf-rotulo">Nuevo nombre EDP</span>
+        <input v-model="form.nombre" type="text" placeholder="Nombre según el EDP" required />
+      </div>
+      <button type="submit" class="btn-agregar" :disabled="guardando">{{ guardando ? 'Guardando…' : 'Agregar' }}</button>
+    </form>
+    <p v-if="error" class="mf-error">{{ error }}</p>
+  </ModalFormulario>
 </template>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 24, 39, 0.45);
-  display: grid;
-  place-items: center;
-  z-index: 40;
-}
-.modal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 360px;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-h2 {
-  margin: 0;
-  font-size: 1.05rem;
-}
-.ayuda {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
 .lista {
-  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
   margin: 0;
   padding: 0;
-  max-height: 160px;
-  overflow-y: auto;
+  list-style: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
 }
 .lista li {
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.88rem;
   border-bottom: 1px solid var(--color-border);
 }
 .lista li:last-child {
   border-bottom: none;
 }
-.vacio {
+.lista .vacio {
   color: var(--color-text-muted);
 }
-.form {
-  display: flex;
-  flex-direction: column;
+.padre {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+.agregar-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 0.6rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--color-border);
+  align-items: end;
 }
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
+.agregar-fila.una {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
-input {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  font: inherit;
-}
-button {
-  padding: 0.55rem 1rem;
+.btn-agregar {
+  padding: 0.65rem 1.1rem;
   border: none;
   border-radius: var(--radius-control);
   background: var(--color-primary);
@@ -144,18 +103,8 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
-button:disabled {
+.btn-agregar:disabled {
   opacity: 0.6;
   cursor: default;
-}
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-.error {
-  color: var(--color-danger);
-  font-size: 0.85rem;
-  margin: 0;
 }
 </style>

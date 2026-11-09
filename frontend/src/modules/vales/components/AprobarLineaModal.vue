@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, useAttrs } from 'vue'
+import ModalFormulario from '../../../components/ModalFormulario.vue'
 
 const props = defineProps({
   linea: { type: Object, required: true },
@@ -16,10 +17,28 @@ const form = reactive({
 const guardando = ref(false)
 const error = ref('')
 
+async function noEntregar() {
+  error.value = ''
+  guardando.value = true
+  try {
+    await attrs.onRechazar()
+  } catch (e) {
+    console.error(e)
+    error.value = `No se pudo rechazar la línea${e?.message ? ': ' + e.message : '.'}`
+  } finally {
+    guardando.value = false
+  }
+}
+
 async function onSubmit() {
   error.value = ''
-  if (!form.almacen_id || !form.cantidad || Number(form.cantidad) <= 0) {
-    error.value = 'Selecciona el almacén y una cantidad mayor a cero.'
+  // Cantidad 0 = "no se le va a entregar nada": es lo mismo que rechazar la línea.
+  if (form.cantidad !== '' && Number(form.cantidad) === 0) {
+    await noEntregar()
+    return
+  }
+  if (!form.almacen_id || !form.cantidad || Number(form.cantidad) < 0) {
+    error.value = 'Selecciona el almacén y una cantidad válida.'
     return
   }
 
@@ -40,128 +59,44 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="overlay" @click.self="$emit('cerrar')">
-    <form class="modal" @submit.prevent="onSubmit">
-      <h2>Aprobar línea</h2>
-      <p class="resumen">
-        {{ linea.materiales?.codigo }} — {{ linea.materiales?.descripcion }}
-        (solicitado: {{ linea.cantidad_solicitada }} {{ linea.materiales?.unidad }})
-      </p>
-
-      <label>
-        Almacén de origen
+  <ModalFormulario
+    titulo="Aprobar línea"
+    :subtitulo="`${linea.materiales?.descripcion ?? ''} · solicitado: ${linea.cantidad_solicitada} ${linea.materiales?.unidad ?? ''}`"
+    ancho="600px"
+    texto-guardar="Aprobar y reservar"
+    texto-guardando="Aprobando…"
+    :guardando="guardando"
+    :error="error"
+    @cerrar="$emit('cerrar')"
+    @enviar="onSubmit"
+  >
+    <div class="mf-grid">
+      <div class="mf-campo">
+        <span class="mf-rotulo">Almacén de origen</span>
         <select v-model="form.almacen_id" required>
           <option v-for="a in almacenesActivos" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
         </select>
-      </label>
-
-      <label>
-        Cantidad a aprobar
-        <div class="cantidad-con-unidad">
-          <input v-model="form.cantidad" type="number" step="0.001" min="0.001" required />
-          <span class="unidad-badge">{{ linea.materiales?.unidad }}</span>
-        </div>
-      </label>
-
-      <p v-if="error" class="error">{{ error }}</p>
-
-      <div class="acciones">
-        <button type="button" class="secundario" @click="$emit('cerrar')">Cancelar</button>
-        <button type="submit" :disabled="guardando">
-          {{ guardando ? 'Aprobando…' : 'Aprobar y reservar' }}
-        </button>
       </div>
-    </form>
-  </div>
+      <div class="mf-campo">
+        <span class="mf-rotulo">Cantidad a aprobar</span>
+        <div class="mf-con-unidad">
+          <input v-model="form.cantidad" type="number" step="0.001" min="0" required />
+          <span class="mf-unidad">{{ linea.materiales?.unidad }}</span>
+        </div>
+      </div>
+    </div>
+    <p class="mf-ayuda">Si no se le va a entregar nada de este material, pon 0 (o usa "No entregar") y la línea se rechaza.</p>
+
+    <template #acciones>
+      <button type="button" class="no-entregar" :disabled="guardando" @click="noEntregar">No entregar</button>
+    </template>
+  </ModalFormulario>
 </template>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 24, 39, 0.45);
-  display: grid;
-  place-items: center;
-  z-index: 40;
-}
-.modal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 360px;
-  max-width: calc(100vw - 2rem);
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-h2 {
-  margin: 0;
-  font-size: 1.05rem;
-}
-.resumen {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
-}
-input,
-select {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  font: inherit;
-}
-.cantidad-con-unidad {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.cantidad-con-unidad input {
-  flex: 1;
-}
-.unidad-badge {
-  padding: 0.3rem 0.6rem;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-control);
-  font-size: 0.8rem;
-  color: var(--color-text);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.acciones {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-button {
-  padding: 0.55rem 1rem;
-  border: none;
-  border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
-  font-weight: 600;
-  cursor: pointer;
-}
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-.error {
+.no-entregar {
+  background: var(--color-danger-soft, none);
   color: var(--color-danger);
-  font-size: 0.85rem;
-  margin: 0;
+  border: 1px solid var(--color-danger);
 }
 </style>

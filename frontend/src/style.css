@@ -1,5 +1,12 @@
 :root {
-  color-scheme: dark light;
+  /* Sin esto, un input nativo (el <input type="date"> del Dashboard, por
+     ejemplo) se pinta según la preferencia de color del SISTEMA OPERATIVO,
+     no según nuestro tema — con el SO en claro y nuestra app en oscuro (el
+     look por defecto), el ícono del calendario salía negro sobre fondo
+     oscuro y quedaba invisible. tokens.css ya pone color-scheme:light en
+     [data-theme='light'] (selector con atributo, más específico que este
+     :root) así que ese caso sigue funcionando sin tocar nada más. */
+  color-scheme: dark;
   font: 15px/1.5 var(--font-principal);
 }
 
@@ -37,4 +44,137 @@ select,
 textarea,
 button {
   font-family: inherit;
+}
+
+/* Campos de texto: sin recuadro de color al hacer clic; basta el cursor para
+   escribir. (Botones y enlaces conservan su foco con teclado, por
+   accesibilidad.) El contenedor de un buscador se resalta muy suave. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+}
+/* ── Filtro por columna tipo Excel (utils/filtroColumnas.js) ── */
+[data-flt-oculto] {
+  display: none !important;
+}
+.flt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.35;
+  cursor: pointer;
+}
+th:hover > .flt-btn,
+.pl-th > *:hover > .flt-btn,
+.flt-btn:focus-visible,
+.flt-btn.on {
+  opacity: 1;
+}
+.flt-btn.on {
+  background: rgba(246, 168, 0, 0.22);
+  color: #b45309;
+}
+.flt-pop {
+  position: fixed;
+  z-index: 4000;
+  width: 260px;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111);
+  box-shadow: 0 0 0 1px var(--color-border, #e4e7ec), 0 12px 32px rgba(0, 0, 0, 0.28);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.flt-busca {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border, #e4e7ec);
+  border-radius: 10px;
+  background: var(--color-surface-2, #f4f5f7);
+  color: inherit;
+  font: inherit;
+}
+.flt-acc,
+.flt-pie {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+.flt-acc button,
+.flt-pie button {
+  border: 0;
+  background: none;
+  color: var(--color-text-muted, #667085);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+.flt-pie .pri {
+  padding: 6px 14px;
+  border-radius: 9px;
+  background: #f6a800;
+  color: #1a1206;
+}
+.flt-lista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: 220px;
+  border-top: 1px solid var(--color-border, #e4e7ec);
+  border-bottom: 1px solid var(--color-border, #e4e7ec);
+  padding: 4px 0;
+}
+.flt-op {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.flt-op:hover {
+  background: var(--color-surface-2, #f4f5f7);
+}
+.flt-tx {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flt-ct {
+  color: var(--color-text-muted, #667085);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.flt-nada {
+  margin: 8px 4px;
+  color: var(--color-text-muted, #667085);
+}
+.search:focus-within,
+.pl-search:focus-within {
+  box-shadow: 0 0 0 1.5px var(--color-text-muted, #8d929b) !important;
 }

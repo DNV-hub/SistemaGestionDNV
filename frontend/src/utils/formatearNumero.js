@@ -12,3 +12,4 @@ export function formatearNumero(valor, { decimales = 3 } = {}) {
   if (!Number.isFinite(numero)) return '—'
   return numero.toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: decimales })
 }
+

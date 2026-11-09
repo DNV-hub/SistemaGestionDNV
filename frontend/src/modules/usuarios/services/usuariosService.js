@@ -1,6 +1,11 @@
 import { supabase } from '../../../services/supabaseClient'
 
-const SELECT_USUARIO = '*, roles(id, nombre), frentes(id, codigo, nombre), contratos(id, codigo, nombre)'
+// frentes!usuarios_frente_id_fkey: desde que frentes.residente_id también
+// referencia a usuarios, hay dos relaciones entre estas dos tablas y
+// PostgREST ya no puede adivinar cuál usar sin que se la nombremos — esta
+// es la de "a qué frente queda restringida esta cuenta de campo", no la de
+// "quién es el residente de tal frente".
+const SELECT_USUARIO = '*, roles(id, nombre), frentes!usuarios_frente_id_fkey(id, codigo, nombre), contratos(id, codigo, nombre)'
 
 export async function listarUsuarios() {
   const { data, error } = await supabase.from('usuarios').select(SELECT_USUARIO).order('nombre')
@@ -9,7 +14,7 @@ export async function listarUsuarios() {
 }
 
 export async function listarRoles() {
-  const { data, error } = await supabase.from('roles').select('id, nombre').order('nombre')
+  const { data, error } = await supabase.from('roles').select('id, nombre, descripcion').order('nombre')
   if (error) throw error
   return data
 }
@@ -58,15 +63,6 @@ export async function restablecerPassword(id, password) {
   }
   if (data?.error) throw new Error(data.error)
   return data
-}
-
-/** Solo Developer (sistema.borrar_pruebas): rompe el vínculo de un usuario
- * de prueba con el catálogo de supervisores del RDC, que es lo que suele
- * bloquear su eliminación (rdc_supervisores.usuario_id no tiene cascada).
- * Se niega si ese supervisor ya tiene reportes reales guardados. */
-export async function desvincularSupervisorPrueba(id) {
-  const { error } = await supabase.rpc('fn_desvincular_supervisor_prueba', { p_usuario_id: id })
-  if (error) throw error
 }
 
 /** Solo Developer: cuenta, tabla por tabla, qué sigue atado a esta cuenta.

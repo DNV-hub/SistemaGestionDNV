@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRdcStore } from '../store/rdc'
 import { nuevoId } from '../services/rdcRepository'
 import { partidasEjecutadas } from '../services/rdcCalculos'
@@ -39,8 +39,9 @@ function quitar(id) {
 
 <template>
   <div v-if="reporte">
-    <div class="card">
-      <div class="card-title"><i class="ti ti-calendar-plus" />Programación — día siguiente</div>
+    <div class="rx-two" style="margin-bottom: 20px">
+    <div class="card" style="flex: 1 1 320px; min-width: 0; margin-bottom: 0">
+      <div class="card-title"><i class="ti ti-calendar-plus" />Programación · día siguiente</div>
       <div v-for="p in programadas" :key="p.id" class="fila-prog">
         <select v-model="p.etiqueta" @change="guardar">
           <option value="">— Partida —</option>
@@ -53,7 +54,7 @@ function quitar(id) {
       <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregar('programada')">Agregar partida</button>
     </div>
 
-    <div class="card">
+    <div class="card" style="flex: 1 1 320px; min-width: 0; margin-bottom: 0">
       <div class="card-title"><i class="ti ti-circle-plus" />Actividades no programadas</div>
       <div v-for="p in noProgramadas" :key="p.id" class="fila-prog">
         <input v-model="p.descripcion" type="text" placeholder="Actividad" @change="guardar" />
@@ -63,25 +64,22 @@ function quitar(id) {
       <p v-if="!noProgramadas.length" class="empty-msg">Nada por ahora.</p>
       <button type="button" class="secondary-btn" style="margin-top: 0.5rem" @click="agregar('no_programada')">Agregar actividad</button>
     </div>
-
-    <div class="card">
-      <div class="card-title"><i class="ti ti-message-circle" />Observaciones</div>
-      <div class="field">
-        <textarea v-model="reporte.observaciones" placeholder="Observaciones de campo, calidad, condiciones del frente…" @change="guardar" />
-      </div>
     </div>
 
     <div class="card">
-      <div class="card-title"><i class="ti ti-tools" />Requerimientos</div>
-      <div class="field">
-        <textarea v-model="reporte.requerimientos" placeholder="Materiales, equipos, herramientas, personal o servicios que se necesitan…" @change="guardar" />
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><i class="ti ti-shield-exclamation" />Restricciones</div>
-      <div class="field">
-        <textarea v-model="reporte.restricciones" placeholder="Restricciones operativas, de acceso, clima, permisos…" @change="guardar" />
+      <div class="rx-g3" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px">
+        <div class="field">
+          <label for="obs-obs">Observaciones</label>
+          <textarea id="obs-obs" v-model="reporte.observaciones" placeholder="Observaciones de campo, calidad, condiciones del frente…" @change="guardar" />
+        </div>
+        <div class="field">
+          <label for="obs-req">Requerimientos</label>
+          <textarea id="obs-req" v-model="reporte.requerimientos" placeholder="Materiales, equipos, herramientas, personal o servicios que se necesitan…" @change="guardar" />
+        </div>
+        <div class="field">
+          <label for="obs-res">Restricciones</label>
+          <textarea id="obs-res" v-model="reporte.restricciones" placeholder="Restricciones operativas, de acceso, clima, permisos…" @change="guardar" />
+        </div>
       </div>
     </div>
 

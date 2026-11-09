@@ -14,10 +14,7 @@ const auth = useAuthStore()
       Reporte diario
     </router-link>
     <router-link v-if="auth.tienePermiso('rdc.crear')" to="/fotos" class="tab" exact-active-class="activo">
-      Fotografías
-    </router-link>
-    <router-link v-if="auth.tienePermiso('rdc.ver_propios')" to="/sketches" class="tab" exact-active-class="activo">
-      Sketch's
+      Fotos y sketch
     </router-link>
   </nav>
 </template>

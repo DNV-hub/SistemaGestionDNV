@@ -1,7 +1,8 @@
 <script setup>
 import { reactive, ref, useAttrs } from 'vue'
+import ModalFormulario from '../../../components/ModalFormulario.vue'
 
-const props = defineProps({
+defineProps({
   categorias: { type: Array, default: () => [] },
 })
 
@@ -40,116 +41,77 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="overlay" @click.self="$emit('cerrar')">
-    <div class="modal">
-      <h2>Categorías</h2>
+  <ModalFormulario
+    titulo="Categorías"
+    ancho="600px"
+    texto-guardar="Cerrar"
+    solo-cerrar
+    @cerrar="$emit('cerrar')"
+  >
+    <ul class="lista">
+      <li v-for="c in categorias" :key="c.id">
+        {{ c.nombre }}
+        <span v-if="c.categoria_padre_id" class="padre">
+          (subcategoría de {{ categorias.find((p) => p.id === c.categoria_padre_id)?.nombre ?? '—' }})
+        </span>
+      </li>
+      <li v-if="!categorias.length" class="vacio">Todavía no hay categorías.</li>
+    </ul>
 
-      <ul class="lista">
-        <li v-for="c in categorias" :key="c.id">
-          {{ c.nombre }}
-          <span v-if="c.categoria_padre_id" class="padre">
-            (subcategoría de {{ categorias.find((p) => p.id === c.categoria_padre_id)?.nombre ?? '—' }})
-          </span>
-        </li>
-        <li v-if="!categorias.length" class="vacio">Todavía no hay categorías.</li>
-      </ul>
-
-      <form class="form" @submit.prevent="onSubmit">
-        <label>
-          Nueva categoría
-          <input v-model="form.nombre" type="text" placeholder="Nombre" required />
-        </label>
-        <label>
-          Categoría padre (opcional)
-          <select v-model="form.categoria_padre_id">
-            <option value="">Ninguna</option>
-            <option v-for="c in categorias" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-          </select>
-        </label>
-        <p v-if="error" class="error">{{ error }}</p>
-        <button type="submit" :disabled="guardando">
-          {{ guardando ? 'Guardando…' : 'Agregar categoría' }}
-        </button>
-      </form>
-
-      <button type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
-    </div>
-  </div>
+    <form class="agregar-fila" @submit.prevent="onSubmit">
+      <div class="mf-campo">
+        <span class="mf-rotulo">Nueva categoría</span>
+        <input v-model="form.nombre" type="text" placeholder="Nombre" required />
+      </div>
+      <div class="mf-campo">
+        <span class="mf-rotulo">Categoría padre <em>(opcional)</em></span>
+        <select v-model="form.categoria_padre_id">
+          <option value="">Ninguna</option>
+          <option v-for="c in categorias" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-agregar" :disabled="guardando">{{ guardando ? 'Guardando…' : 'Agregar' }}</button>
+    </form>
+    <p v-if="error" class="mf-error">{{ error }}</p>
+  </ModalFormulario>
 </template>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 24, 39, 0.45);
-  display: grid;
-  place-items: center;
-  z-index: 40;
-}
-.modal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 360px;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-h2 {
-  margin: 0;
-  font-size: 1.05rem;
-}
 .lista {
-  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
   margin: 0;
   padding: 0;
-  max-height: 160px;
-  overflow-y: auto;
+  list-style: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
 }
 .lista li {
-  padding: 0.4rem 0.6rem;
-  font-size: 0.85rem;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.88rem;
   border-bottom: 1px solid var(--color-border);
 }
 .lista li:last-child {
   border-bottom: none;
 }
+.lista .vacio {
+  color: var(--color-text-muted);
+}
 .padre {
   color: var(--color-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
-.vacio {
-  color: var(--color-text-muted);
-}
-.form {
-  display: flex;
-  flex-direction: column;
+.agregar-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 0.6rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--color-border);
+  align-items: end;
 }
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
+.agregar-fila.una {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
-input,
-select {
-  padding: 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  font: inherit;
-}
-button {
-  padding: 0.55rem 1rem;
+.btn-agregar {
+  padding: 0.65rem 1.1rem;
   border: none;
   border-radius: var(--radius-control);
   background: var(--color-primary);
@@ -157,18 +119,8 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
-button:disabled {
+.btn-agregar:disabled {
   opacity: 0.6;
   cursor: default;
-}
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-.error {
-  color: var(--color-danger);
-  font-size: 0.85rem;
-  margin: 0;
 }
 </style>

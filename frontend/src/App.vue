@@ -1,19 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from './store/auth'
 import { useTemaStore } from './store/tema'
 import IconoNav from './components/IconoNav.vue'
+import IconoBarra from './components/IconoBarra.vue'
 import { contarValesPendientes, contarAlertasActivas } from './modules/dashboard/services/dashboardService'
 import { contarValesNovedades } from './modules/vales/services/valesService'
 import { suplantandoAOtraCuenta, volverAMiCuenta } from './modules/developer/services/developerService'
 import { hayActualizacionSW, aplicarActualizacionSW } from './actualizacionSW'
-import { pendientes as rdcPendientes } from './modules/rdc/services/rdcRepository'
+import { pendientes as rdcPendientes, fallidos as rdcFallidos } from './modules/rdc/services/rdcRepository'
 import { pendientes as fotosPendientes } from './modules/fotos/services/fotosRepository'
 
 const auth = useAuthStore()
 const tema = useTemaStore()
 const router = useRouter()
+const route = useRoute()
 
 // Si Developer está "viendo como" otra cuenta, la sesión real cambió del
 // todo (no es una simulación) — lo único que queda de rastro es esta marca
@@ -46,9 +48,43 @@ async function cerrarSesion() {
 const badgeVales = ref(0)
 const badgeAlertas = ref(0)
 const badgeRdc = ref(0)
+const badgeRdcFallidos = ref(0)
 const badgeFotos = ref(0)
 const mostrarMenu = ref(false)
+// Videos de soporte: se abre en otra pestaña (no se sale de la app).
+const URL_SOPORTE = 'https://www.youtube.com/watch?v=GBIIQ0kP15E'
 const mostrarMas = ref(false)
+const usuarioFilaRef = ref(null)
+const posMenuConfig = ref({ left: '0px', bottom: '0px' })
+
+/** El menú se renderiza con <Teleport to="body"> (ver más abajo): directo
+ * dentro de .nav/.pie se veía tapado por .contenido pese a tener z-index
+ * más alto — .contenido tiene scroll propio y el navegador lo pinta en su
+ * propia capa por encima, sin importar z-index (comprobado en vivo con
+ * agent-browser, subir el z-index a 999 no lo arreglaba). Al vivir fuera
+ * de esa jerarquía ya no compite por capas, pero pierde el anclaje
+ * CSS relativo a .usuario-fila — por eso se calcula la posición en JS. */
+function alternarMenuUsuario() {
+  if (!mostrarMenu.value && usuarioFilaRef.value) {
+    const r = usuarioFilaRef.value.getBoundingClientRect()
+    posMenuConfig.value = { left: `${r.right + 10}px`, bottom: `${window.innerHeight - r.bottom}px` }
+  }
+  mostrarMenu.value = !mostrarMenu.value
+}
+
+// Mismo problema y misma solución que el menú de arriba, pero para el
+// tooltip de "pasar el mouse" (solo aplica contraído — expandido ya se ve
+// el nombre/rol como texto, no hace falta). Antes era un ::after en CSS
+// puro; se vuelve un elemento de verdad porque un ::after no se puede
+// teletransportar.
+const mostrarTooltipUsuario = ref(false)
+const posTooltipUsuario = ref({ left: '0px', bottom: '0px' })
+function mostrarTooltip() {
+  if (!usuarioFilaRef.value) return
+  const r = usuarioFilaRef.value.getBoundingClientRect()
+  posTooltipUsuario.value = { left: `${r.right + 10}px`, bottom: `${window.innerHeight - r.bottom}px` }
+  mostrarTooltipUsuario.value = true
+}
 
 async function cerrarSesionDesdeMenu() {
   mostrarMenu.value = false
@@ -90,6 +126,9 @@ function cargarContadores() {
     rdcPendientes()
       .then((filas) => (badgeRdc.value = filas.length))
       .catch(() => {})
+    rdcFallidos()
+      .then((filas) => (badgeRdcFallidos.value = filas.length))
+      .catch(() => {})
   }
   if (auth.tienePermiso('rdc.crear')) {
     fotosPendientes()
@@ -102,6 +141,16 @@ function cargarContadores() {
 // se espera auth.init() antes de app.mount para que el guard del router
 // resuelva la primera navegación con la sesión ya cargada).
 if (auth.estaAutenticado) cargarContadores()
+
+// Sin esto, los badges quedaban pegados al número de cuando se inició
+// sesión — una alerta resuelta (o borrada, como con "Vaciar el catálogo"
+// en Developer) desde OTRA pantalla nunca se reflejaba hasta recargar la
+// página entera. Recargar en cada cambio de ruta es barato (unos conteos)
+// y cubre cualquier acción que haya cambiado algo, sin tener que acordarse
+// de llamar a cargarContadores() desde cada pantalla que podría afectarlos.
+router.afterEach(() => {
+  if (auth.estaAutenticado) cargarContadores()
+})
 
 // Los módulos se agrupan por área operativa, no solo por tabla — así se ve
 // de un vistazo quién es dueño de qué (Planeamiento define qué existe y qué
@@ -119,6 +168,13 @@ if (auth.estaAutenticado) cargarContadores()
 // además invita a tocar donde no corresponde. Se resuelve con
 // rolesExcluidos, igual que ya se hacía con Almacén en Catálogo y Frentes.
 const SOLO_CAMPO = ['Supervisor']
+// Residencia también pisa terreno (reporta RDC y sube fotos, igual que
+// Supervisor) pero además necesita los módulos de oficina (Almacén,
+// Catálogo, Frentes…) que a Supervisor se le ocultan — por eso no entra en
+// SOLO_CAMPO general, solo se suma puntualmente a los 3 accesos de campo
+// de abajo (Reporte diario/Fotografías/Sketch's) y se excluye del "RDC"
+// genérico de Planeamiento para no mostrarle el mismo módulo dos veces.
+const CAMPO_MAS_RESIDENCIA = [...SOLO_CAMPO, 'Residencia']
 
 // labelMovil: la pestaña flotante es angosta y solo tiene lugar para una
 // palabra — el sidebar de escritorio (label) no se toca, sigue con el
@@ -150,30 +206,38 @@ const SOLO_CAMPO = ['Supervisor']
 // prioridad marcada del lado de Supervisor, así que terminaba
 // colándose ADELANTE de Reporte/Fotos/Sketch's al ordenar — se
 // reportó como "en el celular ahora aparece primero Vales".
+// Para el Supervisor, "Vales" se presenta como "Almacén" (casita): sigue
+// siendo la misma pantalla y la misma ruta (/vales), solo cambia el nombre.
+const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
+const etiquetaVales = computed(() => (esSupervisor.value ? 'Almacén' : 'Vales'))
+const iconoVales = computed(() => (esSupervisor.value ? 'almacen' : 'vales'))
 const navPrincipal = computed(() => [
-  { to: '/', label: 'Dashboard', icono: 'dashboard', color: 'amber', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 1 },
-  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: SOLO_CAMPO, prioridadMovil: 1 },
-  { to: '/fotos', label: 'Fotografías', labelMovil: 'Fotos', icono: 'camara', color: 'teal', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: SOLO_CAMPO, prioridadMovil: 2 },
-  { to: '/sketches', label: "Sketch's", icono: 'sketch', color: 'teal', permiso: 'rdc.ver_propios', rolesIncluidos: SOLO_CAMPO, prioridadMovil: 3 },
-  { to: '/developer', label: 'Developer', icono: 'developer', color: 'slate', permiso: 'sistema.borrar_pruebas' },
+  { to: '/', label: 'Dashboard', icono: 'dashboard', color: 'amber', permiso: 'dashboard.ver', prioridadMovil: 1 },
+  { to: '/rdc', label: 'Reporte diario', labelMovil: 'Reporte', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: CAMPO_MAS_RESIDENCIA, prioridadMovil: 2 },
+  // Fotos y Sketch's se unieron en una sola pantalla (/fotos); /sketches
+  // redirige para no romper enlaces guardados.
+  { to: '/fotos', label: 'Fotos y sketch', labelMovil: 'Fotos', icono: 'camara', color: 'teal', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: CAMPO_MAS_RESIDENCIA, prioridadMovil: 3 },
 ])
 
 const navPlaneamiento = computed(() => [
   { to: '/catalogo', label: 'Catálogo', icono: 'catalogo', color: 'slate', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
   { to: '/frentes', label: 'Frentes', icono: 'frentes', color: 'violet', permiso: 'frentes.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
-  { to: '/procura', label: 'Procura', icono: 'procura', color: 'blue', permiso: 'procura.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/rdc', label: 'RDC', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 2 },
-  // Planeamiento es quien saca los reportes generales del sistema (no solo
-  // los del RDC) — vive acá y no en "Principal", junto al resto de lo que
-  // administra ese rol.
-  { to: '/reportes', label: 'Reportes', icono: 'reportes', color: 'slate', permiso: 'reportes.exportar', rolesExcluidos: SOLO_CAMPO },
+  // "Confirmación" dejó de tener entrada propia en el menú (no le sirvió al
+  // usuario tal como estaba) — la ruta /confirmacion y su vista siguen
+  // existiendo tal cual (nadie más las enlaza, ver grep antes de este
+  // cambio), así que nada se rompe si alguien todavía tiene la URL guardada.
+  // "Procura" dejó de tener entrada propia en el menú: ahora se entra por
+  // la pestaña "Procura" de la ficha de cada frente (frentes/views/ficha/
+  // FichaProcura.vue). La ruta /procura y sus vistas siguen existiendo tal
+  // cual (nadie más las enlaza — ver grep antes de este cambio), así que
+  // nada se rompe si alguien todavía tiene la URL vieja guardada.
+  { to: '/rdc', label: 'RDC', icono: 'rdc', color: 'teal', permiso: 'rdc.ver_propios', rolesExcluidos: CAMPO_MAS_RESIDENCIA, prioridadMovil: 2 },
 ])
 
 const navAlmacen = computed(() => [
   { to: '/almacen', label: 'Almacén', icono: 'almacen', color: 'blue', permiso: 'stock.ver', rolesExcluidos: SOLO_CAMPO, prioridadMovil: 3 },
-  { to: '/vales', label: 'Vales', icono: 'vales', color: 'amber', permiso: 'vales.ver_propios', badge: badgeVales.value, prioridadMovil: 4 },
+  { to: '/vales', label: etiquetaVales.value, icono: iconoVales.value, color: 'amber', permiso: 'vales.ver_propios', badge: badgeVales.value, prioridadMovil: 4 },
   { to: '/reservas', label: 'Reservas', icono: 'reservas', color: 'green', permiso: 'reservas.ver', rolesExcluidos: SOLO_CAMPO },
-  { to: '/kardex', label: 'Kardex', icono: 'kardex', color: 'slate', permiso: 'kardex.ver', rolesExcluidos: SOLO_CAMPO },
   { to: '/alertas', label: 'Alertas', icono: 'alertas', color: 'pink', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
 ])
 
@@ -184,6 +248,7 @@ const navAlmacen = computed(() => [
 const navSistema = [
   { to: '/usuarios', label: 'Usuarios y roles', icono: 'usuarios', permiso: 'usuarios.ver' },
   { to: '/configuracion/roles', label: 'Roles y permisos', icono: 'engranaje', permiso: 'roles.gestionar' },
+  { to: '/developer', label: 'Developer', icono: 'developer', permiso: 'sistema.borrar_pruebas' },
 ]
 
 function visibles(items) {
@@ -230,6 +295,140 @@ const inicialesUsuario = computed(() => {
     .join('')
     .toUpperCase()
 })
+
+// Rail flotante de escritorio: estructura distinta al sidebar antiguo.
+// Mobile sigue usando navTodos/tabsMoviles (no se toca).
+const navRailTop = computed(() => [
+  // Al Supervisor el Dashboard ya no le sale en la barra: se llega desde el
+  // menú de su usuario ("Dashboard general").
+  { to: '/', label: 'Dashboard', icono: 'dashboard', permiso: 'dashboard.ver', rolesExcluidos: SOLO_CAMPO },
+  { to: '/rdc', label: 'Reporte diario', icono: 'rdc', permiso: 'rdc.ver_propios', badge: badgeRdc.value, rolesIncluidos: CAMPO_MAS_RESIDENCIA },
+  { to: '/fotos', label: 'Fotos y sketch', icono: 'camara', permiso: 'rdc.crear', badge: badgeFotos.value, rolesIncluidos: CAMPO_MAS_RESIDENCIA },
+  { to: '/planeamiento', label: 'Planeamiento', icono: 'planeamiento', permiso: 'catalogo.ver', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { to: '/calidad', label: 'Calidad', icono: 'calidad', permiso: 'rdc.ver_todos', rolesExcluidos: ['Almacen', ...SOLO_CAMPO] },
+  { label: 'Equipos y maquinaria', icono: 'equipos', deshabilitado: true, rolesExcluidos: SOLO_CAMPO },
+  { to: '/almacen', label: 'Almacén', icono: 'almacen', permiso: 'stock.ver', rolesExcluidos: SOLO_CAMPO, badge: badgeVales.value },
+  {
+    to: '/vales',
+    label: etiquetaVales.value,
+    tooltip: badgeVales.value ? `${etiquetaVales.value} · ${badgeVales.value} sin responder` : etiquetaVales.value,
+    icono: iconoVales.value,
+    permiso: 'vales.ver_propios',
+    badge: badgeVales.value,
+    rolesIncluidos: SOLO_CAMPO,
+  },
+])
+
+const navRailBottom = computed(() => [
+  { to: '/alertas', label: 'Alertas', icono: 'alertas', permiso: 'alertas.ver', badge: badgeAlertas.value, rolesExcluidos: SOLO_CAMPO },
+])
+
+function visiblesRail(items) {
+  return items.filter(
+    (item) =>
+      !item.rolesExcluidos?.includes(auth.nombreRol) &&
+      (!item.rolesIncluidos || item.rolesIncluidos.includes(auth.nombreRol)) &&
+      (item.deshabilitado || auth.tienePermiso(item.permiso))
+  )
+}
+
+// El ítem Planeamiento en el rail debe marcarse activo también cuando el
+// usuario está en sub-rutas que no empiezan con /planeamiento (ej. /rdc/123).
+const activoPlaneamiento = computed(() =>
+  route.path.startsWith('/planeamiento') ||
+  route.path.startsWith('/catalogo') ||
+  route.path.startsWith('/frentes') ||
+  route.path.startsWith('/rdc')
+)
+
+// ---- Barra inferior del Supervisor (celular) ---------------------------------
+// Solo íconos: Reporte · Fotos · Almacén · avatar. Alertas únicamente en
+// Reporte (rojo: reportes cuyo envío falló) y Almacén (vales que ya
+// respondieron y todavía no se han visto). Fotos y avatar nunca llevan.
+const tabsSup = computed(() => {
+  const p = route.path
+  return [
+    {
+      clave: 'reporte',
+      to: '/rdc',
+      label: 'Reporte',
+      activo: p.startsWith('/rdc') || p.startsWith('/planeamiento/rdc'),
+      permiso: 'rdc.ver_propios',
+      badge: badgeRdcFallidos.value,
+      rojo: true,
+      aria: badgeRdcFallidos.value ? `Reporte: ${badgeRdcFallidos.value} envío fallido` : 'Reporte',
+    },
+    { clave: 'fotos', to: '/fotos', label: 'Fotos', activo: p.startsWith('/fotos'), permiso: 'rdc.crear', badge: 0, aria: 'Fotos' },
+    {
+      clave: 'almacen',
+      to: '/vales',
+      label: 'Almacén',
+      activo: p.startsWith('/vales'),
+      permiso: 'vales.ver_propios',
+      badge: badgeVales.value,
+      aria: badgeVales.value ? `Almacén: ${badgeVales.value} vales respondidos` : 'Almacén',
+    },
+  ].filter((t) => auth.tienePermiso(t.permiso))
+})
+const avatarActivo = computed(() => mostrarMas.value || route.path === '/')
+
+// ---- Barra inferior de Administración (celular) ------------------------------
+// Developer, Administrador, Coordinador y Planeamiento comparten la misma
+// navegación: Dashboard · Planeamiento · Almacén · avatar, solo íconos. Vales y
+// Reservas viven dentro de Almacén; RDC, Frentes y Catálogo dentro de Planeamiento.
+const ROLES_ADMIN_MOVIL = ['Developer', 'Administrador', 'Coordinador', 'Planeamiento']
+const esAdminMovil = computed(() => ROLES_ADMIN_MOVIL.includes(auth.nombreRol))
+const tabsAdm = computed(() => {
+  const p = route.path
+  return [
+    { clave: 'dashboard', to: '/', label: 'Dashboard', activo: p === '/', permiso: 'dashboard.ver', badge: 0, aria: 'Dashboard' },
+    { clave: 'planeamiento', to: '/planeamiento', label: 'Planeamiento', activo: activoPlaneamiento.value, permiso: 'catalogo.ver', badge: 0, aria: 'Planeamiento' },
+    {
+      clave: 'almacen',
+      to: '/almacen',
+      label: 'Almacén',
+      activo: p.startsWith('/almacen') || p.startsWith('/vales') || p.startsWith('/reservas'),
+      permiso: 'stock.ver',
+      badge: badgeVales.value,
+      aria: badgeVales.value ? `Almacén: ${badgeVales.value} ${badgeVales.value === 1 ? 'vale' : 'vales'} por responder` : 'Almacén',
+    },
+    { clave: 'calidad', to: '/calidad', label: 'Calidad', activo: p.startsWith('/calidad'), permiso: 'rdc.ver_todos', badge: 0, aria: 'Calidad' },
+  ].filter((t) => auth.tienePermiso(t.permiso))
+})
+// "Developer" del menú: con cualquiera de los dos permisos de sistema.
+const verDeveloper = computed(() => auth.tienePermiso('sistema.borrar_pruebas') || auth.tienePermiso('sistema.suplantar_usuario'))
+const itemsMenuAdm = computed(() =>
+  navSistema.filter((i) => (i.to === '/developer' ? verDeveloper.value : auth.tienePermiso(i.permiso)))
+)
+
+// Con el teclado abierto la barra inferior estorba (iOS no reduce el
+// viewport, así que quedaría flotando sobre el campo): se oculta mientras un
+// campo de texto tiene el foco.
+const tecladoAbierto = ref(false)
+const esCampoTexto = (el) =>
+  el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) && !['checkbox', 'radio', 'button', 'file', 'submit'].includes(el.type)
+const alEnfocar = (e) => {
+  if (esCampoTexto(e.target)) tecladoAbierto.value = true
+}
+const alDesenfocar = () => {
+  tecladoAbierto.value = false
+}
+onMounted(() => {
+  document.addEventListener('focusin', alEnfocar)
+  document.addEventListener('focusout', alDesenfocar)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('focusin', alEnfocar)
+  document.removeEventListener('focusout', alDesenfocar)
+})
+
+const mensajeProximamente = ref(null)
+let _timerProximamente = null
+function notificarProximamente(nombre) {
+  mensajeProximamente.value = `${nombre} — Próximamente`
+  clearTimeout(_timerProximamente)
+  _timerProximamente = setTimeout(() => { mensajeProximamente.value = null }, 2500)
+}
 </script>
 
 <template>
@@ -239,7 +438,7 @@ const inicialesUsuario = computed(() => {
   </div>
 
   <div v-if="viendoComoOtraCuenta" class="banner-suplantacion">
-    <span>Developer: viendo el sistema como <strong>{{ auth.perfil?.nombre }}</strong> ({{ auth.nombreRol }}).</span>
+    <span class="banner-texto">Developer: viendo como <strong>{{ auth.perfil?.nombre }}</strong> ({{ auth.nombreRol }})</span>
     <button type="button" :disabled="volviendo" @click="volver">{{ volviendo ? 'Volviendo…' : 'Volver a mi cuenta' }}</button>
   </div>
 
@@ -260,49 +459,63 @@ const inicialesUsuario = computed(() => {
     "
   >
     <aside class="nav">
-      <div class="marca">
-        <span class="marca-icono">D</span>
-        <div>
-          <div class="marca-nombre">DNV</div>
-          <div class="marca-sub">Sistema de Control</div>
-        </div>
-      </div>
+      <!-- Logo -->
+      <div class="marca-rail" aria-hidden="true">D</div>
 
-      <div class="nav-scroll">
-        <nav class="grupo">
-          <p class="grupo-titulo">Principal</p>
-          <router-link v-for="item in visibles(navPrincipal)" :key="item.to" :to="item.to" class="item">
-            <IconoNav :nombre="item.icono" />
-            <span>{{ item.label }}</span>
-          </router-link>
-        </nav>
+      <div class="rail-sep"></div>
 
-        <nav v-if="visibles(navPlaneamiento).length" class="grupo">
-          <p class="grupo-titulo">Planeamiento</p>
-          <router-link v-for="item in visibles(navPlaneamiento)" :key="item.to" :to="item.to" class="item">
-            <IconoNav :nombre="item.icono" />
-            <span>{{ item.label }}</span>
-          </router-link>
-        </nav>
+      <!-- Ítems superiores del rail -->
+      <template v-for="item in visiblesRail(navRailTop)" :key="item.to ?? item.label">
+        <router-link
+          v-if="!item.deshabilitado"
+          :to="item.to"
+          class="rail-item"
+          :class="{ 'rail-activo': item.to === '/planeamiento' && activoPlaneamiento && !route.path.startsWith('/planeamiento') }"
+          :title="item.tooltip ?? item.label"
+          :aria-label="item.tooltip ?? item.label"
+        >
+          <IconoNav :nombre="item.icono" />
+          <span v-if="item.badge" class="rail-badge"></span>
+        </router-link>
+        <button
+          v-else
+          type="button"
+          class="rail-item rail-item-off"
+          :title="item.label"
+          :aria-label="item.label + ' — Próximamente'"
+          @click="notificarProximamente(item.label)"
+        >
+          <IconoNav :nombre="item.icono" />
+        </button>
+      </template>
 
-        <nav v-if="visibles(navAlmacen).length" class="grupo">
-          <p class="grupo-titulo">Almacén</p>
-          <router-link v-for="item in visibles(navAlmacen)" :key="item.to" :to="item.to" class="item">
-            <IconoNav :nombre="item.icono" />
-            <span>{{ item.label }}</span>
-            <span v-if="item.badge" class="badge-contador">{{ item.badge }}</span>
-          </router-link>
-        </nav>
-      </div>
+      <!-- Spacer empuja Alertas al fondo -->
+      <div class="rail-spacer"></div>
 
-      <div class="pie">
+      <!-- Ítems inferiores (Alertas) -->
+      <template v-for="item in visiblesRail(navRailBottom)" :key="item.to">
+        <router-link :to="item.to" class="rail-item" :title="item.label" :aria-label="item.label">
+          <IconoNav :nombre="item.icono" />
+          <span v-if="item.badge" class="rail-badge"></span>
+        </router-link>
+      </template>
+
+      <div class="rail-sep"></div>
+
+      <!-- Avatar / configuración de usuario -->
+      <Teleport to="body">
+        <div v-if="mensajeProximamente" class="toast-proximamente">{{ mensajeProximamente }}</div>
+
         <div v-if="mostrarMenu" class="backdrop-menu" @click="mostrarMenu = false"></div>
-
-        <div v-if="mostrarMenu" class="menu-config">
+        <div v-if="mostrarMenu" class="menu-config" :style="posMenuConfig">
           <button type="button" class="menu-item" @click="tema.alternar">
             <IconoNav :nombre="tema.modo === 'dark' ? 'sol' : 'luna'" />
             <span>{{ tema.modo === 'dark' ? 'Modo claro' : 'Modo oscuro' }}</span>
           </button>
+          <router-link v-if="esSupervisor && auth.tienePermiso('dashboard.ver')" to="/" class="menu-item" @click="mostrarMenu = false">
+            <IconoNav nombre="dashboard" />
+            <span>Dashboard general</span>
+          </router-link>
           <router-link
             v-for="item in visibles(navSistema)"
             :key="item.to"
@@ -313,27 +526,76 @@ const inicialesUsuario = computed(() => {
             <IconoNav :nombre="item.icono" />
             <span>{{ item.label }}</span>
           </router-link>
+          <a :href="URL_SOPORTE" target="_blank" rel="noopener noreferrer" class="menu-item" @click="mostrarMenu = false">
+            <IconoNav nombre="soporte" />
+            <span>Soporte</span>
+          </a>
           <button type="button" class="menu-item peligro" @click="cerrarSesionDesdeMenu">
             <IconoNav nombre="salir" />
             <span>Cerrar sesión</span>
           </button>
         </div>
 
-        <button type="button" class="usuario-fila" @click="mostrarMenu = !mostrarMenu">
-          <span class="avatar">{{ inicialesUsuario }}</span>
-          <div class="usuario-info">
-            <div class="usuario-nombre">{{ auth.perfil?.nombre }}</div>
-            <div class="usuario-rol">{{ auth.nombreRol }}</div>
-          </div>
-          <IconoNav nombre="engranaje" class="icono-engranaje" />
-        </button>
-      </div>
+        <div v-if="mostrarTooltipUsuario" class="tooltip-usuario" :style="posTooltipUsuario">
+          {{ auth.perfil?.nombre ?? '' }} — {{ auth.nombreRol ?? '' }}
+        </div>
+      </Teleport>
+
+      <button
+        ref="usuarioFilaRef"
+        type="button"
+        class="rail-avatar"
+        :aria-label="`${auth.perfil?.nombre ?? ''} — ${auth.nombreRol ?? ''}`"
+        @click="alternarMenuUsuario"
+        @mouseenter="mostrarTooltip"
+        @mouseleave="mostrarTooltipUsuario = false"
+      >
+        {{ inicialesUsuario }}
+      </button>
     </aside>
     <main class="contenido">
       <router-view />
     </main>
 
-    <nav v-if="!$route.meta.ocultarTabbar" class="tabbar">
+    <!-- Supervisor: barra de solo íconos + avatar (reemplaza a "Más") -->
+    <nav v-if="esSupervisor && !$route.meta.ocultarTabbar && !tecladoAbierto" class="tabbar-sup" aria-label="Menú del supervisor">
+      <router-link
+        v-for="t in tabsSup"
+        :key="t.clave"
+        :to="t.to"
+        class="nv"
+        :class="{ on: t.activo }"
+        :aria-label="t.aria"
+        :aria-current="t.activo ? 'page' : undefined"
+      >
+        <IconoBarra :nombre="t.clave" />
+        <span v-if="t.badge" class="bd" :class="{ rojo: t.rojo }">{{ t.badge }}</span>
+      </router-link>
+      <button type="button" class="nv" :class="{ on: avatarActivo }" :aria-label="`Menú de ${auth.perfil?.nombre ?? 'usuario'}`" @click="mostrarMas = true">
+        <span class="nv-avatar">{{ inicialesUsuario }}</span>
+      </button>
+    </nav>
+
+    <!-- Developer / Administrador / Coordinador / Planeamiento: 3 módulos + avatar -->
+    <nav v-if="esAdminMovil && !$route.meta.ocultarTabbar && !tecladoAbierto" class="tabbar-adm" aria-label="Menú principal">
+      <router-link
+        v-for="t in tabsAdm"
+        :key="t.clave"
+        :to="t.to"
+        class="nv"
+        :class="{ on: t.activo }"
+        :aria-label="t.aria"
+        :aria-current="t.activo ? 'page' : undefined"
+      >
+        <IconoBarra :nombre="t.clave" />
+        <span v-if="t.badge" class="bd">{{ t.badge }}</span>
+      </router-link>
+      <button type="button" class="nv" :class="{ on: mostrarMas }" :aria-label="`Menú de ${auth.perfil?.nombre ?? 'usuario'}`" @click="mostrarMas = true">
+        <span class="nv-avatar">{{ inicialesUsuario }}</span>
+      </button>
+    </nav>
+
+    <nav v-if="!esSupervisor && !esAdminMovil && !$route.meta.ocultarTabbar" class="tabbar">
       <router-link v-for="item in tabsMoviles" :key="item.to" :to="item.to" class="tab">
         <span class="tab-inner">
           <span class="tab-icon">
@@ -352,7 +614,66 @@ const inicialesUsuario = computed(() => {
     </nav>
 
     <div v-if="mostrarMas" class="hoja-backdrop" @click="mostrarMas = false"></div>
-    <div v-if="mostrarMas" class="hoja-mas">
+    <!-- Menú del avatar del Supervisor -->
+    <div v-if="mostrarMas && esSupervisor" class="hoja-mas hoja-sup" role="dialog" aria-label="Menú de usuario">
+      <div class="hoja-manija"></div>
+      <div class="hoja-perfil">
+        <span class="avatar">{{ inicialesUsuario }}</span>
+        <div class="usuario-info">
+          <div class="usuario-nombre">{{ auth.perfil?.nombre }}</div>
+          <div class="usuario-rol">{{ auth.nombreRol }}</div>
+        </div>
+      </div>
+      <router-link v-if="auth.tienePermiso('dashboard.ver')" to="/" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav nombre="dashboard" />
+        <span>Dashboard general</span>
+      </router-link>
+      <button type="button" class="hoja-item" @click="tema.alternar">
+        <IconoNav :nombre="tema.modo === 'dark' ? 'sol' : 'luna'" />
+        <span>{{ tema.modo === 'dark' ? 'Modo claro' : 'Modo oscuro' }}</span>
+      </button>
+      <a :href="URL_SOPORTE" target="_blank" rel="noopener noreferrer" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav nombre="soporte" />
+        <span>Soporte</span>
+      </a>
+      <button type="button" class="hoja-item peligro" @click="cerrarSesionDesdeMas">
+        <IconoNav nombre="salir" />
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+    <!-- Menú del avatar de Administración -->
+    <div v-if="mostrarMas && esAdminMovil" class="hoja-mas hoja-adm" role="dialog" aria-label="Menú de usuario">
+      <div class="hoja-manija"></div>
+      <div class="hoja-perfil">
+        <span class="avatar">{{ inicialesUsuario }}</span>
+        <div class="usuario-info">
+          <div class="usuario-nombre">{{ auth.perfil?.nombre }}</div>
+          <div class="usuario-rol">{{ auth.nombreRol }}</div>
+        </div>
+      </div>
+      <router-link v-if="auth.tienePermiso('alertas.ver')" to="/alertas" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav nombre="alertas" />
+        <span>Alertas de stock</span>
+        <span v-if="badgeAlertas" class="hoja-contador">{{ badgeAlertas }}</span>
+      </router-link>
+      <router-link v-for="item in itemsMenuAdm" :key="item.to" :to="item.to" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav :nombre="item.icono" />
+        <span>{{ item.label }}</span>
+      </router-link>
+      <button type="button" class="hoja-item" @click="tema.alternar">
+        <IconoNav :nombre="tema.modo === 'dark' ? 'sol' : 'luna'" />
+        <span>{{ tema.modo === 'dark' ? 'Modo claro' : 'Modo oscuro' }}</span>
+      </button>
+      <a :href="URL_SOPORTE" target="_blank" rel="noopener noreferrer" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav nombre="soporte" />
+        <span>Soporte</span>
+      </a>
+      <button type="button" class="hoja-item peligro" @click="cerrarSesionDesdeMas">
+        <IconoNav nombre="salir" />
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
+    <div v-if="mostrarMas && !esSupervisor && !esAdminMovil" class="hoja-mas">
       <div class="hoja-manija"></div>
 
       <div class="hoja-perfil">
@@ -418,6 +739,10 @@ const inicialesUsuario = computed(() => {
         <IconoNav :nombre="item.icono" />
         <span>{{ item.label }}</span>
       </router-link>
+      <a :href="URL_SOPORTE" target="_blank" rel="noopener noreferrer" class="hoja-item" @click="mostrarMas = false">
+        <IconoNav nombre="soporte" />
+        <span>Soporte</span>
+      </a>
       <button type="button" class="hoja-item peligro" @click="cerrarSesionDesdeMas">
         <IconoNav nombre="salir" />
         <span>Cerrar sesión</span>
@@ -475,7 +800,15 @@ const inicialesUsuario = computed(() => {
   font-weight: 600;
   box-sizing: border-box;
 }
+.banner-texto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .banner-suplantacion button {
+  flex: 0 0 auto;
+  white-space: nowrap;
   padding: 0.3rem 0.75rem;
   border: none;
   border-radius: var(--radius-control);
@@ -501,193 +834,179 @@ const inicialesUsuario = computed(() => {
   min-height: 100vh;
 }
 .shell {
-  display: grid;
-  grid-template-columns: 240px 1fr;
+  display: block;
   height: 100vh;
   background: var(--color-bg);
 }
+
+/* Rail flotante de escritorio — 88px fijo, siempre visible, sin modo expandido */
 .nav {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  bottom: 12px;
+  width: 72px;
+  background: #0e0f12;
+  border-radius: 26px;
+  padding: 14px 0;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  height: 100%;
-  padding: 1.1rem 0.9rem;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--sidebar-border);
-  overflow: hidden;
-}
-.marca {
-  display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0 0.35rem;
-  flex-shrink: 0;
+  gap: 4px;
+  z-index: 35;
+  /* overflow: visible permite que los tooltips (::after) se dibujen fuera
+     del borde redondeado sin ser recortados. El fondo redondeado lo da
+     el background + border-radius del propio elemento, no un clip. */
 }
-/* Único que se desplaza si los enlaces no caben — la marca de arriba y el
-   usuario de abajo (con "Cerrar sesión") quedan siempre visibles, sin
-   necesidad de bajar la pantalla. */
-.nav-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1.35rem;
-  /* Firefox: delgado y del color del texto tenue, no el gris grueso por
-     defecto del sistema operativo. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border) transparent;
-}
-.nav-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.nav-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.nav-scroll::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: var(--radius-pill);
-}
-.nav-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
-}
-.marca-icono {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
+.marca-rail {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f6a800;
+  color: #111;
   display: grid;
   place-items: center;
   font-weight: 800;
-  font-size: 0.95rem;
+  font-size: 1.1rem;
   flex-shrink: 0;
+  margin-bottom: 2px;
+  user-select: none;
 }
-.marca-nombre {
-  color: var(--sidebar-text);
-  font-weight: 700;
-  font-size: 0.82rem;
-  line-height: 1.15;
+.rail-sep {
+  width: 40px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+  margin: 6px 0;
 }
-.marca-sub {
-  color: var(--sidebar-text-muted);
-  font-size: 0.68rem;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+.rail-spacer {
+  flex: 1;
 }
-.grupo {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.grupo-titulo {
-  margin: 0 0 0.35rem;
-  padding: 0 0.55rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--sidebar-text-muted);
-}
-.item {
+.rail-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  color: var(--sidebar-text-muted);
+  justify-content: center;
+  color: #8d929b;
   text-decoration: none;
-  padding: 0.5rem 0.6rem;
-  border-radius: var(--radius-control);
-  font-size: 0.87rem;
-  font-weight: 500;
-}
-.item:hover {
-  background: var(--sidebar-hover-bg);
-  color: var(--sidebar-text);
-}
-.item.router-link-active {
-  background: var(--sidebar-active-bg);
-  color: var(--sidebar-active-text);
-  font-weight: 600;
-}
-.badge-contador {
-  margin-left: auto;
-  min-width: 1.2rem;
-  text-align: center;
-  padding: 0.05rem 0.4rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-danger);
-  color: #fff;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-.item.router-link-active .badge-contador {
-  background: var(--color-primary-ink);
-  color: var(--color-primary);
-}
-.pie {
   flex-shrink: 0;
-  display: flex;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--sidebar-border);
   position: relative;
-}
-.usuario-fila {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  width: 100%;
   background: none;
   border: none;
-  padding: 0.3rem 0.15rem;
-  border-radius: var(--radius-control);
   cursor: pointer;
-  text-align: left;
+  font: inherit;
+  transition: background 150ms, color 150ms;
 }
-.usuario-fila:hover {
-  background: var(--sidebar-hover-bg);
+.rail-item:hover {
+  background: #1c1e24;
+  color: #fff;
 }
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-control);
-  background: var(--color-surface-2);
-  border: 1px solid var(--sidebar-border);
-  color: var(--sidebar-text);
+.rail-item.router-link-active,
+.rail-item.rail-activo {
+  background: #f6a800;
+  color: #111;
+}
+/* Tooltip con ::after — position: absolute respecto al ítem (que tiene
+   position: relative). El rail no tiene overflow:hidden, así que el tooltip
+   se dibuja fuera del riel sin ser recortado. */
+.rail-item:hover::after,
+.rail-item:focus-visible::after {
+  content: attr(title);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1c1e24;
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  pointer-events: none;
+}
+.rail-item-off {
+  opacity: 0.38;
+}
+.rail-item-off:hover {
+  background: none;
+  color: #8d929b;
+  opacity: 0.5;
+}
+.rail-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  pointer-events: none;
+}
+.rail-item :deep(.icono-nav) {
+  width: 20px;
+  height: 20px;
+}
+.rail-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #d1d5db;
   display: grid;
   place-items: center;
   font-weight: 700;
   font-size: 0.78rem;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: background 150ms;
+  font-family: inherit;
+  margin-top: 2px;
 }
-.usuario-info {
-  min-width: 0;
-  flex: 1;
+.rail-avatar:hover {
+  background: #1c1e24;
 }
-.usuario-nombre {
-  color: var(--sidebar-text);
-  font-size: 0.82rem;
+.toast-proximamente {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c1e24;
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  pointer-events: none;
 }
-.usuario-rol {
-  color: var(--sidebar-text-muted);
-  font-size: 0.72rem;
-}
-.icono-engranaje {
-  color: var(--sidebar-text-muted);
-  flex-shrink: 0;
+.tooltip-usuario {
+  position: fixed;
+  background: #1c1e24;
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 37;
+  pointer-events: none;
 }
 .backdrop-menu {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 36;
 }
 .menu-config {
-  position: absolute;
-  bottom: calc(100% + 0.5rem);
-  right: 0;
+  position: fixed;
   width: 200px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -697,7 +1016,7 @@ const inicialesUsuario = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  z-index: 31;
+  z-index: 37;
 }
 .menu-item {
   display: flex;
@@ -726,12 +1045,20 @@ const inicialesUsuario = computed(() => {
   min-width: 0;
   height: 100%;
   overflow-y: auto;
+  /* 12px margen + 72px riel + 12px separación = 96px */
+  margin-left: 96px;
 }
 
 /* Barra de pestañas flotante — solo existe en celular/tablet (ver media
    query). En escritorio el sidebar de la izquierda cubre toda la
    navegación. */
 .tabbar {
+  display: none;
+}
+.tabbar-sup {
+  display: none;
+}
+.tabbar-adm {
   display: none;
 }
 .hoja-backdrop,
@@ -748,7 +1075,6 @@ const inicialesUsuario = computed(() => {
    quedar tapado, esta barra ya no le resta alto al contenedor. */
 @media (max-width: 1024px) {
   .shell {
-    display: block;
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
@@ -757,24 +1083,11 @@ const inicialesUsuario = computed(() => {
     display: none;
   }
   .contenido {
-    /* 100% del alto real de .shell, no 100dvh de la pantalla entera: al
-       "ver como" otra cuenta, .shell se achica (por la barra amarilla de
-       arriba, con su propio margin-top inline) pero esto seguía pidiendo
-       el alto completo del dispositivo — se desbordaba, y como .shell
-       tiene overflow:hidden, la parte de abajo (el "Anterior"/"Siguiente"
-       del RDC, por ejemplo) quedaba recortada sin verse. */
+    margin-left: 0;
     height: 100%;
     overflow-x: hidden;
-    /* En un iPhone con Dynamic Island/notch, el título de cada pantalla
-       quedaba literalmente debajo de esa isla (la pinta el propio iOS,
-       tapando lo que haya ahí) — en Android no pasa porque no tiene esa
-       forma de recorte. env() da 0 en los celulares que no la tienen, así
-       que esto no mueve nada donde no hace falta. */
     padding-top: env(safe-area-inset-top);
   }
-  /* Con la barra amarilla de "viendo como otra cuenta" ya se dejó ese
-     mismo espacio arriba (su propio alto incluye env(safe-area-inset-top))
-     — sumarlo de nuevo acá empujaba todo más abajo de lo necesario. */
   .shell-suplantacion .contenido {
     padding-top: 0;
   }
@@ -794,6 +1107,192 @@ const inicialesUsuario = computed(() => {
     align-items: center;
     padding: 0 5px;
     z-index: 20;
+  }
+  /* Barra del Supervisor: solo íconos, 64px, radio 24, margen 10px. */
+  .tabbar-sup {
+    display: flex;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+    height: 64px;
+    border-radius: 24px;
+    background: #0e0f12;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+    align-items: center;
+    justify-content: space-around;
+    z-index: 20;
+  }
+  :root[data-theme='dark'] .tabbar-sup {
+    background: #17191e;
+    box-shadow: 0 0 0 1px #262930, 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+  .tabbar-sup .nv {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 52px;
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    color: #8d929b;
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabbar-sup .nv.on {
+    background: #f6a800;
+    color: #111;
+  }
+  .tabbar-sup .bd {
+    position: absolute;
+    top: 5px;
+    right: 18px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #f6a800;
+    color: #111;
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #0e0f12;
+  }
+  :root[data-theme='dark'] .tabbar-sup .bd {
+    border-color: #17191e;
+  }
+  .tabbar-sup .bd.rojo {
+    background: #e5484d;
+    color: #fff;
+  }
+  .tabbar-sup .nv.on .bd {
+    background: #111;
+    color: #f6a800;
+    border-color: #f6a800;
+  }
+  .tabbar-sup .nv.on .bd.rojo {
+    background: #e5484d;
+    color: #fff;
+  }
+  .nv-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #1c1e24;
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 1.5px #3a3d45;
+  }
+  .tabbar-sup .nv.on .nv-avatar {
+    background: #111;
+    color: #f6a800;
+    box-shadow: 0 0 0 1.5px #111;
+  }
+  /* Barra de Administración: vidrio delgado (56px, radio 22, margen 10px),
+     solo íconos. El activo lleva fondo ámbar suave y el ícono en ámbar. */
+  .tabbar-adm {
+    display: flex;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+    height: 56px;
+    padding: 0 6px;
+    border-radius: 22px;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 20;
+    background: rgba(20, 20, 23, 0.88);
+    -webkit-backdrop-filter: blur(22px) saturate(1.6);
+    backdrop-filter: blur(22px) saturate(1.6);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  :root[data-theme='light'] .tabbar-adm {
+    background: rgba(255, 255, 255, 0.62);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .tabbar-adm {
+      background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    }
+  }
+  .tabbar-adm .nv {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 1 64px;
+    min-width: 0;
+    height: 44px;
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+  .tabbar-adm .nv.on {
+    background: rgba(246, 168, 0, 0.18);
+    color: #f6a800;
+  }
+  :root[data-theme='light'] .tabbar-adm .nv.on {
+    background: rgba(217, 142, 0, 0.16);
+    color: #c98200;
+  }
+  .tabbar-adm .bd {
+    position: absolute;
+    top: 2px;
+    right: 14px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: #f6a800;
+    color: #111;
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 2px var(--color-bg);
+  }
+  .tabbar-adm .nv-avatar {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+    box-shadow: inset 0 0 0 1.5px var(--color-border);
+  }
+  .tabbar-adm .nv.on .nv-avatar {
+    background: rgba(246, 168, 0, 0.18);
+    color: #f6a800;
+    box-shadow: inset 0 0 0 1.5px #f6a800;
+  }
+  :root[data-theme='light'] .tabbar-adm .nv.on .nv-avatar {
+    color: #c98200;
+    box-shadow: inset 0 0 0 1.5px #c98200;
+  }
+  .hoja-contador {
+    margin-left: auto;
+    min-width: 22px;
+    padding: 1px 8px;
+    border-radius: 99px;
+    background: #e5484d;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
   }
   .tab {
     flex: 1;

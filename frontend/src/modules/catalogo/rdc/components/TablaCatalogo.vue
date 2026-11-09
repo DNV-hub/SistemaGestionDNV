@@ -35,12 +35,15 @@ function filaVacia() {
   return { ...props.nuevaFilaBase }
 }
 const nuevaFila = reactive(filaVacia())
+// Object.assign solo pisa las claves de la base (frente_id): lo tipeado en
+// las demás columnas se quedaba. Se borra todo y se vuelve a la base.
+function limpiarNuevaFila() {
+  for (const clave of Object.keys(nuevaFila)) delete nuevaFila[clave]
+  Object.assign(nuevaFila, filaVacia())
+}
 // Cuando cambia el frente seleccionado (catálogos "por frente"), la fila en
 // blanco tiene que arrancar de nuevo con el frente_id correcto.
-watch(
-  () => props.nuevaFilaBase,
-  () => Object.assign(nuevaFila, filaVacia()),
-)
+watch(() => props.nuevaFilaBase, limpiarNuevaFila)
 
 const creando = ref(false)
 const faltaRequerido = (fila) => props.columnas.some((c) => c.requerido && (fila[c.clave] === '' || fila[c.clave] == null))
@@ -51,7 +54,7 @@ async function crear() {
   creando.value = true
   try {
     await props.alCrear({ ...nuevaFila })
-    Object.assign(nuevaFila, filaVacia())
+    limpiarNuevaFila()
   } catch (e) {
     error.value = e?.message ?? 'No se pudo crear la fila.'
   } finally {
@@ -117,7 +120,7 @@ async function eliminar(fila) {
 <template>
   <div class="tabla-catalogo">
     <p v-if="soloLectura" class="aviso-solo-lectura">
-      Solo lectura. Para crear, editar o borrar, ve al módulo <router-link to="/frentes">Frentes</router-link> —
+      Solo lectura. Para crear, editar o borrar, ve al módulo <router-link to="/planeamiento/frentes">Frentes</router-link> —
       administrarlo también desde acá haría fácil que las dos pantallas terminen diciendo cosas distintas.
     </p>
     <p v-if="error" class="error">{{ error }}</p>
@@ -217,8 +220,10 @@ async function eliminar(fila) {
 
 <style scoped>
 .tabla-catalogo {
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
+  background: var(--p-card);
+  border-radius: 20px;
+  box-shadow: 0 0 0 1px var(--p-line);
+  padding: 6px 8px 8px;
 }
 .scroll {
   overflow-x: auto;
@@ -230,18 +235,25 @@ table {
 }
 th,
 td {
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid var(--color-border);
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--p-line);
   white-space: nowrap;
 }
+tbody td {
+  height: 52px;
+}
 thead th {
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
-  font-weight: 600;
+  background: var(--p-card);
+  color: var(--p-faint);
+  font-weight: 700;
   font-size: 11px;
+  height: 44px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-align: left;
+}
+tbody tr:hover td {
+  background: var(--p-hover);
 }
 input[type='text'],
 input[type='number'],
@@ -252,19 +264,19 @@ select {
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--color-text);
+  color: var(--p-text);
   font-size: 0.85rem;
 }
 input[type='text']:hover,
 input[type='number']:hover,
 select:hover {
-  border-color: var(--color-border);
+  border-color: var(--p-line);
 }
 input[type='text']:focus,
 input[type='number']:focus,
 select:focus {
   border-color: var(--color-primary);
-  background: var(--color-surface);
+  background: var(--p-card);
   outline: none;
 }
 input:disabled,
@@ -275,15 +287,39 @@ select:disabled {
   text-align: center;
 }
 .celda-activo input {
-  width: 16px;
-  height: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 24px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--p-sw-off, #d5d5d0);
+  position: relative;
   cursor: pointer;
+  margin: 0;
+}
+.celda-activo input::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.celda-activo input:checked {
+  background: #f6a800;
+}
+.celda-activo input:checked::after {
+  transform: translateX(16px);
 }
 .celda-acciones {
   text-align: center;
 }
-.fila-nueva {
-  background: var(--color-surface-2);
+.fila-nueva td {
+  background: var(--p-hover);
 }
 .boton-agregar {
   padding: 0.35rem 0.7rem;
@@ -302,18 +338,18 @@ select:disabled {
 }
 .vacio {
   text-align: center;
-  color: var(--color-text-muted);
+  color: var(--p-muted);
 }
 .error {
-  color: var(--color-danger);
+  color: var(--p-danger);
   font-size: 0.85rem;
   padding: 0.5rem 0;
 }
 .aviso-solo-lectura {
   margin: 0 0 0.75rem;
   padding: 0.6rem 0.8rem;
-  background: var(--color-info-soft);
-  color: var(--color-text);
+  background: var(--p-info-bg);
+  color: var(--p-text);
   border-radius: var(--radius-control);
   font-size: 0.85rem;
 }

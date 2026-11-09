@@ -73,7 +73,6 @@ async function exportar() {
         'Fecha/Hora': new Date(m.fecha_hora).toLocaleString(),
         Tipo: ETIQUETAS_TIPO_EXPORT[m.tipo_movimiento] ?? m.tipo_movimiento,
         Almacén: m.almacenes?.nombre ?? '',
-        Código: m.materiales?.codigo ?? '',
         Descripción: m.materiales?.descripcion ?? '',
         Cantidad: m.cantidad,
         Unidad: m.materiales?.unidad ?? '',
@@ -128,46 +127,55 @@ async function exportar() {
     <p v-if="kardex.error" class="error">{{ kardex.error }}</p>
     <p v-if="kardex.cargando">Cargando…</p>
 
-    <table v-else class="tabla">
-      <thead>
-        <tr>
-          <th>Fecha/Hora</th>
-          <th>Tipo</th>
-          <th>Almacén</th>
-          <th>Código</th>
-          <th>Descripción</th>
-          <th>Cantidad</th>
-          <th>Saldo resultante</th>
-          <th>Vale</th>
-          <th>Frente</th>
-          <th>Solicitado por</th>
-          <th>Usuario</th>
-          <th>Observación</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="m in kardex.movimientos" :key="m.id">
-          <td>{{ new Date(m.fecha_hora).toLocaleString() }}</td>
-          <td>
-            <span class="badge" :class="m.tipo_movimiento">{{ ETIQUETAS_TIPO[m.tipo_movimiento] }}</span>
-          </td>
-          <td>{{ m.almacenes?.nombre ?? '—' }}</td>
-          <td>{{ m.materiales?.codigo ?? '—' }}</td>
-          <td>{{ m.materiales?.descripcion ?? '—' }}</td>
-          <td class="num">{{ formatearNumero(m.cantidad) }} {{ m.materiales?.unidad }}</td>
-          <td class="num">{{ formatearNumero(m.saldo_resultante) }}</td>
-          <td>{{ m.vales?.numero ?? '—' }}</td>
-          <td v-if="m.vales?.frentes">{{ m.vales.frentes.codigo ? m.vales.frentes.codigo + ' — ' : '' }}{{ m.vales.frentes.nombre }}</td>
-          <td v-else>—</td>
-          <td>{{ m.vales?.usuarios?.nombre ?? '—' }}</td>
-          <td>{{ m.usuarios?.nombre ?? '—' }}</td>
-          <td>{{ m.observacion ?? '—' }}</td>
-        </tr>
-        <tr v-if="!kardex.movimientos.length">
-          <td colspan="12" class="vacio">No hay movimientos para los filtros seleccionados.</td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Antes la tabla no tenía scroll propio: al desplazarse a la derecha se
+         movía toda la página (filtros incluidos) y se perdía de vista con
+         qué fila/material se estaba trabajando. Ahora solo el cuerpo de la
+         tabla scrollea horizontal (.tabla-wrap), el encabezado queda fijo
+         arriba, y Fecha/Hora + Material quedan congelados a la izquierda
+         (mismo criterio de "Código / Descripción" combinados que ya usa
+         Almacén) para no perder la referencia mientras se recorre el resto. -->
+    <div v-else class="tabla-wrap">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th class="col-fija col-fecha">Fecha/Hora</th>
+            <th class="col-fija col-material">Material</th>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Saldo resultante</th>
+            <th>Almacén</th>
+            <th>Vale</th>
+            <th>Frente</th>
+            <th>Solicitado por</th>
+            <th>Usuario</th>
+            <th>Observación</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="m in kardex.movimientos" :key="m.id">
+            <td class="col-fija col-fecha">{{ new Date(m.fecha_hora).toLocaleString() }}</td>
+            <td class="col-fija col-material">
+              <div class="desc">{{ m.materiales?.descripcion ?? '—' }}</div>
+            </td>
+            <td>
+              <span class="badge" :class="m.tipo_movimiento">{{ ETIQUETAS_TIPO[m.tipo_movimiento] }}</span>
+            </td>
+            <td class="num">{{ formatearNumero(m.cantidad) }} {{ m.materiales?.unidad }}</td>
+            <td class="num">{{ formatearNumero(m.saldo_resultante) }}</td>
+            <td>{{ m.almacenes?.nombre ?? '—' }}</td>
+            <td>{{ m.vales?.numero ?? '—' }}</td>
+            <td v-if="m.vales?.frentes">{{ m.vales.frentes.codigo ? m.vales.frentes.codigo + ' — ' : '' }}{{ m.vales.frentes.nombre }}</td>
+            <td v-else>—</td>
+            <td>{{ m.vales?.usuarios?.nombre ?? '—' }}</td>
+            <td>{{ m.usuarios?.nombre ?? '—' }}</td>
+            <td class="observacion">{{ m.observacion ?? '—' }}</td>
+          </tr>
+          <tr v-if="!kardex.movimientos.length">
+            <td colspan="11" class="vacio">No hay movimientos para los filtros seleccionados.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <p v-if="kardex.movimientos.length === 300" class="aviso-limite">
       Mostrando los últimos 300 movimientos. Usa los filtros para acotar la búsqueda.
     </p>
@@ -223,12 +231,31 @@ button:disabled {
   opacity: 0.6;
   cursor: default;
 }
-.tabla {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--color-surface);
+/* Contenedor propio del scroll horizontal: así el header de la página y los
+   filtros de arriba se quedan quietos, y lo único que se mueve al ir hacia
+   la derecha es el cuerpo de la tabla. Como <div> de bloque normal, este
+   contenedor ocuparía todo el ancho disponible aunque la tabla necesite
+   menos (dejando una franja vacía a la derecha, del color de fondo de la
+   página, hasta donde alcance la scrollbar) — con "inline-block" se ajusta
+   al ancho real de la tabla, y "max-width: 100%" es lo que activa el scroll
+   cuando la pantalla es más angosta que eso. */
+.tabla-wrap {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  overflow: hidden;
+  /* Límite razonable de alto con scroll vertical propio: con 300 filas
+     (el tope que ya impone el store) desplazarse por la tabla no debería
+     desplazar además toda la página. */
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.tabla {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface);
 }
 .tabla th,
 .tabla td {
@@ -243,12 +270,55 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 .tabla th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: var(--color-surface-2);
   color: var(--color-text-muted);
   font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+/* Columnas congeladas a la izquierda (Fecha/Hora + Material): necesitan
+   fondo opaco propio para no dejar ver las columnas que pasan por debajo al
+   scrollear, y un ancho fijo (no solo mínimo) para que el "left" de la
+   segunda calce exacto contra el borde de la primera. La esquina de arriba
+   a la izquierda está fija en las dos direcciones a la vez, por eso lleva
+   z-index más alto que el resto del header y que el resto de la columna. */
+.col-fija {
+  position: sticky;
+  background: var(--color-surface);
+  z-index: 1;
+}
+thead .col-fija {
+  z-index: 3;
+}
+.col-fecha {
+  left: 0;
+  width: 160px;
+}
+.col-material {
+  left: 160px;
+  width: 240px;
+  box-shadow: 2px 0 5px -3px rgba(0, 0, 0, 0.25);
+}
+.observacion {
+  white-space: normal;
+  max-width: 260px;
+}
+.desc {
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: normal;
+}
+.code {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  margin-top: 0.1rem;
+}
+.tabla tbody tr:hover td {
+  background: var(--color-surface-2);
 }
 .badge {
   padding: 0.15rem 0.5rem;

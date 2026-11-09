@@ -4,6 +4,7 @@ import { useRdcStore } from '../store/rdc'
 import { nuevoId } from '../services/rdcRepository'
 import { CAUSAS_STANDBY, CAUSA_TIEMPO_TOTAL, HITOS } from '../services/rdcConstantes'
 import { causaEfectiva, fmtHm, minutosEntre, minutosStandby, nombreDe, totalStandbyMin } from '../services/rdcCalculos'
+import SelectorHora from './SelectorHora.vue'
 
 const rdc = useRdcStore()
 const reporte = computed(() => rdc.actual)
@@ -167,11 +168,11 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
         <div class="grid2">
           <div class="field">
             <label for="restr-ini">Hora inicio</label>
-            <input id="restr-ini" v-model="reporte.restriccionInicio" type="time" @change="guardar" />
+            <SelectorHora v-model="reporte.restriccionInicio" @update:model-value="guardar" />
           </div>
           <div class="field">
             <label for="restr-fin">Hora fin</label>
-            <input id="restr-fin" v-model="reporte.restriccionFin" type="time" @change="guardar" />
+            <SelectorHora v-model="reporte.restriccionFin" @update:model-value="guardar" />
           </div>
         </div>
       </div>
@@ -185,26 +186,27 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
       </div>
 
       <div v-if="hitosAbierto" style="margin-top: 12px">
+        <div class="hitos-grid">
         <div v-for="h in HITOS" :key="h" class="hito-row">
           <span class="hito-label">{{ h }}</span>
-          <input :value="horaHito(h)" type="time" @change="fijarHito(h, $event.target.value)" />
+          <SelectorHora :model-value="horaHito(h)" @update:model-value="(v) => fijarHito(h, v)" />
         </div>
         <div class="hito-row">
           <span class="hito-label">Salida a refrigerio/almuerzo</span>
-          <input v-model="reporte.refrigerioSalida" type="time" @change="guardar" />
+          <SelectorHora v-model="reporte.refrigerioSalida" @update:model-value="guardar" />
         </div>
         <div class="hito-row">
           <span class="hito-label">Retorno de refrigerio/almuerzo</span>
-          <input v-model="reporte.refrigerioRetorno" type="time" @change="guardar" />
+          <SelectorHora v-model="reporte.refrigerioRetorno" @update:model-value="guardar" />
+        </div>
         </div>
         <p class="note">Registra estos hitos una vez al inicio del turno.</p>
       </div>
     </div>
 
-    <div class="section-title" style="margin: 4px 4px 10px"><i class="ti ti-notebook" />Bitácora de Campo</div>
-
-    <div class="card">
-      <div class="card-title"><i class="ti ti-bolt" />Agregar Registro</div>
+    <div class="rx-two">
+    <div class="card" style="flex: 1 1 360px; min-width: 0">
+      <div class="card-title"><i class="ti ti-bolt" />Bitácora de campo · Agregar registro</div>
 
       <div class="tipo-toggle">
         <button type="button" class="tipo-btn" :class="{ active: tipoNuevo === 'actividad' }" @click="tipoNuevo = 'actividad'">Actividad</button>
@@ -214,8 +216,8 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
       <div style="margin-top: 12px">
         <template v-if="tipoNuevo === 'actividad'">
           <div class="grid2" style="margin-bottom: 10px">
-            <div class="field"><label>Hora Inicio</label><input v-model="nuevaActividad.horaInicio" type="time" /></div>
-            <div class="field"><label>Hora Fin</label><input v-model="nuevaActividad.horaFin" type="time" /></div>
+            <div class="field"><label>Hora Inicio</label><SelectorHora v-model="nuevaActividad.horaInicio" /></div>
+            <div class="field"><label>Hora Fin</label><SelectorHora v-model="nuevaActividad.horaFin" /></div>
           </div>
           <div class="field">
             <label>Descripción de Actividad</label>
@@ -249,8 +251,8 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
             </div>
           </div>
           <div v-else-if="nuevaParada.causa" class="grid2" style="margin-bottom: 10px">
-            <div class="field"><label>Desde</label><input v-model="nuevaParada.desde" type="time" /></div>
-            <div class="field"><label>Hasta</label><input v-model="nuevaParada.hasta" type="time" /></div>
+            <div class="field"><label>Desde</label><SelectorHora v-model="nuevaParada.desde" /></div>
+            <div class="field"><label>Hasta</label><SelectorHora v-model="nuevaParada.hasta" /></div>
           </div>
 
           <div class="field" style="margin-bottom: 10px">
@@ -268,14 +270,14 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
         </template>
       </div>
 
-      <button type="button" class="nav-btn primary" style="margin-top: 12px" :disabled="!puedeAgregar" @click="agregarRegistro">
+      <button type="button" class="nav-btn dk-btn" style="margin-top: 12px; width: auto; padding: 0 20px" :disabled="!puedeAgregar" @click="agregarRegistro">
         <i class="ti ti-plus" /> Agregar a Bitácora
       </button>
     </div>
 
-    <div class="card">
+    <div class="card" style="flex: 1 1 360px; min-width: 0">
       <div class="card-title">
-        <i class="ti ti-list-check" />Línea de Tiempo — <span class="frente-actual">{{ frenteActual }}</span>
+        <i class="ti ti-list-check" />Línea de tiempo · <span class="frente-actual">{{ frenteActual }}</span>
       </div>
 
       <div v-if="totalParadas > 0" class="alert alert-red">
@@ -293,8 +295,8 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
         <div v-if="x.tipo === 'actividad'" class="timeline-card">
           <template v-if="estaAbierto('actividad', x.r.id)">
             <div class="grid2" style="margin-bottom: 8px">
-              <div class="field"><label>Hora Inicio</label><input v-model="x.r.horaInicio" type="time" @change="guardar" /></div>
-              <div class="field"><label>Hora Fin</label><input v-model="x.r.horaFin" type="time" @change="guardar" /></div>
+              <div class="field"><label>Hora Inicio</label><SelectorHora v-model="x.r.horaInicio" @update:model-value="guardar" /></div>
+              <div class="field"><label>Hora Fin</label><SelectorHora v-model="x.r.horaFin" @update:model-value="guardar" /></div>
             </div>
             <div class="field">
               <label>Descripción de Actividad</label>
@@ -342,8 +344,8 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
               <div class="field"><label>Minutos</label><input v-model="x.r.totalMinutos" type="number" min="0" max="59" inputmode="numeric" @change="guardar" /></div>
             </div>
             <div v-else class="grid2" style="margin-bottom: 8px">
-              <div class="field"><label>Desde</label><input v-model="x.r.desde" type="time" @change="guardar" /></div>
-              <div class="field"><label>Hasta</label><input v-model="x.r.hasta" type="time" @change="guardar" /></div>
+              <div class="field"><label>Desde</label><SelectorHora v-model="x.r.desde" @update:model-value="guardar" /></div>
+              <div class="field"><label>Hasta</label><SelectorHora v-model="x.r.hasta" @update:model-value="guardar" /></div>
             </div>
 
             <div class="field" style="margin-bottom: 8px">
@@ -385,10 +387,17 @@ const frenteActual = computed(() => nombreDe(rdc.catalogos, 'frentes', reporte.v
         </div>
       </template>
     </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.dk-btn {
+  background: var(--tx);
+  color: var(--bg);
+  border: 0;
+  box-shadow: none;
+}
 .frente-actual {
   text-transform: none;
   font-weight: 400;

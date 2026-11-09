@@ -1,0 +1,16 @@
+-- El código de catálogo nunca fue la identidad del material (ver migración
+-- 20260911110000_codigo_no_es_identidad.sql, que ya le quitó el UNIQUE) ni
+-- agrupa nada para el EDP (eso lo hace nombres_edp vía
+-- materiales.descripcion_edp_id). El usuario señaló que ni siquiera sirve
+-- para ubicar materiales en la práctica: almacenero y supervisores buscan
+-- por nombre, no por código — así que obligarlo a llenarse en cada alta de
+-- material es forzar un dato que nadie necesita de verdad.
+--
+-- El NOT NULL original (20260822100300_catalogo.sql) nunca se había
+-- tocado. Se saca acá; el resto del sistema ya referencia materiales por
+-- material_id (uuid) en todas sus tablas, nunca por código, así que no hay
+-- ninguna integridad referencial que dependa de este valor.
+--
+-- Reversible: alter table materiales alter column codigo set not null
+-- (fallaría si ya existen filas con codigo null en ese momento).
+alter table materiales alter column codigo drop not null;

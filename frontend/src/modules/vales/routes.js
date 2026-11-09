@@ -30,6 +30,12 @@ export const valesRoutes = [
     meta: { permiso: 'devoluciones.crear', ocultarTabbar: true },
   },
   {
+    path: '/vales/transferencia',
+    name: 'vales-transferencia',
+    component: () => import('./views/TransferenciaNuevaView.vue'),
+    meta: { permiso: 'transferencias.crear', ocultarTabbar: true },
+  },
+  {
     path: '/vales/:id',
     name: 'vale-detalle',
     component: () => import('./views/ValeDetalleView.vue'),

@@ -26,30 +26,28 @@ export async function eliminarAlmacen(id) {
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')
-    .select('id, codigo, descripcion, unidad, unidad_edp, tipo_conversion, descripcion_edp_id')
+    .select('id, codigo, descripcion, unidad, unidad_edp, tipo_conversion, descripcion_edp_id, observaciones')
     .eq('estado', 'activo')
-    .order('codigo')
+    .order('descripcion')
   if (error) throw error
   return data
 }
 
-/** Lotes (ingresos) de este material en este almacén que todavía tienen
- * saldo por entregar — para elegir de cuál sale una entrega cuando el
- * material necesita conversión de unidades (el factor varía por lote). */
-export async function listarLotesDisponibles(materialId, almacenId) {
-  const { data, error } = await supabase
-    .from('ingresos')
-    .select('id, fecha, cantidad, cantidad_restante, ancho, largo, factor_conversion, documento_referencia')
-    .eq('material_id', materialId)
-    .eq('almacen_id', almacenId)
-    .gt('cantidad_restante', 0)
-    .order('fecha')
+/** Mismo criterio que el KPI "Vales por aprobar" del Dashboard (Enviado/En
+ * revision = todavía sin decisión de Almacén) — se repite acá en vez de
+ * importarlo desde el módulo de Dashboard para no acoplar Almacén a un
+ * módulo que no le pertenece por una sola cuenta. */
+export async function contarValesPendientes() {
+  const { count, error } = await supabase
+    .from('vales')
+    .select('id', { count: 'exact', head: true })
+    .in('estado', ['Enviado', 'En revision'])
   if (error) throw error
-  return data
+  return count ?? 0
 }
 
 const SELECT_STOCK =
-  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_pct), contratos(id, codigo, nombre)'
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad, stock_minimo_pct, categorias(nombre)), contratos(id, codigo, nombre)'
 
 /** Stock agregado por material (sumado entre almacenes) con Categoría/Tipo
  * de material y la cantidad también en la unidad del EDP, para el
@@ -70,7 +68,7 @@ export async function listarStockParaExportar() {
     supabase
       .from('stock')
       .select(
-        'material_id, cantidad_fisica, materiales(codigo, descripcion, unidad, unidad_edp, tipo_conversion, categorias(nombre, padre:categorias!categoria_padre_id(nombre)))'
+        'material_id, cantidad_fisica, materiales(codigo, descripcion, unidad, unidad_edp, tipo_conversion, categorias(nombre, padre:categorias!categoria_padre_id(nombre)), nombres_edp(nombre))'
       ),
     supabase
       .from('ingresos')
@@ -104,9 +102,14 @@ export async function listarStockParaExportar() {
     const necesitaConversion = m.tipo_conversion !== 'ninguna'
     const conversion = conversionPorMaterial.get(materialId)
     return {
-      codigo: m.codigo,
-      categoria: m.categorias?.padre?.nombre ?? '',
-      tipoMaterial: m.categorias?.nombre ?? '',
+      // La categoría del material puede o no tener padre (subcategoría) —
+      // con padre, ese padre es la categoría "general" a mostrar; sin
+      // padre, la propia categoría ya es la de primer nivel.
+      // "TIPO DE MATERIAL" es el nombre EDP (nombres_edp, el mismo que usa
+      // Catálogo) — no una subcategoría: son dos clasificaciones
+      // independientes del material.
+      categoria: m.categorias?.padre?.nombre ?? m.categorias?.nombre ?? '',
+      tipoMaterial: m.nombres_edp?.nombre ?? '',
       descripcion: m.descripcion,
       ancho: necesitaConversion ? conversion?.ancho ?? null : null,
       largo: necesitaConversion ? conversion?.largo ?? null : null,
@@ -146,26 +149,33 @@ export async function listarStockMinimos() {
 const SELECT_MOVIMIENTO =
   '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), contratos(id, codigo, nombre), usuarios(id, nombre)'
 
+/** Corrige los datos escritos de uno o varios ingresos (guía, proveedor,
+ * observación). No toca cantidades ni stock. */
+export async function editarDatosIngresos(ids, { documento_referencia, proveedor, observacion }) {
+  const { error } = await supabase.rpc('fn_editar_datos_ingreso', {
+    p_ids: ids,
+    p_documento: documento_referencia,
+    p_proveedor: proveedor,
+    p_observacion: observacion,
+  })
+  if (error) throw error
+}
+
 export async function listarIngresos() {
   const { data, error } = await supabase
     .from('ingresos')
     .select(SELECT_MOVIMIENTO)
     .order('created_at', { ascending: false })
-    .limit(100)
-  if (error) throw error
-  return data
-}
-
-export async function crearIngreso(payload) {
-  const { data, error } = await supabase.from('ingresos').insert(payload).select(SELECT_MOVIMIENTO).single()
+    .limit(1000)
   if (error) throw error
   return data
 }
 
 /**
- * Inserta muchos ingresos de una vez (carga inicial de stock desde Excel).
- * En lotes de 300: una sola fila por INSERT no tiene límite práctico aquí,
- * pero evita mandar de una un archivo enorme en un solo request.
+ * Inserta muchos ingresos de una vez — una guía con varios materiales
+ * (IngresoFormModal.vue) o la carga inicial de stock desde Excel. En lotes
+ * de 300: una sola fila por INSERT no tiene límite práctico aquí, pero
+ * evita mandar de una un archivo enorme en un solo request.
  */
 export async function crearIngresosMasivo(filas) {
   const LOTE = 300
@@ -181,39 +191,12 @@ export async function crearIngresosMasivo(filas) {
   return creados
 }
 
-/** Ingresos de materiales que necesitan conversión y todavía no tienen sus
- * medidas cargadas (típicamente el stock inicial, subido antes de que
- * existiera esta columna) — para exportar, completar en Excel y reimportar. */
-export async function listarIngresosSinMedidas() {
-  const { data, error } = await supabase
-    .from('ingresos')
-    .select(
-      'id, fecha, cantidad, documento_referencia, materiales!inner(codigo, descripcion, unidad, tipo_conversion), almacenes(codigo, nombre)'
-    )
-    .neq('materiales.tipo_conversion', 'ninguna')
-    .is('factor_conversion', null)
-    .order('fecha')
-  if (error) throw error
-  return data
-}
-
-/** Le agrega ancho/largo a un ingreso ya existente — no toca cantidad ni
- * cantidad_restante, así que no hay riesgo de descuadrar stock/kardex. */
-export async function actualizarMedidasIngreso(id, { ancho, largo }) {
-  const { error } = await supabase.rpc('fn_actualizar_medidas_ingreso', {
-    p_ingreso_id: id,
-    p_ancho: ancho ?? null,
-    p_largo: largo ?? null,
-  })
-  if (error) throw error
-}
-
 export async function listarAjustes() {
   const { data, error } = await supabase
     .from('ajustes')
     .select(SELECT_MOVIMIENTO)
     .order('created_at', { ascending: false })
-    .limit(100)
+    .limit(1000)
   if (error) throw error
   return data
 }
@@ -224,15 +207,21 @@ export async function crearAjuste(payload) {
   return data
 }
 
+// usuarios(id, nombre) es quien REGISTRÓ la salida (el almacenero que hizo
+// la entrega física) — no el supervisor que la pidió. Ese viene aparte, vía
+// vale_detalle -> vales.supervisor_id, igual que ya lo arma Kardex
+// (kardexService.js) — una salida sin vale (entrega manual/directa) no
+// tiene nada acá, y queda como "—".
 const SELECT_SALIDA =
-  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), frentes(id, codigo, nombre), contratos(id, codigo, nombre), usuarios(id, nombre)'
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), frentes(id, codigo, nombre), contratos(id, codigo, nombre), usuarios(id, nombre), ' +
+  'vale_detalle(vale_id, vales(numero, usuarios!supervisor_id(nombre)))'
 
 export async function listarSalidas() {
   const { data, error } = await supabase
     .from('salidas')
     .select(SELECT_SALIDA)
     .order('created_at', { ascending: false })
-    .limit(100)
+    .limit(1000)
   if (error) throw error
   return data
 }

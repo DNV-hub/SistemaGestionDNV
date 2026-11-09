@@ -13,7 +13,7 @@ export const FOTO_TIPOS = {
 
 // Ancho máximo y calidad JPEG al comprimir — igual que el RDC original, para
 // que el tamaño de archivo que llega a SharePoint no cambie.
-export const COMPRESION = { maxAncho: 1600, calidad: 0.7 }
+const COMPRESION = { maxAncho: 1600, calidad: 0.7 }
 
 /** Nombre de archivo por tipo. Redline es uno solo por envío (no lleva
  * índice); el resto numera correlativamente dentro de su categoría. */

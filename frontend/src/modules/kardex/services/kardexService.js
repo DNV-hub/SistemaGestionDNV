@@ -37,7 +37,7 @@ export async function listarKardexParaExportar(filtros = {}) {
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')
-    .select('id, codigo, descripcion, unidad')
+    .select('id, codigo, descripcion, unidad, observaciones')
     .eq('estado', 'activo')
     .order('codigo')
   if (error) throw error

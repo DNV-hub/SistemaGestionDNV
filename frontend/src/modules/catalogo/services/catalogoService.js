@@ -3,7 +3,7 @@ import { supabase } from '../../../services/supabaseClient'
 const SELECT_MATERIAL = '*, categorias(id, nombre), nombres_edp(id, nombre)'
 
 export async function listarMateriales() {
-  const { data, error } = await supabase.from('materiales').select(SELECT_MATERIAL).order('codigo')
+  const { data, error } = await supabase.from('materiales').select(SELECT_MATERIAL).order('descripcion')
   if (error) throw error
   return data
 }
@@ -29,6 +29,22 @@ export async function crearCategoriasEnLote(payloads) {
 
 export async function listarNombresEdp() {
   const { data, error } = await supabase.from('nombres_edp').select('*').order('nombre')
+  if (error) throw error
+  return data
+}
+
+/** Agrega una descripción por guía a un nombre EDP (ya existente → se ignora). */
+export async function crearGuiaEdp(payload) {
+  const { error } = await supabase.from('nombres_edp_guias').insert(payload)
+  if (error && error.code !== '23505') throw error
+}
+
+/** Descripciones por guía de todos los nombres EDP (opciones de sugerencia). */
+export async function listarGuiasEdp() {
+  const { data, error } = await supabase
+    .from('nombres_edp_guias')
+    .select('nombre_edp_id, descripcion, nombres_edp(nombre)')
+    .limit(5000)
   if (error) throw error
   return data
 }

@@ -4,7 +4,7 @@ import { ENVIO, ESTADO } from '../services/rdcDb'
 import * as repo from '../services/rdcRepository'
 import { descargarCatalogos, eliminarReporteRemoto, listarReportes, obtenerReporteCompleto } from '../services/rdcService'
 import { iniciarSincronizacionAutomatica, sincronizar } from '../services/rdcSync'
-import { PERSONAL_INDIRECTO_SALA_ELECTRICA } from '../services/rdcRepository'
+import { PERSONAL_INDIRECTO_SALA_ELECTRICA, hoyLocal } from '../services/rdcRepository'
 import { SECTOR_SALA_ELECTRICA } from '../services/rdcConstantes'
 
 // Store del módulo RDC.
@@ -33,6 +33,33 @@ let colaGuardado = Promise.resolve()
 // volverlo reactivo sin ninguna razón.
 let detenerSincronizacion = null
 
+// El frente elegido en el Dashboard del RDC (ver RdcDashboardView.vue) — un
+// supervisor rota de frente seguido, así que esto es lo que de verdad
+// cambia, no quién es (ya tiene su propia cuenta). Se guarda por
+// dispositivo, no por servidor: mismo criterio que tema.js/menuLateral.js.
+// Al crear un reporte nuevo, este valor manda sobre el "arrastre" del
+// último reporte (ver nuevo() más abajo) — así, una vez elegido acá, Paso 1
+// del formulario no necesita volver a preguntarlo.
+const CLAVE_FRENTE_ACTUAL = (usuarioId) => `dnv-rdc-frente-actual-${usuarioId}`
+function leerFrenteActualGuardado(usuarioId) {
+  if (!usuarioId) return null
+  try {
+    return localStorage.getItem(CLAVE_FRENTE_ACTUAL(usuarioId)) || null
+  } catch {
+    return null
+  }
+}
+function guardarFrenteActual(usuarioId, frenteId) {
+  if (!usuarioId) return
+  try {
+    if (frenteId) localStorage.setItem(CLAVE_FRENTE_ACTUAL(usuarioId), frenteId)
+    else localStorage.removeItem(CLAVE_FRENTE_ACTUAL(usuarioId))
+  } catch {
+    // localStorage bloqueado (modo privado): sin recordar el frente entre
+    // sesiones, sin problema — igual se puede elegir cada vez.
+  }
+}
+
 export const useRdcStore = defineStore('rdc', {
   state: () => ({
     catalogos: null,
@@ -44,22 +71,56 @@ export const useRdcStore = defineStore('rdc', {
     sincronizando: false,
     ultimaSincronizacion: null,
     error: '',
+    frenteActualId: null,
   }),
 
   getters: {
+    /** El frente elegido en el Dashboard, tal como lo tiene el catálogo
+     * (código, nombre, si tiene Control de sostenimiento activo…). null
+     * mientras no se haya elegido ninguno todavía. */
+    frenteActual: (state) => (state.catalogos?.frentes ?? []).find((f) => f.id === state.frenteActualId) ?? null,
+
     /** Los catálogos vinieron de una carga previa y todavía no se pudieron
      * refrescar en esta sesión. La interfaz lo avisa para que nadie se extrañe
      * de no ver un frente creado hoy. */
     hayPendientes: (state) =>
       state.reportes.some((r) => r.estado === ESTADO.FINALIZADO && (r.estadoSupabase !== ENVIO.ENVIADO || r.estadoSharepoint !== ENVIO.ENVIADO)),
 
+    /** Borradores de días anteriores que nunca se terminaron de enviar — el
+     * de HOY se excluye a propósito, todavía se está llenando. `hayPendientes`
+     * (arriba) no los detecta: solo mira reportes que ya llegaron a
+     * "Finalizado" y están esperando salir; un borrador nunca finalizado no
+     * pasa por ahí y se puede quedar así para siempre sin que nada lo avise —
+     * es justo lo que le pasó a varios supervisores. */
+    borradoresViejos: (state) => {
+      const hoy = hoyLocal()
+      return state.reportes
+        .filter((r) => r.estado === ESTADO.BORRADOR && r.fecha < hoy)
+        .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    },
+
     esSalaElectrica: (state) =>
       !!state.actual && state.catalogos?.sectores?.find((s) => s.id === state.actual.sectorId)?.nombre === SECTOR_SALA_ELECTRICA,
 
-    frentesDelSector: (state) => {
-      if (!state.actual?.sectorId) return state.catalogos?.frentes ?? []
-      return (state.catalogos?.frentes ?? []).filter((f) => f.sector_id === state.actual.sectorId)
+    /** El Sector ya no se elige a mano (era redundante con el catálogo de
+     * Frentes, que ya lo tiene cargado) — se deriva del Frente elegido. Esta
+     * lista sale ordenada por sector y luego por nombre, con el sector como
+     * prefijo de cada opción, para que siga siendo fácil de ubicar en el
+     * selector ahora que ya no hay un sector eligiéndose primero para
+     * acortarla. */
+    frentesOrdenados: (state) => {
+      const nombreSector = (id) => state.catalogos?.sectores?.find((s) => s.id === id)?.nombre ?? ''
+      return [...(state.catalogos?.frentes ?? [])].sort((a, b) => {
+        const sa = nombreSector(a.sector_id)
+        const sb = nombreSector(b.sector_id)
+        return sa.localeCompare(sb) || a.nombre.localeCompare(b.nombre)
+      })
     },
+
+    /** El sector de un frente, tal como lo tiene cargado el catálogo de
+     * Frentes — de acá sale el sectorId del reporte, nunca de una elección
+     * manual aparte. */
+    sectorIdDeFrente: (state) => (frenteId) => state.catalogos?.frentes?.find((f) => f.id === frenteId)?.sector_id ?? null,
 
     /** El registro de rdc_supervisores vinculado a la cuenta que está
      * conectada ahora — null para quien no es supervisor de campo
@@ -80,6 +141,10 @@ export const useRdcStore = defineStore('rdc', {
         this.catalogos = await repo.leerCatalogos()
         await this.listar()
         this.sinCatalogos = !(await repo.hayCatalogos())
+        if (this.frenteActualId === null) {
+          const auth = useAuthStore()
+          this.frenteActualId = leerFrenteActualGuardado(auth.perfil?.id) ?? this.reportes[0]?.frenteId ?? null
+        }
         // Refrescar catálogos es "mejor si se puede", nunca un requisito: si no
         // hay señal se sigue trabajando con la copia local.
         this.refrescarCatalogos().catch(() => {})
@@ -105,12 +170,47 @@ export const useRdcStore = defineStore('rdc', {
       detenerSincronizacion = iniciarSincronizacionAutomatica(() => this.catalogos, { intervaloMinutos: 2 })
     },
 
+    /** Lo llama el botón "Cambiar" del Dashboard. Queda recordado en este
+     * dispositivo para la próxima vez que se abra el módulo. */
+    elegirFrenteActual(frenteId) {
+      const auth = useAuthStore()
+      this.frenteActualId = frenteId
+      guardarFrenteActual(auth.perfil?.id, frenteId)
+    },
+
     async refrescarCatalogos() {
       if (!navigator.onLine) return
       const catalogos = await descargarCatalogos()
       await repo.guardarCatalogos(catalogos)
       this.catalogos = await repo.leerCatalogos()
       this.sinCatalogos = false
+      await this.corregirSectorDelActual()
+    },
+
+    /**
+     * Bug real: un frente creado sin sector_id (Planeamiento se olvidó de
+     * elegirlo) deja a cualquier borrador que ya lo tenía seleccionado con
+     * sectorId null para siempre — aunque después se corrija el frente en
+     * el Sistema, el borrador ya guardó ese null y `alCambiarFrente()`
+     * (PasoDatos.vue) solo vuelve a calcularlo si el supervisor TOCA el
+     * selector de Frente de nuevo, cosa que no tiene por qué hacer si ya
+     * lo había elegido bien. Se llama desde los dos momentos en que algo
+     * relevante puede haber cambiado — recién se abre el borrador (puede
+     * que los catálogos ya estuvieran frescos) o recién se refrescan los
+     * catálogos (puede que el borrador ya estuviera abierto) — porque
+     * `refrescarCatalogos()` no espera a `abrir()` ni al revés, y cualquiera
+     * de los dos puede terminar segundo. Sin esto, el supervisor queda
+     * bloqueado en el Resumen ("falta completar: el sector") sin ninguna
+     * acción que lo arregle, más que un colega de Sistema tocando
+     * IndexedDB a mano.
+     */
+    async corregirSectorDelActual() {
+      if (!this.actual || this.actual.estado !== ESTADO.BORRADOR || !this.actual.frenteId) return
+      const sectorReal = this.sectorIdDeFrente(this.actual.frenteId)
+      if (sectorReal && sectorReal !== this.actual.sectorId) {
+        this.actual.sectorId = sectorReal
+        await this.guardar()
+      }
     },
 
     /**
@@ -158,23 +258,32 @@ export const useRdcStore = defineStore('rdc', {
      * trabajo del día (metrados, elementos, bitácora, stand by,
      * programación, observaciones...) — ver crearBorradorDesde() para por
      * qué esto NO es el comportamiento por defecto de todos los demás. */
-    async nuevo() {
+    async nuevo({ fecha = null } = {}) {
       const auth = useAuthStore()
       const ultimo = this.reportes[0]
 
+      // El frente elegido en el Dashboard manda por sobre el "arrastre" del
+      // último reporte — es la fuente de verdad una vez que existe (recién
+      // rotó de frente, por ejemplo, y todavía no hizo ningún reporte ahí).
+      const frenteId = this.frenteActualId ?? ultimo?.frenteId ?? null
       const reporte =
         auth.perfil?.rdc_heredar_reporte_completo && ultimo
           ? repo.crearBorradorDesde(ultimo, { creadoPor: auth.perfil?.id })
           : repo.crearBorrador({
               creadoPor: auth.perfil?.id,
               supervisorId: this.supervisorPropio?.id ?? ultimo?.supervisorId ?? null,
-              sectorId: ultimo?.sectorId ?? null,
-              frenteId: ultimo?.frenteId ?? null,
+              // Derivado del frente heredado, no del sectorId de ayer — si el
+              // frente cambió de sector desde entonces, esto ya lo refleja.
+              sectorId: this.sectorIdDeFrente(frenteId),
+              frenteId,
               capatazId: ultimo?.capatazId ?? null,
               personalPrevio: ultimo?.personal,
               maquinariaPrevia: ultimo?.maquinaria,
             })
 
+      // Los supervisores reportan el día anterior: "Crear" en la tarjeta de
+      // ayer tiene que crear el reporte de AYER, no el de hoy.
+      if (fecha) reporte.fecha = fecha
       this.actual = await repo.guardar(reporte)
       await this.listar()
       return this.actual
@@ -215,6 +324,7 @@ export const useRdcStore = defineStore('rdc', {
       // salir, en vez de conservarlo.
       await colaGuardado
       this.actual = (await repo.obtener(id)) ?? null
+      await this.corregirSectorDelActual()
       return this.actual
     },
 

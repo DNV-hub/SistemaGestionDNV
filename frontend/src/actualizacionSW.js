@@ -28,7 +28,7 @@ if ('serviceWorker' in navigator) {
   // mientras la app sigue abierta hace que el banner de "Hay una versión
   // nueva" aparezca solo, sin depender de que alguien recargue a mano.
   navigator.serviceWorker.ready.then((registration) => {
-    setInterval(() => registration.update(), 5 * 60 * 1000)
+    setInterval(() => registration.update(), 2 * 60 * 1000)
   })
 }
 

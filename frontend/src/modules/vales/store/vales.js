@@ -8,12 +8,14 @@ import {
   eliminarLinea,
   rechazarLinea,
   cancelarLinea,
+  cerrarLinea,
   aprobarLinea,
   liberarReserva,
   listarReservasDeVale,
   obtenerReservaActivaDeLinea,
-  registrarSalida,
+  registrarEntregaMultilote,
   listarFrentesActivos,
+  listarFrentesParaDevolucion,
   listarMaterialesActivos,
   listarAlmacenesActivos,
   listarStockDisponible,
@@ -26,6 +28,7 @@ export const useValesStore = defineStore('vales', {
     vales: [],
     valeActual: null,
     frentesActivos: [],
+    frentesParaDevolucion: [], // activos + paralizados — ver listarFrentesParaDevolucion
     materialesActivos: [],
     almacenesActivos: [],
     supervisoresActivos: [],
@@ -60,14 +63,25 @@ export const useValesStore = defineStore('vales', {
       }
     },
 
+    /** Se pide aparte (no en cargarLista) porque solo la pantalla de
+     * Devolución la necesita — pedir material nuevo y transferir siguen
+     * restringidos a frentes activos nomás. */
+    async cargarFrentesParaDevolucion() {
+      this.frentesParaDevolucion = await listarFrentesParaDevolucion()
+    },
+
     async cargarDetalle(id) {
       this.cargando = true
       this.error = ''
       try {
+        // Materiales y almacenes activos casi no cambian: se piden solo la
+        // primera vez (cargarLista también los trae). Antes se descargaban de
+        // nuevo en CADA vale que se abría, y con la bandeja del almacenero —
+        // donde se saltan vales uno tras otro — eso se notaba.
         const [vale, materialesActivos, almacenesActivos] = await Promise.all([
           obtenerVale(id),
-          listarMaterialesActivos(),
-          listarAlmacenesActivos(),
+          this.materialesActivos.length ? this.materialesActivos : listarMaterialesActivos(),
+          this.almacenesActivos.length ? this.almacenesActivos : listarAlmacenesActivos(),
         ])
         this.valeActual = vale
         this.materialesActivos = materialesActivos
@@ -162,10 +176,27 @@ export const useValesStore = defineStore('vales', {
       }
     },
 
-    async aprobarLinea({ vale_detalle_id, almacen_id, cantidad, usuario_id }) {
+    /** `recargar: false` deja el refresco del detalle (y del estado del vale)
+     * a quien llama — para aprobar varias líneas seguidas sin volver a
+     * descargar el vale, sus alertas y la comparación con Procura entre una
+     * línea y la siguiente (eso era lo que hacía lenta la respuesta de un
+     * vale: ~2 s por línea). */
+    async aprobarLinea({ vale_detalle_id, almacen_id, cantidad, usuario_id, recargar = true }) {
       await aprobarLinea({ vale_detalle_id, almacen_id, cantidad, usuario_id })
+      if (!recargar) return
       await this.recargarDetalle()
       await this._actualizarEstadoValeSiCorresponde()
+    },
+
+    /** Red de seguridad: si todas las líneas ya se respondieron pero el vale
+     * se quedó en Enviado / En revisión (el último paso del flujo falló o se
+     * cortó), lo pone en su estado real. No hace nada si el vale está bien. */
+    async reconciliarEstado() {
+      const vale = this.valeActual
+      if (!vale?.lineas?.length) return false
+      const antes = vale.estado
+      await this._actualizarEstadoValeSiCorresponde()
+      return this.valeActual?.estado !== antes
     },
 
     async rechazarLinea(lineaId) {
@@ -229,6 +260,18 @@ export const useValesStore = defineStore('vales', {
       await this.recargarDetalle()
     },
 
+    /**
+     * Almacén decide no entregar (más) de una línea aprobada: la base libera
+     * la reserva y cierra la línea en un solo paso — Cancelado si no se
+     * entregó nada, Entregado con lo entregado si ya salió una parte — y
+     * recalcula el vale. Es la única forma de soltar material de un vale.
+     */
+    async cerrarLinea(linea, motivo) {
+      await cerrarLinea(linea.id, motivo)
+      await this.recargarDetalle()
+      this._actualizarEnLista(this.valeActual)
+    },
+
     async obtenerReservaDeLinea(lineaId) {
       return obtenerReservaActivaDeLinea(lineaId)
     },
@@ -239,17 +282,21 @@ export const useValesStore = defineStore('vales', {
      * físico, escribe en kardex y avanza la reserva/línea/vale
      * automáticamente — acá solo insertamos la fila y refrescamos.
      */
-    async registrarEntrega({ linea, reserva, cantidad, documento_referencia, ingreso_id, usuario_id }) {
-      await registrarSalida({
+    /** Registra la entrega física (parcial o total) de una línea reservada,
+     * repartida entre uno o más lotes en una sola llamada atómica. Los
+     * triggers de `salidas` descuentan stock, escriben el kardex y avanzan
+     * la reserva/línea/vale por cada lote — acá solo se manda el array y
+     * se refresca el detalle. */
+    async registrarEntrega({ linea, reserva, documento_referencia, asignaciones, usuario_id }) {
+      await registrarEntregaMultilote({
         material_id: linea.material_id,
         almacen_id: reserva.almacen_id,
-        cantidad,
-        documento_referencia,
-        ingreso_id: ingreso_id ?? null,
         frente_id: this.valeActual.frente_id,
         vale_detalle_id: linea.id,
         reserva_id: reserva.id,
         usuario_id,
+        documento_referencia,
+        asignaciones,
       })
       await this.recargarDetalle()
     },
@@ -275,7 +322,6 @@ export const useValesStore = defineStore('vales', {
         else {
           mapa.set(s.material_id, {
             id: s.material_id,
-            codigo: s.materiales.codigo,
             descripcion: s.materiales.descripcion,
             unidad: s.materiales.unidad,
             disponible: cantidad,

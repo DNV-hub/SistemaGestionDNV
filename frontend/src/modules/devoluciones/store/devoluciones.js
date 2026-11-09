@@ -4,6 +4,8 @@ import {
   listarDevoluciones,
   recibirDevolucion,
   rechazarDevolucion,
+  reevaluarDevolucion,
+  anularRecepcionDevolucion,
 } from '../services/devolucionesService'
 
 export const useDevolucionesStore = defineStore('devoluciones', {
@@ -40,6 +42,16 @@ export const useDevolucionesStore = defineStore('devoluciones', {
 
     async rechazar(payload) {
       await rechazarDevolucion(payload)
+      await this.cargar()
+    },
+
+    async reevaluar(payload) {
+      await reevaluarDevolucion(payload)
+      await this.cargar()
+    },
+
+    async anularRecepcion(payload) {
+      await anularRecepcionDevolucion(payload)
       await this.cargar()
     },
   },

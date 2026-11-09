@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { ESTADO } from '../services/rdcDb'
+import { hoyLocal } from '../services/rdcRepository'
+import { fmtHm, nombreDe, partidasEjecutadas, textoWhatsapp, totalPersonal, totalStandbyMin } from '../services/rdcCalculos'
 import PasoDatos from '../components/PasoDatos.vue'
 import PasoJornada from '../components/PasoJornada.vue'
 import PasoMetrados from '../components/PasoMetrados.vue'
@@ -11,39 +13,66 @@ import PasoResumen from '../components/PasoResumen.vue'
 import '../estilos/rdc-tema.css'
 import '../estilos/tabler-rdc.css'
 import '../estilos/complementos.css'
+import '../estilos/rdc-referencia.css'
 
 const rdc = useRdcStore()
 const route = useRoute()
 const router = useRouter()
 
-// Las mismas cinco pestañas, en el mismo orden y con los mismos iconos que el
-// RDC que los supervisores ya usan.
+// Los mismos cinco pasos, en el mismo orden, ahora como pestañas numeradas.
 const PASOS = [
-  { clave: 'datos', titulo: 'Datos', icono: 'ti-id-badge', componente: PasoDatos },
-  { clave: 'jornada', titulo: 'Jornada', icono: 'ti-checklist', componente: PasoJornada },
-  { clave: 'metrados', titulo: 'Metrados', icono: 'ti-ruler-measure', componente: PasoMetrados },
-  { clave: 'obs', titulo: 'Obs/Prog', icono: 'ti-note', componente: PasoObservaciones },
-  { clave: 'resumen', titulo: 'Resumen', icono: 'ti-send', componente: PasoResumen },
+  { clave: 'datos', titulo: 'Datos', componente: PasoDatos },
+  { clave: 'jornada', titulo: 'Jornada', componente: PasoJornada },
+  { clave: 'metrados', titulo: 'Metrados', componente: PasoMetrados },
+  { clave: 'obs', titulo: 'Obs/Prog', componente: PasoObservaciones },
+  { clave: 'resumen', titulo: 'Resumen', componente: PasoResumen },
 ]
 
 const paso = ref(0)
 const listo = ref(false)
 
-onMounted(async () => {
+// Función, no un onMounted suelto: Vue Router reutiliza este componente al
+// navegar entre dos rutas 'rdc-editar' con distinto :id (mismo registro de
+// ruta, solo cambia el parámetro) — ej. el aviso de "ya existe un reporte
+// duplicado" (ver PasoDatos.vue → irADuplicado) hace exactamente eso al
+// adoptar el otro reporte. Sin esto, la URL cambiaba de verdad pero la
+// pantalla se quedaba congelada mostrando el reporte VIEJO (mismo paso,
+// mismo aviso de duplicado pegado) — parecía que el botón no hacía nada.
+async function cargarReporte() {
+  listo.value = false
   if (!rdc.catalogos) await rdc.iniciar()
   const id = route.params.id
   if (id) await rdc.abrir(id)
-  if (!rdc.actual) {
-    const nuevo = await rdc.nuevo()
-    router.replace({ name: 'rdc-editar', params: { id: nuevo.id } })
+  if (!rdc.actual || rdc.actual.id !== id) {
+    // /rdc/nuevo crea un borrador sin preguntar nada — hasta acá, siempre
+    // uno nuevo. El problema: si el navegador recupera la pestaña quedada
+    // en esa URL (Android mata pestañas en segundo plano todo el tiempo) y
+    // ESTE dispositivo ya tenía un reporte de hoy (borrador o ya
+    // finalizado), se creaba un SEGUNDO reporte para la misma fecha — el
+    // primero en sincronizar se queda con el cupo (supervisor+frente+fecha
+    // es único) y el otro falla para siempre con "ya existe un reporte",
+    // sin que reintentar lo arregle. Reabrir lo que ya existe de hoy, en
+    // vez de crear algo nuevo a ciegas, cierra esa puerta.
+    const deHoy = rdc.reportes.find((r) => r.fecha === hoyLocal())
+    if (deHoy?.estado === ESTADO.FINALIZADO) {
+      router.replace({ name: 'rdc-detalle', params: { id: deHoy.id } })
+      return
+    }
+    if (deHoy) await rdc.abrir(deHoy.id)
+    else await rdc.nuevo()
+    router.replace({ name: 'rdc-editar', params: { id: rdc.actual.id } })
+    return
   }
+  paso.value = 0
   listo.value = true
-})
+}
+onMounted(cargarReporte)
+watch(() => route.params.id, cargarReporte)
 
 const componenteActual = computed(() => PASOS[paso.value].componente)
-const esUltimoPaso = computed(() => paso.value === PASOS.length - 1)
 
 function ir(indice) {
+  if (indice < 0 || indice >= PASOS.length) return
   paso.value = indice
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -52,8 +81,7 @@ function cerrar() {
   router.push({ name: 'rdc' })
 }
 
-// La lista (docs/mockups/02-rdc-lista.html) ya no tiene un botón de borrar
-// en cada tarjeta — el mockup no lo muestra ahí. Este es su lugar nuevo:
+// La lista ya no tiene un botón de borrar en cada fila. Este es su lugar:
 // solo tiene sentido borrar mientras el reporte sigue siendo un borrador
 // (uno ya finalizado es registro histórico, no se borra).
 async function borrar() {
@@ -68,7 +96,7 @@ async function borrar() {
   }
 }
 
-// El deslizamiento lateral entre pestañas es parte de cómo se usa hoy en el
+// El deslizamiento lateral entre pasos es parte de cómo se usa hoy en el
 // frente: se pasa de paso con el pulgar, sin apuntar a un botón chico.
 let inicioX = 0
 let inicioY = 0
@@ -83,226 +111,211 @@ function alSoltar(e) {
   if (dx < 0 && paso.value < PASOS.length - 1) ir(paso.value + 1)
   else if (dx > 0 && paso.value > 0) ir(paso.value - 1)
 }
+
+// ---- Columna fija de la derecha (en todos los pasos) ----
+const reporte = computed(() => rdc.actual)
+const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
+const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
+const ejecutadas = computed(() => (reporte.value ? partidasEjecutadas(reporte.value) : []))
+const personal = computed(() => (reporte.value ? totalPersonal(reporte.value) : 0))
+const standby = computed(() => (reporte.value ? fmtHm(totalStandbyMin(reporte.value)) : '0h 00m'))
+const textoWsp = computed(() => (reporte.value ? textoWhatsapp(reporte.value, rdc.catalogos) : ''))
+
+const antesDeEnviar = computed(() => {
+  const r = reporte.value
+  if (!r) return []
+  return [
+    { etiqueta: 'Capataz', ok: !!r.capatazId },
+    { etiqueta: 'Supervisor responsable', ok: !!r.supervisorId },
+    { etiqueta: 'Personal presente', ok: personal.value > 0 },
+    { etiqueta: 'Hitos de jornada', ok: (r.hitos ?? []).length > 0 },
+    { etiqueta: 'Metrados ejecutados', ok: ejecutadas.value.length > 0 },
+  ]
+})
+const pendientes = computed(() => antesDeEnviar.value.filter((c) => !c.ok).length)
+
+const copiado = ref(false)
+async function copiar() {
+  await navigator.clipboard.writeText(textoWsp.value)
+  copiado.value = true
+  setTimeout(() => (copiado.value = false), 2000)
+}
+async function compartir() {
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: textoWsp.value, title: 'Reporte Diario de Campo' })
+      return
+    } catch {
+      /* el usuario canceló la hoja de compartir — no es un error */
+    }
+  }
+  await copiar()
+}
 </script>
 
 <template>
-  <div class="rdc-app formulario">
-    <header class="appbar">
-      <button type="button" class="icon-btn" aria-label="Cerrar y volver a mis reportes" @click="cerrar">
-        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5.5 5.5l11 11M16.5 5.5l-11 11"/></svg>
-      </button>
-      <div class="appbar-title">
-        Reporte diario
-        <span v-if="rdc.actual?.esCorreccion" class="marca-correccion">Corrección</span>
+  <div class="rdc-app rdc-ref">
+    <div class="rx-pagina sin-pad">
+      <div class="rx-hd">
+        <div class="rx-row" style="gap: 14px">
+          <button type="button" class="rb" aria-label="Cerrar y volver a mis reportes" @click="cerrar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            Cerrar
+          </button>
+          <div>
+            <div class="rx-titulo">
+              {{ reporte ? nombre('frentes', reporte.frenteId) : 'Reporte diario' }}
+              <span v-if="reporte?.esCorreccion" class="marca-correccion">Corrección</span>
+            </div>
+            <div class="rmu rx-sub">
+              <span class="rx-dot"></span>Guardado automático · {{ reporte ? fmtFecha(reporte.fecha) : '' }}
+            </div>
+          </div>
+        </div>
+        <button v-if="reporte?.estado === ESTADO.BORRADOR" type="button" class="rb" aria-label="Borrar este borrador" @click="borrar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" /></svg>
+          Borrar borrador
+        </button>
       </div>
-      <div class="save-state">
-        <span class="save-dot"></span>
-        <span>Guardado</span>
-      </div>
-      <button
-        v-if="rdc.actual?.estado === ESTADO.BORRADOR"
-        type="button"
-        class="icon-btn"
-        aria-label="Borrar este borrador"
-        @click="borrar"
-      >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4.5a1 1 0 011-1h2a1 1 0 011 1V6m2 0-.7 10.5a1.5 1.5 0 01-1.5 1.4H7.2a1.5 1.5 0 01-1.5-1.4L5 6"/></svg>
-      </button>
-    </header>
 
-    <div class="progress">
-      <div class="seg-row">
-        <div v-for="(p, i) in PASOS" :key="p.clave" class="seg" :class="{ done: i < paso, now: i === paso }"></div>
+      <div class="rx-pasos" role="tablist" aria-label="Pasos del reporte">
+        <button
+          v-for="(p, i) in PASOS"
+          :key="p.clave"
+          type="button"
+          role="tab"
+          class="rst"
+          :class="{ on: paso === i, done: i < paso }"
+          :aria-selected="paso === i"
+          @click="ir(i)"
+        >
+          <span class="rn">
+            <svg v-if="i < paso" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            <template v-else>{{ i + 1 }}</template>
+          </span>
+          {{ p.titulo }}
+        </button>
       </div>
-      <div class="prog-labels">
-        <span class="step">{{ PASOS[paso].titulo }}</span>
-        <span class="of">Paso {{ paso + 1 }} de {{ PASOS.length }}</span>
+
+      <div class="rx-two">
+        <div class="rx-main" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
+          <p v-if="!listo" class="empty-msg">Cargando…</p>
+          <component :is="componenteActual" v-else-if="reporte" />
+
+          <!-- Anterior sigue disponible hasta enviar, incluso en el último
+               paso (Resumen) — ahí no hay "Siguiente" porque ese paso ya tiene
+               su propio botón "Terminado y Enviar" adentro. -->
+          <div v-if="listo" class="rx-row rx-nav">
+            <button type="button" class="rb" :class="{ off: paso === 0 }" :disabled="paso === 0" @click="ir(paso - 1)">← Anterior</button>
+            <button v-if="paso < PASOS.length - 1" type="button" class="rb pri" style="padding: 0 26px" @click="ir(paso + 1)">Siguiente →</button>
+          </div>
+        </div>
+
+        <aside v-if="listo && reporte" class="rx-side" aria-label="Resumen del día">
+          <div class="rp" style="gap: 16px">
+            <div class="rsh">RESUMEN DEL DÍA</div>
+            <div class="rmu rx-sub">{{ fmtFecha(reporte.fecha) }} · {{ nombre('frentes', reporte.frenteId) }} · {{ nombre('supervisores', reporte.supervisorId) }}</div>
+            <div class="rx-mini3">
+              <div><div class="rmu rx-mini-l">Personal</div><div class="rx-mini-v">{{ personal }}</div></div>
+              <div><div class="rmu rx-mini-l">Stand By</div><div class="rx-mini-v">{{ standby }}</div></div>
+              <div><div class="rmu rx-mini-l">Metrados</div><div class="rx-mini-v">{{ ejecutadas.length }}</div></div>
+            </div>
+            <div>
+              <div class="rl">Antes de enviar · {{ pendientes }} pendientes</div>
+              <div v-for="c in antesDeEnviar" :key="c.etiqueta" class="rx-check">
+                <svg v-if="c.ok" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22A55B" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l2.7 2.7L16 9.8" /></svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9AA0AA" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /></svg>
+                <span>{{ c.etiqueta }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rp" style="gap: 14px">
+            <div class="rx-row" style="justify-content: space-between">
+              <div class="rsh">REPORTE WHATSAPP</div>
+              <div class="rx-row" style="gap: 8px">
+                <button type="button" class="rb sm" @click="compartir">Compartir</button>
+                <button type="button" class="rb sm" @click="copiar">{{ copiado ? 'Copiado ✓' : 'Copiar' }}</button>
+              </div>
+            </div>
+            <pre class="rx-pre">{{ textoWsp }}</pre>
+          </div>
+        </aside>
       </div>
-    </div>
-
-    <main class="content" @touchstart.passive="alTocar" @touchend.passive="alSoltar">
-      <p v-if="!listo" class="empty-msg">Cargando…</p>
-      <component :is="componenteActual" v-else-if="rdc.actual" />
-    </main>
-
-    <!-- Anterior sigue disponible hasta enviar, incluso en el último paso
-         (Resumen) — ahí no hay "Siguiente" porque ese paso ya tiene su
-         propio botón "Terminado y Enviar" adentro. -->
-    <div class="actionbar">
-      <button type="button" class="btn btn-sec" :disabled="paso === 0" @click="ir(paso - 1)">Anterior</button>
-      <button v-if="!esUltimoPaso" type="button" class="btn btn-pri" @click="ir(paso + 1)">
-        Siguiente
-        <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5h10M9.5 4.5l4 4-4 4"/></svg>
-      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Mismos nombres/valores que RdcListaView (docs/mockups/01-rdc-formulario.html):
-   paleta propia, con guión para no chocar con las variables sin guión de
-   rdc-tema.css. El formulario es un flujo de tarea: sin la píldora
-   "Reporte Diario de Campo", sin barra de pestañas abajo (ya la oculta
-   routes.js con ocultarTabbar), cabecera propia con una X que cierra el
-   flujo entero (no es "paso atrás", eso lo hacen Anterior/Siguiente). */
-.rdc-app.formulario {
-  --bg: #f4f5f7;
-  --card: #ffffff;
-  --border-lista: #e4e7ec;
-  --text-2: #667085;
-  --text-3: #98a2b3;
-  --ok: #059669;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  height: calc(100dvh - env(safe-area-inset-top));
-  background: var(--bg);
-  /* En el celular esto no hace nada (la pantalla ya es más angosta que
-     720px); en escritorio evita que el formulario se estire de punta a
-     punta de la ventana — mismo tratamiento que ya tiene RdcListaView. */
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.appbar {
-  height: 56px;
-  flex-shrink: 0;
-  background: var(--card);
-  border-bottom: 1px solid var(--border-lista);
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 4px;
-  gap: 4px;
-}
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
-.appbar-title {
-  flex: 1;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
+.rx-titulo {
+  font-size: 20px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+}
+.rx-sub {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rx-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
 }
 .marca-correccion {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  color: #fff;
-  background: #f5a800;
+  color: #111;
+  background: #f6a800;
   padding: 3px 9px;
   border-radius: 5px;
-  flex-shrink: 0;
 }
-.save-state {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding-right: 8px;
-  flex-shrink: 0;
-}
-.save-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ok);
-}
-.save-state span:last-child {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ok);
-}
-
-.progress {
-  flex-shrink: 0;
-  background: var(--card);
-  border-bottom: 1px solid var(--border-lista);
-  padding: 11px 16px 12px;
-}
-.seg-row {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 9px;
-}
-.seg {
-  flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: #e4e7ec;
-}
-.seg.done,
-.seg.now {
-  background: #f5a800;
-}
-.prog-labels {
-  display: flex;
-  align-items: baseline;
+.rx-nav {
   justify-content: space-between;
 }
-.prog-labels .step {
-  font-size: 14px;
+.rx-mini3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--ln);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.rx-mini3 > div {
+  background: var(--sf);
+  padding: 14px 12px;
+}
+.rx-mini-l {
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
 }
-.prog-labels .of {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-3);
+.rx-mini-v {
+  font-size: 20px;
+  font-weight: 800;
+  margin-top: 4px;
+  white-space: nowrap;
 }
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
-}
-
-.actionbar {
-  flex-shrink: 0;
-  background: var(--card);
-  border-top: 1px solid var(--border-lista);
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  display: flex;
-  gap: 10px;
-}
-.btn {
-  height: 52px;
-  border-radius: 12px;
+.rx-check {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-size: 16px;
+  gap: 10px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  flex: 1;
-  border: none;
-  cursor: pointer;
+  margin-bottom: 10px;
 }
-.btn-sec {
-  background: var(--card);
-  border: 1.5px solid var(--border-lista);
-  color: var(--text-3);
-}
-.btn-sec:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.btn-pri {
-  background: #f5a800;
-  color: #1a1206;
+@media (max-width: 1024px) {
+  .rx-side {
+    position: static;
+    max-width: none;
+    flex-basis: 100%;
+  }
 }
 </style>

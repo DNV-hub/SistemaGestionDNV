@@ -37,6 +37,18 @@ export const CATALOGOS = [
   'partidasEstandar',
   'partidasEdt',
   'pernos',
+  // Estado derivado (perforado/inyectado, ya instalado) de
+  // rdc_reporte_elementos, vía fn_rdc_*_estado — solo trae datos de frentes
+  // con el interruptor frentes.rdc_control_pernos activo (hoy, solo
+  // Barrera 5). Ver PasoMetrados.vue.
+  'pernosEstado',
+  'mallaEstado',
+  'cableEstado',
+  // Previsto/acumulado/saldo por partida EDT (fn_rdc_acumulado_edt) — lo
+  // que PasoMetrados.vue usa para mostrar "Previsto / Acum. a ayer / Saldo"
+  // junto a cada partida digitada. Distinto de 'partidasEdt' (el catálogo
+  // crudo de partidas): esto es el cálculo ya resuelto.
+  'acumuladosEdt',
 ]
 
 // Estados de envío, uno por destino. Son independientes a propósito: un

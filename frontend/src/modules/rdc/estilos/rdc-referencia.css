@@ -1,0 +1,265 @@
+/*
+ * RDC — rediseño según rdc-referencia.html.
+ * Todo cuelga de `.rdc-app.rdc-ref` para no tocar Fotos/Sketch's, que siguen
+ * usando el chrome anterior. Variables de la referencia: --bg --sf --so --ln
+ * --tx --mu. Claro = hex de la referencia; oscuro = tokens de la app.
+ */
+.rdc-app.rdc-ref {
+  --bg: var(--color-bg);
+  --sf: var(--color-surface);
+  --so: var(--color-surface-2);
+  --ln: var(--color-border);
+  --ln2: var(--color-border);
+  --tx: var(--color-text);
+  --mu: var(--color-text-muted);
+  --fa: var(--color-text-muted);
+  --hv: var(--color-surface-2);
+  --ok-bg: rgba(34, 197, 94, 0.16);
+  --ok-fg: #4ade80;
+  --dr-bg: rgba(246, 168, 0, 0.18);
+  --dr-fg: #f5b93a;
+  --er-bg: rgba(239, 68, 68, 0.16);
+  --er-fg: #f87171;
+  --am-fg: #f5b93a;
+  --sw-off: #3a3f49;
+  --shadow-pop: 0 18px 40px rgba(0, 0, 0, 0.45);
+
+  /* alias del tema viejo → los pasos existentes toman la paleta nueva */
+  --surface: var(--sf);
+  --surface2: var(--so);
+  --border: var(--ln);
+  --border-md: var(--ln2);
+  --text: var(--tx);
+  --text2: var(--mu);
+  --text3: var(--fa);
+  --blue: var(--tx);
+  --blue-text: var(--tx);
+  --blue-bg: var(--so);
+  --green: #22c55e;
+  --green-bg: var(--ok-bg);
+  --green-text: var(--ok-fg);
+  --amber: #f6a800;
+  --amber-bg: var(--dr-bg);
+  --amber-text: var(--dr-fg);
+  --red: #ef4444;
+  --red-bg: var(--er-bg);
+  --red-text: var(--er-fg);
+  --neutral-bg: var(--so);
+  --neutral-text: var(--mu);
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --shadow: none;
+  --shadow-md: var(--shadow-pop);
+
+  background: var(--bg);
+  color: var(--tx);
+  font-size: 14px;
+}
+:root[data-theme='light'] .rdc-app.rdc-ref {
+  --bg: #f6f6f4;
+  --sf: #ffffff;
+  --so: #f3f3f1;
+  --ln: #e8e8e4;
+  --ln2: #e2e2dd;
+  --tx: #111111;
+  --mu: #6b7078;
+  --fa: #8d929b;
+  --hv: #fafaf8;
+  --ok-bg: rgba(34, 197, 94, 0.16);
+  --ok-fg: #1b8a4c;
+  --dr-bg: rgba(246, 168, 0, 0.18);
+  --dr-fg: #b86f00;
+  --er-bg: rgba(239, 68, 68, 0.16);
+  --er-fg: #d92d20;
+  --am-fg: #c98200;
+  --sw-off: #d5d5d0;
+  --shadow-pop: 0 18px 40px rgba(17, 17, 17, 0.12);
+}
+
+.rdc-ref .rx-pagina {
+  width: 100%;
+  padding: 32px 40px 64px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.rdc-ref .rx-pagina.sin-pad {
+  padding-top: 20px;
+}
+.rdc-ref .rx-h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: var(--tx); }
+.rdc-ref .rx-hd { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
+.rdc-ref .rx-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.rdc-ref .rx-col { display: flex; flex-direction: column; gap: 20px; }
+.rdc-ref .rx-two { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.rdc-ref .rx-main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.rdc-ref .rx-side { flex: 1 1 340px; max-width: 420px; min-width: 0; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 16px; }
+.rdc-ref .rx-g2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.rdc-ref .rx-g3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.rdc-ref .rx-hide { display: none !important; }
+.rdc-ref .rx-pre {
+  margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px; line-height: 1.55; background: var(--so); border-radius: 12px; padding: 14px; max-height: 380px; overflow: auto; color: var(--tx);
+}
+
+/* Tarjetas, campos, botones (clases de la referencia) */
+.rdc-ref .rp { background: var(--sf); color: var(--tx); border-radius: 20px; box-shadow: 0 0 0 1px var(--ln); padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+.rdc-ref .rsh { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.rdc-ref .rl { display: block; font-size: 12px; font-weight: 700; color: var(--mu); margin-bottom: 6px; }
+.rdc-ref .rmu { color: var(--mu); }
+.rdc-ref .rin { background: var(--so); border-radius: 14px; }
+.rdc-ref .rf {
+  box-sizing: border-box; width: 100%; height: 44px; border: 0; border-radius: 12px; background: var(--sf); color: var(--tx);
+  padding: 0 14px; font-size: 14px; font-weight: 600; box-shadow: 0 0 0 1px var(--ln2);
+}
+.rdc-ref textarea.rf { height: auto; min-height: 84px; padding: 12px 14px; resize: vertical; font-weight: 500; }
+.rdc-ref .rb {
+  border: 0; height: 44px; padding: 0 18px; border-radius: 14px; font-size: 14px; font-weight: 700; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; white-space: nowrap; background: var(--sf); color: var(--mu); box-shadow: 0 0 0 1px var(--ln); cursor: pointer; text-decoration: none;
+}
+.rdc-ref .rb:hover:not(:disabled) { color: var(--tx); }
+.rdc-ref .rb.pri { background: #f6a800; color: #111; box-shadow: none; font-weight: 800; }
+.rdc-ref .rb.pri:hover:not(:disabled) { background: #e59a00; color: #111; }
+.rdc-ref .rb.dk { background: var(--tx); color: var(--bg); box-shadow: none; }
+.rdc-ref .rb.sm { height: 36px; border-radius: 12px; font-size: 13px; padding: 0 14px; }
+.rdc-ref .rb:disabled, .rdc-ref .rb.off { opacity: 0.45; cursor: not-allowed; }
+.rdc-ref .rseg { border: 0; background: var(--so); color: var(--mu); height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.rdc-ref .rseg:hover { color: var(--tx); }
+.rdc-ref .rseg.on { background: var(--tx); color: var(--bg); }
+.rdc-ref .rpl { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; white-space: nowrap; display: inline-block; }
+.rdc-ref .rpl.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.rdc-ref .rpl.dr { background: var(--dr-bg); color: var(--dr-fg); }
+.rdc-ref .rpl.er { background: var(--er-bg); color: var(--er-fg); }
+.rdc-ref .rkpi { background: var(--sf); padding: 18px 22px; }
+.rdc-ref .rgrid-k { display: grid; gap: 1px; background: var(--ln); border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px var(--ln); }
+.rdc-ref .rtabla { background: var(--sf); border-radius: 20px; box-shadow: 0 0 0 1px var(--ln); overflow-x: auto; }
+.rdc-ref .rtabla .in { min-width: 860px; padding: 6px 8px 8px; }
+.rdc-ref .rtr { display: grid; align-items: center; }
+.rdc-ref .rth { padding: 0 16px; height: 44px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--mu); }
+.rdc-ref .rth span, .rdc-ref button.rrow span { white-space: nowrap; }
+.rdc-ref .rrow { display: grid; align-items: center; padding: 0 16px; min-height: 52px; border-radius: 12px; font-size: 14px; border: 0; background: transparent; width: 100%; text-align: left; color: inherit; transition: background 0.12s; }
+.rdc-ref button.rrow { cursor: pointer; }
+.rdc-ref button.rrow:hover { background: var(--hv); }
+.rdc-ref .rem { border: 1px dashed var(--ln2); border-radius: 14px; padding: 22px 16px; text-align: center; font-size: 13px; color: var(--fa); font-weight: 500; }
+.rdc-ref .rstp { width: 34px; height: 34px; border: 0; border-radius: 10px; background: var(--sf); color: var(--tx); font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0; box-shadow: 0 0 0 1px var(--ln2); cursor: pointer; }
+.rdc-ref .rsw, .rdc-ref .toggle-row input[type='checkbox'] {
+  appearance: none; -webkit-appearance: none; width: 40px; height: 24px; border-radius: 999px; background: var(--sw-off); position: relative; cursor: pointer; margin: 0; flex: 0 0 auto;
+}
+.rdc-ref .rsw::after, .rdc-ref .toggle-row input[type='checkbox']::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.15s;
+}
+.rdc-ref .rsw:checked, .rdc-ref .toggle-row input[type='checkbox']:checked { background: #f6a800; }
+.rdc-ref .rsw:checked::after, .rdc-ref .toggle-row input[type='checkbox']:checked::after { transform: translateX(16px); }
+.rdc-ref :focus-visible { outline: 2px solid #f6a800; outline-offset: 2px; }
+
+/* Pasos como pestañas numeradas */
+.rdc-ref .rx-pasos { display: flex; overflow-x: auto; background: var(--sf); border-radius: 20px; box-shadow: 0 0 0 1px var(--ln); padding: 0 12px; }
+.rdc-ref .rst { border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 14px 8px; font-size: 14px; font-weight: 700; color: var(--mu); border-bottom: 3px solid transparent; flex: 1 1 0; justify-content: center; white-space: nowrap; cursor: pointer; }
+.rdc-ref .rst .rn { width: 26px; height: 26px; border-radius: 50%; background: var(--so); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+.rdc-ref .rst.on { color: var(--tx); border-bottom-color: #f6a800; }
+.rdc-ref .rst.on .rn { background: #f6a800; color: #111; }
+.rdc-ref .rst.done .rn { background: rgba(34, 197, 94, 0.2); color: var(--ok-fg); }
+
+/* ───────── Overrides del tema viejo (Paso*.vue) ───────── */
+.rdc-ref .app { max-width: none; padding: 0; }
+.rdc-ref .card, .rdc-ref .section {
+  background: var(--sf); border: 0; border-radius: 20px; padding: 24px; margin-bottom: 20px; box-shadow: 0 0 0 1px var(--ln);
+}
+.rdc-ref .rx-main > div > .card:last-child { margin-bottom: 0; }
+.rdc-ref .card-title, .rdc-ref .section-title {
+  font-size: 13px; font-weight: 800; color: var(--tx); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 18px; padding-left: 0; gap: 10px;
+}
+.rdc-ref .card-title::before, .rdc-ref .card-title::after, .rdc-ref .section-title::before, .rdc-ref .section-title::after { display: none; }
+.rdc-ref .card-title i, .rdc-ref .section-title i, .rdc-ref .acordeon-titulo i, .rdc-ref .blq-titulo i { display: none; }
+.rdc-ref .field label { font-size: 12px; font-weight: 700; color: var(--mu); }
+.rdc-ref .field input, .rdc-ref .field select, .rdc-ref .field textarea {
+  height: 44px; border: 0; border-radius: 12px; background: var(--sf); color: var(--tx); padding: 0 14px; font-size: 14px; font-weight: 600; box-shadow: 0 0 0 1px var(--ln2);
+}
+.rdc-ref .field textarea { height: auto; min-height: 84px; padding: 12px 14px; font-weight: 500; }
+.rdc-ref .field input:focus, .rdc-ref .field select:focus, .rdc-ref .field textarea:focus { box-shadow: 0 0 0 2px #f6a800; border: 0; }
+.rdc-ref .field textarea.wsp-textarea { background: var(--so); }
+.rdc-ref .grid2 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.rdc-ref .grid3 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+@media (max-width: 760px) {
+  .rdc-ref .field input, .rdc-ref .field select, .rdc-ref .field textarea { font-size: 16px; }
+  .rdc-ref .rx-pagina { padding: 16px; }
+  .rdc-ref .rf { font-size: 16px; }
+}
+
+.rdc-ref .btn-primary, .rdc-ref .nav-btn.primary {
+  background: #f6a800; color: #111; box-shadow: none; border-radius: 14px; font-weight: 800; min-height: 44px;
+}
+.rdc-ref .btn-primary:hover, .rdc-ref .nav-btn.primary:hover { background: #e59a00; }
+.rdc-ref .btn-secondary, .rdc-ref .secondary-btn, .rdc-ref .export-btn, .rdc-ref .nav-btn:not(.primary) {
+  background: var(--sf); color: var(--mu); border: 0; box-shadow: 0 0 0 1px var(--ln); border-radius: 14px; font-weight: 700; min-height: 44px;
+}
+.rdc-ref .export-btn:hover, .rdc-ref .secondary-btn:hover { color: var(--tx); }
+.rdc-ref .ctrl-add-btn { background: var(--tx); color: var(--bg); border-radius: 12px; min-height: 44px; }
+.rdc-ref .add-btn { border-color: var(--ln2); border-radius: 12px; }
+
+.rdc-ref .person-row { background: var(--so); border: 0; border-radius: 14px; padding: 12px 14px; }
+.rdc-ref .person-row-label { font-size: 14px; font-weight: 600; }
+.rdc-ref .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.rdc-ref .tiles-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.rdc-ref .stepper { background: transparent; padding: 0; gap: 8px; }
+.rdc-ref .stepper-btn { width: 34px; height: 34px; border-radius: 10px; background: var(--sf); color: var(--tx); font-size: 18px; box-shadow: 0 0 0 1px var(--ln2); }
+.rdc-ref .stepper-input { width: 44px; font-size: 16px; font-weight: 800; color: var(--tx); }
+.rdc-ref .frente-fijo { background: var(--sf); border: 0; border-radius: 12px; box-shadow: 0 0 0 1px var(--ln2); min-height: 44px; }
+
+.rdc-ref .toggle-row { background: transparent; border: 0; padding: 0; align-items: center; gap: 14px; font-size: 14px; font-weight: 600; }
+.rdc-ref .hito-row { grid-template-columns: minmax(0, 1fr) 132px; border-bottom: 0; padding: 4px 0; overflow: visible; }
+.rdc-ref .hitos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 28px; }
+.rdc-ref .acordeon-head, .rdc-ref .blq-head { cursor: pointer; }
+.rdc-ref .card.plegable { border-left: 0; }
+.rdc-ref .acordeon-titulo, .rdc-ref .blq-titulo { font-size: 13px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--tx) !important; }
+.rdc-ref .blq-card { border-left: 0 !important; padding: 18px 24px; }
+.rdc-ref .blq-card.blq-critico { border-left: 4px solid #f6a800 !important; border-radius: 6px 20px 20px 6px; }
+.rdc-ref .blq-card.blq-critico .blq-titulo { color: var(--am-fg) !important; }
+.rdc-ref .blq-row { background: var(--so); border: 0; border-radius: 14px; box-shadow: none; }
+.rdc-ref .blq-row.has-val { box-shadow: inset 3px 0 0 #f6a800; }
+.rdc-ref .unit-pill { background: var(--sf); color: var(--mu); }
+
+.rdc-ref .tipo-toggle { background: transparent; padding: 0; gap: 6px; }
+.rdc-ref .tipo-btn { flex: 0 0 auto; background: var(--so); color: var(--mu); height: 36px; padding: 0 14px; font-size: 13px; font-weight: 700; border-radius: 999px; }
+.rdc-ref .tipo-btn.active { background: var(--tx); color: var(--bg); box-shadow: none; }
+.rdc-ref .timeline-card { background: var(--so); border: 0; border-left: 4px solid #22a05b; border-radius: 6px 14px 14px 6px; box-shadow: none; }
+.rdc-ref .timeline-card.standby { background: var(--so); border-left-color: #c98200; }
+.rdc-ref .timeline-card.standby .timeline-title { color: var(--am-fg); }
+.rdc-ref .timeline-box { background: var(--sf); border: 0; box-shadow: 0 0 0 1px var(--ln); }
+.rdc-ref .timeline-badge-standby { background: #c98200; color: #fff; }
+.rdc-ref .alert { border: 0; border-radius: 14px; }
+.rdc-ref .alert-red { background: var(--er-bg); color: var(--er-fg); }
+.rdc-ref .alert-amber { background: var(--dr-bg); color: var(--dr-fg); }
+.rdc-ref .alert-green { background: var(--ok-bg); color: var(--ok-fg); }
+.rdc-ref .alert-blue { background: var(--so); color: var(--mu); }
+
+.rdc-ref .pestanas { justify-content: flex-start; gap: 6px; }
+.rdc-ref .pestana { background: var(--so); border: 0; border-radius: 999px; min-width: 0; flex-direction: row; gap: 8px; padding: 0 14px; height: 36px; font-size: 13px; font-weight: 700; color: var(--mu); }
+.rdc-ref .pestana:hover { color: var(--tx); }
+.rdc-ref .pestana.activa { background: var(--tx); color: var(--bg); }
+.rdc-ref .pestana.activa .pestana-conteo { color: inherit; opacity: 0.8; }
+.rdc-ref .pestana-conteo { color: var(--mu); }
+.rdc-ref .ctrl-form { background: transparent; border: 0; padding: 0; }
+.rdc-ref .toggle-perforadora button { border-color: var(--ln2); color: var(--mu); }
+.rdc-ref .toggle-perforadora button.activo { background: var(--tx); border-color: var(--tx); color: var(--bg); }
+.rdc-ref .prefijo-row, .rdc-ref .area-preview { background: var(--so); border-radius: 12px; }
+
+.rdc-ref .ctrl-table, .rdc-ref .summary-table { border: 0; }
+.rdc-ref .ctrl-table thead tr { background: transparent; }
+.rdc-ref .ctrl-table th, .rdc-ref .summary-table th { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--mu); }
+.rdc-ref .summary-table th { border-bottom: 1px solid var(--ln); }
+
+.rdc-ref input[type='time'], .rdc-ref select.time-field {
+  height: 44px; background: var(--sf); border: 0; border-radius: 12px; box-shadow: 0 0 0 1px var(--ln2); font-weight: 700; font-size: 14px;
+}
+.rdc-ref .avance-stat { background: var(--so); border-radius: 14px; }
+.rdc-ref .titulo-resumen, .rdc-ref .metric-grid { display: none; }
+.rdc-ref .fila-prog input, .rdc-ref .fila-prog select { height: 44px; border: 0; border-radius: 12px; box-shadow: 0 0 0 1px var(--ln2); font-size: 14px; background: var(--sf); }
+.rdc-ref .lista-filas li { background: var(--so); border-radius: 12px; }
+.rdc-ref .metrica { background: var(--sf); border: 0; box-shadow: 0 0 0 1px var(--ln); border-radius: 20px; }
+.rdc-ref .wsp { background: var(--so); border: 0; border-radius: 12px; }
+
+/* Celular/tablet: la barra de pestañas flotante del Sistema tapa el final de la lista */
+@media (max-width: 1024px) {
+  .rdc-app.rdc-ref .rx-pagina { padding-bottom: 132px; }
+}

@@ -34,6 +34,25 @@
   --color-danger:var(--red); --accent:var(--blue);
   --radius-md:var(--r-md); --radius-lg:var(--r-lg); --font-sans:'Plus Jakarta Sans',sans-serif;
 }
+/* Modo oscuro: redefine las mismas variables de arriba reusando los
+   tokens del resto del Sistema (styles/tokens.css), para que el módulo
+   deje de ser "siempre claro" sin tener que tocar cada regla de este
+   archivo (todas ya usan var(--xxx), nunca el color fijo). --blue se queda
+   en la familia azul del tema "Steel & Slate" original (no se pasa a
+   ámbar) para no romper el contraste de texto blanco ya escrito a mano en
+   .btn-primary/.nav-btn.primary/etc. */
+:root[data-theme='dark'] .rdc-app{
+  --bg:var(--color-bg); --surface:var(--color-surface); --surface2:var(--color-surface-2);
+  --border:var(--color-border); --border-md:#3a3f49;
+  --text:var(--color-text); --text2:var(--color-text-muted); --text3:#6b7280;
+  --blue:#3b82f6; --blue-bg:var(--color-info-soft); --blue-text:var(--color-info);
+  --green:var(--color-success); --green-bg:var(--color-success-soft); --green-text:var(--color-success);
+  --neutral:var(--color-text-muted); --neutral-bg:var(--color-surface-2); --neutral-text:var(--color-text);
+  --amber:var(--color-warning); --amber-bg:var(--color-warning-soft); --amber-text:var(--color-warning);
+  --red:var(--color-danger); --red-bg:var(--color-danger-soft); --red-text:var(--color-danger);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 1px 3px rgba(0,0,0,.5);
+  --shadow-md:0 4px 14px rgba(0,0,0,.5),0 2px 4px rgba(0,0,0,.4);
+}
 
 .rdc-app .app{max-width:720px;margin:0 auto}
 /* RdcDetalleView y FotosView todavía usan este chrome viejo (no son un
@@ -179,22 +198,25 @@
 .rdc-app .subtitulo-header{margin:16px 0 4px;padding:7px 12px;background:linear-gradient(90deg,var(--blue-bg),transparent);border-left:3px solid var(--blue);border-radius:0 var(--r-md) var(--r-md) 0;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--blue-text)}
 .rdc-app .partida-card{margin:4px 0;border:1.5px solid var(--border);border-radius:var(--r-md);overflow:hidden;transition:border-color .15s}
 .rdc-app .partida-card.tiene-valor{border-color:var(--green-text)}
-.rdc-app .partida-header{display:flex;align-items:center;gap:8px;padding:11px 13px;cursor:pointer;background:#fff;user-select:none;transition:background .12s}
+.rdc-app .partida-header{display:flex;align-items:center;gap:8px;padding:11px 13px;cursor:pointer;background:var(--surface);user-select:none;transition:background .12s}
 .rdc-app .partida-card.tiene-valor .partida-header{background:var(--green-bg)}
 .rdc-app .partida-nombre{flex:1;font-size:13px;font-weight:500;line-height:1.4;color:var(--text)}
 .rdc-app .partida-um{font-size:10px;font-weight:800;border-radius:20px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
 .rdc-app .partida-valor{font-size:11px;color:var(--text3);flex-shrink:0;transition:all .12s}
 .rdc-app .partida-card.tiene-valor .partida-valor{font-size:13px;font-weight:800;color:var(--green-text)}
-.rdc-app .partida-body{display:none;padding:12px 13px 14px;border-top:1px solid var(--border);background:#fff}
+.rdc-app .partida-body{display:none;padding:12px 13px 14px;border-top:1px solid var(--border);background:var(--surface)}
 .rdc-app .partida-card.open .partida-body{display:block}
 /* CONTROL ITEMS TABLE */
-.rdc-app .ctrl-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
+.rdc-app .ctrl-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:10px;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden}
 .rdc-app .ctrl-table thead tr{background:var(--surface2)}
-.rdc-app .ctrl-table th{padding:7px 8px;text-align:left;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
-.rdc-app .ctrl-table td{padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.rdc-app .ctrl-table th{padding:5px 6px;text-align:left;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
+.rdc-app .ctrl-table td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle}
 .rdc-app .ctrl-table tr:last-child td{border-bottom:none}
 .rdc-app .ctrl-table .total-row{background:var(--green-bg)}
 .rdc-app .ctrl-table .total-row td{font-weight:700;color:var(--green-text);border-top:2px solid var(--border-md);border-bottom:none}
+.rdc-app .ctrl-table .tabla-input{font-size:11px;color:var(--text);background:var(--surface);border:1px solid var(--border-md);border-radius:var(--r-sm);padding:2px 4px;-webkit-appearance:none}
+.rdc-app .ctrl-table .diametro-input{width:40px;margin-left:3px}
+.rdc-app .ctrl-table select.tabla-input{width:100%}
 /* CTRL FORM */
 .rdc-app .ctrl-form{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;margin-bottom:8px}
 .rdc-app .ctrl-form-grid{display:grid;gap:8px}

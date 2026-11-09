@@ -7,18 +7,46 @@ import {
   listarStock,
   listarStockMinimos,
   listarIngresos,
-  crearIngreso,
   crearIngresosMasivo,
   listarAjustes,
   crearAjuste,
   listarSalidas,
   listarMaterialesActivos,
-  listarIngresosSinMedidas,
-  actualizarMedidasIngreso,
+  editarDatosIngresos,
 } from '../services/almacenService'
 import { listarContratos } from '../../../services/contratosService'
-import { crearMaterialesEnLote } from '../../catalogo/services/catalogoService'
+import { crearMaterialesEnLote, crearNombresEdpEnLote, actualizarConversionEnLote } from '../../catalogo/services/catalogoService'
+import { registrarGuiaEdp } from '../../catalogo/composables/useGuiasEdp'
 import { conTiempoLimite } from '../../../utils/conTiempoLimite'
+
+// Caso real: en el campamento la energía (y con ella el internet) tarda en
+// prender cada mañana — el almacenero llega a su oficina antes que vuelva la
+// señal y ya le preguntan el stock. No necesita datos en vivo en ese
+// momento, le alcanza con lo último que sí se cargó. Guardamos una copia de
+// lectura en localStorage después de cada carga exitosa y, si la próxima
+// falla por falta de red, se muestra esa copia en vez de una pantalla en
+// blanco — con su fecha, para que quede claro que no es en vivo. Nunca se
+// usa para escribir nada: cualquier acción (ingreso/ajuste/etc.) necesita
+// conexión igual que siempre.
+const CLAVE_SNAPSHOT = 'dnv-almacen-snapshot'
+
+function guardarSnapshot(datos) {
+  try {
+    localStorage.setItem(CLAVE_SNAPSHOT, JSON.stringify({ ...datos, guardadoEn: new Date().toISOString() }))
+  } catch {
+    // localStorage lleno o bloqueado (modo privado): sin snapshot, sin
+    // problema — la próxima carga exitosa lo vuelve a intentar.
+  }
+}
+
+function leerSnapshot() {
+  try {
+    const crudo = localStorage.getItem(CLAVE_SNAPSHOT)
+    return crudo ? JSON.parse(crudo) : null
+  } catch {
+    return null
+  }
+}
 
 export const useAlmacenStore = defineStore('almacen', {
   state: () => ({
@@ -32,6 +60,9 @@ export const useAlmacenStore = defineStore('almacen', {
     materialesActivos: [],
     cargando: false,
     error: '',
+    // Fecha/hora del snapshot que se está mostrando — null cuando los datos
+    // en pantalla sí son de la carga en vivo más reciente.
+    sinConexionDesde: null,
   }),
 
   actions: {
@@ -64,8 +95,23 @@ export const useAlmacenStore = defineStore('almacen', {
         this.ajustes = ajustes
         this.salidas = salidas
         this.materialesActivos = materialesActivos
+        this.sinConexionDesde = null
+        guardarSnapshot({ almacenes, contratos, stock, stockMinimos, ingresos, ajustes, salidas, materialesActivos })
       } catch (e) {
-        this.error = e?.message ?? 'No se pudo cargar la información de almacén.'
+        const snapshot = leerSnapshot()
+        if (snapshot) {
+          this.almacenes = snapshot.almacenes
+          this.contratos = snapshot.contratos
+          this.stock = snapshot.stock
+          this.stockMinimos = snapshot.stockMinimos
+          this.ingresos = snapshot.ingresos
+          this.ajustes = snapshot.ajustes
+          this.salidas = snapshot.salidas
+          this.materialesActivos = snapshot.materialesActivos
+          this.sinConexionDesde = snapshot.guardadoEn
+        } else {
+          this.error = e?.message ?? 'No se pudo cargar la información de almacén.'
+        }
         console.error(e)
       } finally {
         this.cargando = false
@@ -115,13 +161,6 @@ export const useAlmacenStore = defineStore('almacen', {
       this.stockMinimos = stockMinimos
     },
 
-    async registrarIngreso(payload) {
-      const ingreso = await crearIngreso(payload)
-      this.ingresos.unshift(ingreso)
-      await this.refrescarStock()
-      return ingreso
-    },
-
     async importarIngresosMasivo(filas) {
       const creados = await crearIngresosMasivo(filas)
       this.ingresos.unshift(...creados)
@@ -129,15 +168,25 @@ export const useAlmacenStore = defineStore('almacen', {
       return creados
     },
 
-    /** materialesACrear de procesarFilasIngreso: [{codigo, descripcion, unidad,
+    /** materialesACrear de procesarFilasIngreso: [{descripcion, unidad,
      * tipo_conversion}]. Da de alta cada material nuevo ANTES de registrar
      * los ingresos, para tener su id real y poder resolver material_id en
      * cada fila pendiente. */
     async crearMaterialesFaltantes(materialesACrear) {
       if (!materialesACrear.length) return []
+      // Nombres EDP nuevos que escribió el almacenero (el grupo puede crecer):
+      // se crean primero, una sola vez por nombre.
+      const edpNuevosPorClave = new Map()
+      for (const m of materialesACrear) {
+        if (m.nombre_edp_nuevo) edpNuevosPorClave.set(m.nombre_edp_nuevo.toUpperCase(), m.nombre_edp_nuevo)
+      }
+      const edpCreados = edpNuevosPorClave.size
+        ? await crearNombresEdpEnLote([...edpNuevosPorClave.values()].map((nombre) => ({ nombre })))
+        : []
+      const edpIdPorClave = new Map(edpCreados.map((n) => [n.nombre.toUpperCase(), n.id]))
+      const edpIdDe = (m) => m.descripcion_edp_id ?? (m.nombre_edp_nuevo ? edpIdPorClave.get(m.nombre_edp_nuevo.toUpperCase()) : null)
       const creados = await crearMaterialesEnLote(
         materialesACrear.map((m) => ({
-          codigo: m.codigo,
           descripcion: m.descripcion,
           unidad: m.unidad,
           tipo_conversion: m.tipo_conversion,
@@ -146,29 +195,41 @@ export const useAlmacenStore = defineStore('almacen', {
           // todavía no pregunta esto), se omite y la base pone el estándar
           // en vez de mandar null.
           ...(m.stock_minimo_pct != null ? { stock_minimo_pct: m.stock_minimo_pct } : {}),
+          ...(edpIdDe(m) ? { descripcion_edp_id: edpIdDe(m) } : {}),
         }))
       )
       this.materialesActivos.push(...creados)
+      // Lo que dijo la guía pasa a ser una opción más de su nombre EDP.
+      for (const m of materialesACrear) {
+        const id = edpIdDe(m)
+        if (id && m.guia) {
+          const nombre = edpCreados.find((n) => n.id === id)?.nombre ?? ''
+          await registrarGuiaEdp(id, nombre, m.guia)
+        }
+      }
       return creados
     },
 
-    async obtenerIngresosSinMedidas() {
-      return listarIngresosSinMedidas()
+    /** materialesAActualizarConversion de procesarFilasIngreso: [{id,
+     * tipo_conversion}] — materiales que ya existían sin conversión y esta
+     * importación de ingresos les completó ANCHO/LARGO. Se actualiza el
+     * catálogo local (materialesActivos) para que quede consistente sin
+     * tener que recargar toda la pantalla. */
+    async actualizarConversionMateriales(actualizaciones) {
+      if (!actualizaciones.length) return
+      const resultados = await actualizarConversionEnLote(actualizaciones)
+      for (const r of resultados) {
+        if (!r.ok) continue
+        const idx = this.materialesActivos.findIndex((m) => m.id === r.id)
+        const original = actualizaciones.find((a) => a.id === r.id)
+        if (idx !== -1 && original) this.materialesActivos[idx] = { ...this.materialesActivos[idx], tipo_conversion: original.tipo_conversion }
+      }
     },
 
-    /** aAplicar de procesarFilasMedidas: [{id, ancho, largo}]. Devuelve los
-     * que fallaron (cada fila es independiente, una no tumba al resto). */
-    async importarMedidasIngresos(aAplicar) {
-      const fallidos = []
-      for (const { id, ancho, largo } of aAplicar) {
-        try {
-          await actualizarMedidasIngreso(id, { ancho, largo })
-        } catch (e) {
-          fallidos.push({ id, error: e.message ?? String(e) })
-        }
-      }
-      await this.refrescarStock()
-      return fallidos
+    async editarDatosIngresos(ids, datos) {
+      await editarDatosIngresos(ids, datos)
+      const lista = new Set(ids)
+      this.ingresos = this.ingresos.map((i) => (lista.has(i.id) ? { ...i, ...datos } : i))
     },
 
     async registrarAjuste(payload) {

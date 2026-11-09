@@ -18,7 +18,7 @@ export function hoyLocal() {
 
 /** Las cinco categorías de mano de obra directa, que el reporte siempre lleva
  * aunque queden en cero (así se exportan al Excel). */
-const PERSONAL_DIRECTO = ['Capataz', 'Operario', 'Oficial', 'Peón', 'Vigía']
+export const PERSONAL_DIRECTO = ['Capataz', 'Operario', 'Oficial', 'Peón', 'Vigía']
 
 /** Roles que solo aplican al sector Sala Eléctrica. En el RDC original esto se
  * decide comparando el nombre del sector con un texto exacto; acá se resuelve
@@ -69,6 +69,7 @@ export function crearBorrador({
     observaciones: '',
     requerimientos: '',
     restricciones: '',
+    inyBolsasCemento: null,
 
     redline: false,
     redlineSupervisorId: null,
@@ -86,7 +87,14 @@ export function crearBorrador({
     creadoEnDispositivo: ahora,
     actualizadoEn: ahora,
 
-    personal: personalPrevio
+    // `personalPrevio?.length`, no solo `personalPrevio`: un arreglo vacío es
+    // "truthy" en JS, así que un reporte anterior cuya `personal` haya
+    // quedado en [] (un bug, nunca algo que la UI permita hacer a propósito)
+    // arrastraría ese vacío para siempre, reporte tras reporte — ninguna
+    // pantalla ofrece forma de volver a agregar las categorías una vez
+    // perdidas. Con `.length` en el chequeo, ese caso cae al default de
+    // siempre en vez de perpetuar el vacío.
+    personal: personalPrevio?.length
       ? personalPrevio.map((p) => ({ ...p, id: nuevoId() }))
       : PERSONAL_DIRECTO.map((categoria, i) => ({
           id: nuevoId(),
@@ -98,6 +106,7 @@ export function crearBorrador({
     maquinaria: maquinariaPrevia ? maquinariaPrevia.map((m) => ({ ...m, id: nuevoId() })) : [],
     hitos: [],
     metrados: [],
+    metradosEdt: [],
     elementos: [],
     bitacora: [],
     standby: [],
@@ -152,6 +161,7 @@ export function crearBorradorDesde(anterior, { creadoPor }) {
     maquinaria: regenerarIds(clon.maquinaria),
     hitos: regenerarIds(clon.hitos),
     metrados: regenerarIds(clon.metrados),
+    metradosEdt: regenerarIds(clon.metradosEdt),
     elementos: regenerarIds(clon.elementos),
     bitacora: regenerarIds(clon.bitacora),
     standby: regenerarIds(clon.standby),
@@ -244,6 +254,21 @@ export async function eliminarBorrador(id) {
   return true
 }
 
+/** Ids de los borradores guardados en este dispositivo. */
+export async function idsBorradoresLocales() {
+  const borradores = await db.reportes.where('estado').equals(ESTADO.BORRADOR).toArray()
+  return borradores.map((r) => r.id)
+}
+
+/** Quita de este dispositivo borradores que ya se borraron en el servidor
+ * (se borraron desde otro dispositivo). Solo toca borradores. */
+export async function quitarBorradoresLocales(ids) {
+  for (const id of ids) {
+    const r = await db.reportes.get(id)
+    if (r?.estado === ESTADO.BORRADOR) await db.reportes.delete(id)
+  }
+}
+
 /** Lo que el servicio de sincronización tiene que revisar en cada ciclo:
  * los reportes ya cerrados que todavía no llegaron a alguno de los dos
  * destinos, MÁS todos los borradores activos — estos últimos se resuben
@@ -256,6 +281,51 @@ export async function pendientes() {
   const finalizadosPendientes = finalizados.filter((r) => r.estadoSupabase !== ENVIO.ENVIADO || r.estadoSharepoint !== ENVIO.ENVIADO)
   const borradores = await db.reportes.where('estado').equals(ESTADO.BORRADOR).toArray()
   return [...finalizadosPendientes, ...borradores]
+}
+
+/** Para la validación de duplicados de Perforación (ítem (c) del plan de
+ * control de pernos): códigos normalizados ya perforados en OTROS reportes
+ * de este mismo frente que están en IndexedDB de este dispositivo pero
+ * todavía no sincronizaron — ni `pernosEstado` (catálogo descargado del
+ * servidor) ni `reporte.elementos` (el reporte actual) los pueden ver
+ * todavía. Cualquier estado (Borrador o Finalizado) cuenta: lo que importa
+ * es que el código ya se escribió acá, no si ya se envió. */
+export async function codigosPerforadosLocalesDeFrente(frenteId, excluirReporteId) {
+  const todos = await db.reportes.toArray()
+  const normalizar = (c) => (c ?? '').trim().toUpperCase()
+  const codigos = new Set()
+  for (const r of todos) {
+    if (r.id === excluirReporteId || r.frenteId !== frenteId) continue
+    for (const e of r.elementos ?? []) {
+      if (e.elemento === 'Perno' && e.actividad === 'Perforación' && e.codigo) codigos.add(normalizar(e.codigo))
+    }
+  }
+  return codigos
+}
+
+/** Igual que `codigosPerforadosLocalesDeFrente`, pero para Malla: códigos de
+ * paño normalizados ya reportados en OTROS reportes de este frente que están
+ * en IndexedDB de este dispositivo pero todavía no sincronizaron. */
+export async function codigosMallaLocalesDeFrente(frenteId, excluirReporteId) {
+  const todos = await db.reportes.toArray()
+  const normalizar = (c) => (c ?? '').trim().toUpperCase()
+  const codigos = new Set()
+  for (const r of todos) {
+    if (r.id === excluirReporteId || r.frenteId !== frenteId) continue
+    for (const e of r.elementos ?? []) {
+      if (e.elemento === 'Malla' && e.actividad === 'Instalación' && e.codigo) codigos.add(normalizar(e.codigo))
+    }
+  }
+  return codigos
+}
+
+/** Hora de la última descarga de un catálogo puntual (p. ej. `pernosEstado`),
+ * para pintar "lista actualizada a las HH:MM" — `leerCatalogos()` descarta
+ * `actualizadoEn` porque las vistas solo necesitan los datos, no cuándo
+ * llegaron; acá sí hace falta. */
+export async function obtenerActualizacionCatalogo(clave) {
+  const fila = await db.catalogos.get(clave)
+  return fila?.actualizadoEn ?? null
 }
 
 export async function guardarCatalogos(catalogos) {
@@ -280,4 +350,11 @@ export async function leerCatalogos() {
 export async function hayCatalogos() {
   const frentes = await db.catalogos.get('frentes')
   return !!frentes?.datos?.length
+}
+
+/** Reportes ya cerrados cuyo envío falló (a la base o a SharePoint): es lo que
+ * avisa el número rojo de "Reporte" en la barra inferior del Supervisor. */
+export async function fallidos() {
+  const finalizados = await db.reportes.where('estado').equals(ESTADO.FINALIZADO).toArray()
+  return finalizados.filter((r) => r.estadoSupabase === ENVIO.ERROR || r.estadoSharepoint === ENVIO.ERROR)
 }

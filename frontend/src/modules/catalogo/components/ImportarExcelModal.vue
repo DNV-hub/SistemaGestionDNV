@@ -1,5 +1,7 @@
 <script setup>
+import { useCerrarConEscape } from '../../../composables/useCerrarConEscape'
 import { computed, ref, useAttrs } from 'vue'
+import EstructuraCopiable from '../../../components/EstructuraCopiable.vue'
 import { leerArchivoExcel, procesarFilas } from '../utils/importarExcel'
 
 const props = defineProps({
@@ -45,7 +47,6 @@ async function onArchivoSeleccionado(ev) {
   }
 }
 
-const filasRenombradas = computed(() => resultado.value?.filas.filter((f) => f.renombrado) ?? [])
 const hayAlgoQueHacer = computed(() => resultado.value && (resultado.value.aImportar.length || resultado.value.aActualizar.length))
 
 async function confirmarImportacion() {
@@ -71,41 +72,52 @@ async function confirmarImportacion() {
     importando.value = false
   }
 }
+
+useCerrarConEscape()
 </script>
 
 <template>
   <div class="overlay" @click.self="$emit('cerrar')">
-    <div class="modal">
+    <div class="modal" :class="{ 'con-resultado': resultado && !hecho }">
       <h2>Importar catálogo desde Excel</h2>
-      <p class="ayuda">
-        Columnas esperadas: <strong>CODIGO</strong>, <strong>DESCRIPCION ALMACEN</strong>,
-        <strong>UNIDAD ALMACEN</strong> (obligatorias) — <strong>DESCRIPCION EDP</strong>,
-        <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong>, <strong>STOCK MINIMO</strong> y
-        <strong>CONVERSION</strong> (ninguna / area / longitud) son opcionales.
-        STOCK MINIMO es un porcentaje del último ingreso, no una cantidad fija: escribe <strong>0.2</strong> para 20%
-        (si el último lote que entró fue de 100, avisa al llegar a 20).
-        Si el nombre EDP o la categoría no existen todavía, se crean automáticamente. Un código que <strong>ya
-        existe</strong> no se vuelve a crear, pero si trae algo en CONVERSION esa columna sí se actualiza — así se
-        puede exportar el catálogo, corregir esa columna en Excel, y volver a subir el mismo archivo.
-      </p>
 
-      <label class="archivo">
-        <input type="file" accept=".xlsx,.xls,.csv" @change="onArchivoSeleccionado" />
-      </label>
-
-      <p v-if="leyendo">Leyendo {{ nombreArchivo }}…</p>
-      <p v-if="error" class="error">{{ error }}</p>
-
-      <template v-if="hecho">
-        <p class="aviso">
-          <span v-if="resultado.aImportar.length">Se importaron {{ resultado.aImportar.length }} materiales nuevos. </span>
-          <span v-if="resultado.aActualizar.length">Se actualizó la conversión de {{ resultado.aActualizar.length }} materiales. </span>
-          <span v-if="resultado.nombresEdpNuevos.length">Se crearon {{ resultado.nombresEdpNuevos.length }} nombres EDP nuevos.</span>
+      <div class="panel-izq">
+        <p class="ayuda">
+          Columnas esperadas: <strong>DESCRIPCION ALMACEN</strong>, <strong>UNIDAD ALMACEN</strong> (obligatorias) —
+          <strong>DESCRIPCION EDP</strong>, <strong>UNIDAD EDP</strong>, <strong>CATEGORIA</strong>,
+          <strong>STOCK MINIMO</strong> y <strong>CONVERSION</strong> (ninguna / area / longitud) son opcionales.
+          STOCK MINIMO es un porcentaje del último ingreso, no una cantidad fija: escribe <strong>0.2</strong> para 20%
+          (si el último lote que entró fue de 100, avisa al llegar a 20).
+          Si el nombre EDP o la categoría no existen todavía, se crean automáticamente. Un material cuya
+          <strong>descripción ya existe</strong> no se vuelve a crear, pero si trae algo en CONVERSION esa columna sí
+          se actualiza — así se puede exportar el catálogo, corregir esa columna en Excel, y volver a subir el mismo
+          archivo.
         </p>
-        <button type="button" @click="$emit('cerrar')">Cerrar</button>
-      </template>
 
-      <template v-else-if="resultado">
+        <EstructuraCopiable
+          :encabezados="['DESCRIPCION ALMACEN', 'UNIDAD ALMACEN', 'DESCRIPCION EDP', 'UNIDAD EDP', 'CATEGORIA', 'STOCK MINIMO', 'CONVERSION']"
+        />
+
+        <label class="archivo">
+          <input type="file" accept=".xlsx,.xls,.csv" @change="onArchivoSeleccionado" />
+        </label>
+
+        <p v-if="leyendo">Leyendo {{ nombreArchivo }}…</p>
+        <p v-if="error" class="error">{{ error }}</p>
+
+        <template v-if="hecho">
+          <p class="aviso">
+            <span v-if="resultado.aImportar.length">Se importaron {{ resultado.aImportar.length }} materiales nuevos. </span>
+            <span v-if="resultado.aActualizar.length">Se actualizó la conversión de {{ resultado.aActualizar.length }} materiales. </span>
+            <span v-if="resultado.nombresEdpNuevos.length">Se crearon {{ resultado.nombresEdpNuevos.length }} nombres EDP nuevos.</span>
+          </p>
+          <button type="button" @click="$emit('cerrar')">Cerrar</button>
+        </template>
+
+        <button v-else-if="!resultado" type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
+      </div>
+
+      <div v-if="resultado && !hecho" class="panel-der">
         <div class="resumen">
           <div><strong>{{ resultado.total }}</strong> filas leídas</div>
           <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se crearán</div>
@@ -113,14 +125,10 @@ async function confirmarImportacion() {
             <strong>{{ resultado.aActualizar.length }}</strong> ya existen y se les actualiza la conversión
           </div>
           <div v-if="resultado.conConflicto.length" class="advertencia">
-            <strong>{{ resultado.conConflicto.length }}</strong> omitidas: el código ya existe y no traen nada en CONVERSION
+            <strong>{{ resultado.conConflicto.length }}</strong> omitidas: la descripción ya existe y no traen nada en CONVERSION
           </div>
           <div v-if="resultado.errores.length" class="advertencia">
-            <strong>{{ resultado.errores.length }}</strong> con errores (falta código/descripción/unidad, o CONVERSION inválida)
-          </div>
-          <div v-if="filasRenombradas.length" class="info">
-            <strong>{{ filasRenombradas.length }}</strong> códigos repetidos en el archivo se renombraron
-            con sufijo -1, -2… para que queden únicos
+            <strong>{{ resultado.errores.length }}</strong> con errores (falta descripción/unidad, descripción repetida en el archivo, o CONVERSION inválida)
           </div>
           <div v-if="resultado.nombresEdpNuevos.length" class="info">
             <strong>{{ resultado.nombresEdpNuevos.length }}</strong> nombres EDP nuevos se crearán:
@@ -137,7 +145,6 @@ async function confirmarImportacion() {
             <thead>
               <tr>
                 <th>Fila</th>
-                <th>Código</th>
                 <th>Descripción Almacén</th>
                 <th>Descripción EDP</th>
                 <th>Unidad Almacén</th>
@@ -151,10 +158,6 @@ async function confirmarImportacion() {
             <tbody>
               <tr v-for="f in resultado.filas" :key="f.fila" :class="{ conflicto: f.yaExiste && !f.tipoConversion }">
                 <td>{{ f.fila }}</td>
-                <td>
-                  {{ f.codigo }}
-                  <span v-if="f.renombrado" class="etiqueta">antes: {{ f.codigoOriginal }}</span>
-                </td>
                 <td>{{ f.descripcion }}</td>
                 <td>{{ f.descripcionEdpNombre ?? '—' }}</td>
                 <td>{{ f.unidad }}</td>
@@ -191,9 +194,7 @@ async function confirmarImportacion() {
             }}
           </button>
         </div>
-      </template>
-
-      <button v-else type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
+      </div>
     </div>
   </div>
 </template>
@@ -220,6 +221,20 @@ async function confirmarImportacion() {
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
+.modal.con-resultado {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  width: min(90vw, 1300px);
+  gap: 0;
+  overflow: hidden;
+}
+.modal.con-resultado > h2 {
+  flex: 0 0 100%;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+}
 h2 {
   margin: 0;
   font-size: 1.05rem;
@@ -228,6 +243,28 @@ h2 {
   margin: 0;
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+.panel-izq {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.modal.con-resultado .panel-izq {
+  flex: 0 0 380px;
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
+  padding-right: 1.25rem;
+  border-right: 1px solid var(--color-border);
+}
+.panel-der {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-left: 1.25rem;
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
 }
 .archivo input {
   font-size: 0.85rem;
@@ -252,7 +289,7 @@ h2 {
   color: var(--color-text);
 }
 .tabla-wrap {
-  max-height: 320px;
+  flex: 1;
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);

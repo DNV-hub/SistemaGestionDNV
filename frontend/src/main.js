@@ -6,6 +6,14 @@ import App from './App.vue'
 import { router } from './router'
 import { useTemaStore } from './store/tema'
 import { useAuthStore } from './store/auth'
+import { iniciarFiltroColumnas } from './utils/filtroColumnas'
+
+// Es una app de trabajo en campo, no una página para leer: el zoom con dos
+// dedos (y el doble toque) solo estorba. iOS ya no obedece user-scalable=no del
+// viewport, así que el pellizco se corta aquí.
+for (const evento of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(evento, (e) => e.preventDefault())
+}
 
 const app = createApp(App)
 app.use(createPinia())
@@ -22,3 +30,6 @@ await useAuthStore().init()
 
 app.use(router)
 app.mount('#app')
+
+// Filtro por columna tipo Excel en todas las tablas (ver utils/filtroColumnas.js).
+iniciarFiltroColumnas()

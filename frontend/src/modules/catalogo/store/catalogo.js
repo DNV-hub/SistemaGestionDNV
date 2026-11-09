@@ -48,7 +48,7 @@ export const useCatalogoStore = defineStore('catalogo', {
     async crear(payload) {
       const material = await crearMaterial(payload)
       this.materiales.push(material)
-      this.materiales.sort((a, b) => a.codigo.localeCompare(b.codigo))
+      this.materiales.sort((a, b) => a.descripcion.localeCompare(b.descripcion))
       return material
     },
 
@@ -110,7 +110,7 @@ export const useCatalogoStore = defineStore('catalogo', {
 
       const creados = payloads.length ? await crearMaterialesEnLote(payloads) : []
       this.materiales.push(...creados)
-      this.materiales.sort((a, b) => a.codigo.localeCompare(b.codigo))
+      this.materiales.sort((a, b) => a.descripcion.localeCompare(b.descripcion))
       return creados
     },
 

@@ -1,28 +1,56 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ModalFormulario from '../../../components/ModalFormulario.vue'
 import { useValesStore } from '../store/vales'
 import { useAuthStore } from '../../../store/auth'
+import { useCerrarConEscape } from '../../../composables/useCerrarConEscape'
 import { useDevolucionesStore } from '../../devoluciones/store/devoluciones'
+
+// Dos formas de usarla: pantalla completa (celular, ruta propia) o ventana
+// centrada (escritorio, abierta desde Almacén o Vales), igual que Nuevo vale.
+const props = defineProps({ comoModal: { type: Boolean, default: false } })
+const emit = defineEmits(['cerrar', 'creado'])
 
 const vales = useValesStore()
 const auth = useAuthStore()
 const devoluciones = useDevolucionesStore()
 const router = useRouter()
+const cerrar = () => (props.comoModal ? emit('cerrar') : router.back())
+// Esc cierra: en la ventana lo maneja el cuadro estándar; en la pantalla
+// completa vuelve atrás (si no se está escribiendo en un campo).
+if (!props.comoModal) useCerrarConEscape(cerrar, { ignorarCampos: true })
 
 onMounted(async () => {
-  const tareas = [devoluciones.cargar()]
+  const tareas = [devoluciones.cargar(), vales.cargarFrentesParaDevolucion()]
   if (!vales.frentesActivos.length || !vales.materialesActivos.length) tareas.push(vales.cargarLista())
   await Promise.all(tareas)
 })
 
-const frenteAsignado = computed(() => vales.frentesActivos.find((f) => f.id === auth.perfil?.frente_id) ?? null)
+// Frentes activos Y paralizados: uno recién parado suele ser justo cuando
+// aparece material suelto por devolver, así que no puede quedar afuera.
+const frenteAsignado = computed(() => vales.frentesParaDevolucion.find((f) => f.id === auth.perfil?.frente_id) ?? null)
 const necesitaElegirFrente = computed(() => !frenteAsignado.value)
 
 const form = reactive({ frente_id: '', material_id: '', cantidad: '', estado_material: 'bueno', observacion: '' })
 const enviando = ref(false)
 const error = ref('')
 const aviso = ref('')
+
+const propsRaiz = computed(() =>
+  props.comoModal
+    ? {
+        titulo: 'Devolver material',
+        subtitulo: 'Material que sobra en un frente y vuelve a Almacén.',
+        ancho: '680px',
+        guardando: enviando.value,
+        textoGuardar: 'Solicitar devolución',
+        textoGuardando: 'Enviando…',
+        error: error.value,
+      }
+    : {},
+)
+const Raiz = computed(() => (props.comoModal ? ModalFormulario : 'div'))
 
 function unidadDe(materialId) {
   return vales.materialesActivos.find((m) => m.id === materialId)?.unidad ?? ''
@@ -56,6 +84,10 @@ async function enviar() {
     form.estado_material = 'bueno'
     form.observacion = ''
     aviso.value = 'Devolución solicitada — queda pendiente hasta que Almacén confirme que la recibió.'
+    if (props.comoModal) {
+      emit('creado', aviso.value)
+      return
+    }
   } catch (e) {
     console.error(e)
     error.value = `No se pudo registrar la devolución${e?.message ? ': ' + e.message : '.'}`
@@ -78,9 +110,10 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
 </script>
 
 <template>
-  <div class="devolucion">
-    <header class="appbar">
-      <button type="button" class="icon-btn" aria-label="Cancelar" @click="router.back()">
+  <component :is="Raiz" v-bind="propsRaiz" @cerrar="cerrar" @enviar="enviar">
+  <div class="devolucion" :class="{ 'en-modal': comoModal }">
+    <header v-if="!comoModal" class="appbar">
+      <button type="button" class="icon-btn" aria-label="Cancelar" @click="cerrar">
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5.5 5.5l11 11M16.5 5.5l-11 11"/></svg>
       </button>
       <div class="appbar-title">Devolver material</div>
@@ -92,7 +125,7 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
         <span class="campo-label">Frente</span>
         <select v-model="form.frente_id" class="campo-input">
           <option value="" disabled>Selecciona tu frente…</option>
-          <option v-for="f in vales.frentesActivos" :key="f.id" :value="f.id">
+          <option v-for="f in vales.frentesParaDevolucion" :key="f.id" :value="f.id">
             {{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}
           </option>
         </select>
@@ -102,7 +135,7 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
         <span class="campo-label">Material</span>
         <select v-model="form.material_id" class="campo-input">
           <option value="" disabled>Selecciona un material…</option>
-          <option v-for="m in vales.materialesActivos" :key="m.id" :value="m.id">{{ m.descripcion }} — {{ m.codigo }}</option>
+          <option v-for="m in vales.materialesActivos" :key="m.id" :value="m.id">{{ m.descripcion }}</option>
         </select>
       </label>
 
@@ -133,10 +166,10 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
         <textarea v-model="form.observacion" class="campo-input textarea" rows="3" placeholder="Detalles adicionales…"></textarea>
       </label>
 
-      <p v-if="error" class="error">{{ error }}</p>
-      <p v-if="aviso" class="aviso">{{ aviso }}</p>
+      <p v-if="error && !comoModal" class="error">{{ error }}</p>
+      <p v-if="aviso && !comoModal" class="aviso">{{ aviso }}</p>
 
-      <div class="historial">
+      <div v-if="!comoModal" class="historial">
         <div class="seccion-head">
           <span class="seccion-titulo">MIS DEVOLUCIONES</span>
         </div>
@@ -151,16 +184,34 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
       </div>
     </main>
 
-    <div class="actionbar">
-      <button type="button" class="btn btn-sec" @click="router.back()">Cancelar</button>
+    <div v-if="!comoModal" class="actionbar">
+      <button type="button" class="btn btn-sec" @click="cerrar">Cancelar</button>
       <button type="button" class="btn btn-pri" :disabled="enviando" @click="enviar">
         {{ enviando ? 'Enviando…' : 'Solicitar devolución' }}
       </button>
     </div>
   </div>
+  </component>
 </template>
 
 <style scoped>
+/* Como ventana: sin altura de pantalla ni marco propio; el cuadro estándar
+   pone el título, el error y los botones. */
+.devolucion.en-modal {
+  height: auto;
+  display: block;
+  background: transparent;
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+.devolucion.en-modal .content {
+  overflow: visible;
+  padding: 0;
+}
+.devolucion.en-modal .col-info {
+  position: static;
+}
 .devolucion {
   --bg: #f4f5f7;
   --card: #ffffff;
@@ -183,6 +234,25 @@ const categoria = (estado) => CATEGORIA[estado] ?? 'draft'
   height: calc(100dvh - env(safe-area-inset-top));
   display: flex;
   flex-direction: column;
+}
+/* Modo oscuro: mismo criterio que el resto del módulo (ver el comentario
+   largo en ValesView.vue/rdc-tema.css) — redefine estas mismas variables
+   con los tokens del Sistema. */
+:root[data-theme='dark'] .devolucion {
+  --bg: var(--color-bg);
+  --card: var(--color-surface);
+  --border-lista: var(--color-border);
+  --text: var(--color-text);
+  --text-2: var(--color-text-muted);
+  --text-3: #6b7280;
+  --amber: var(--color-primary);
+  --amber-soft: var(--color-primary-soft);
+  --amber-ink: var(--color-primary);
+  --gray-bg: var(--color-surface-2);
+  --ok: var(--color-success);
+  --ok-bg: var(--color-success-soft);
+  --err: var(--color-danger);
+  --err-bg: var(--color-danger-soft);
 }
 @media (min-width: 1025px) {
   .devolucion {

@@ -1,10 +1,24 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAlertasStore } from '../store/alertas'
 import { useAuthStore } from '../../../store/auth'
 
 const alertas = useAlertasStore()
 const auth = useAuthStore()
+const router = useRouter()
+const puedeAbrirReporteRdc = computed(() => auth.tienePermiso('rdc.ver_todos'))
+function verReporteRdc(id) {
+  router.push({ name: 'rdc-detalle', params: { id } })
+}
+// `new Date('2026-10-16').toLocaleDateString()` se corre un día en zonas
+// detrás de UTC (Perú incluido): la fecha sin hora se interpreta como
+// medianoche UTC, que cae en la tarde del día anterior en hora local. Igual
+// que `hoyLocal()`/`fmtFecha` en el resto del módulo RDC: se arma a mano
+// desde el string, nunca pasando por un Date.
+function fmtFechaIso(iso) {
+  return iso ? iso.split('-').reverse().join('/') : '—'
+}
 
 const puedeResolver = computed(() => auth.tienePermiso('alertas.resolver'))
 const puedeConfigurar = computed(() => auth.tienePermiso('alertas.configurar_umbrales'))
@@ -18,6 +32,7 @@ const ETIQUETAS_TIPO = {
   sobreconsumo: 'Sobreconsumo',
   reserva_prolongada: 'Reserva prolongada',
   inconsistencia_stock: 'Inconsistencia de stock',
+  rdc_sin_sharepoint: 'RDC sin enviar a SharePoint',
 }
 
 const filtros = reactive({ estado: 'activa', tipo: '', nivel: '', frenteId: '' })
@@ -166,12 +181,18 @@ async function guardarConfig() {
           <td>{{ ETIQUETAS_TIPO[a.tipo] ?? a.tipo }}</td>
           <td class="referencia">
             <span v-if="a.frentes">{{ a.frentes.codigo }}</span>
-            <span v-if="a.materiales"> · {{ a.materiales.codigo }}</span>
+            <span v-if="a.materiales"> · {{ a.materiales.descripcion }}</span>
             <span v-if="a.almacenes"> · {{ a.almacenes.codigo }}</span>
             <span v-if="a.vales"> · {{ a.vales.numero }}</span>
-            <span v-if="!a.frentes && !a.materiales && !a.almacenes && !a.vales">—</span>
+            <span v-if="a.rdc_reportes"> · {{ fmtFechaIso(a.rdc_reportes.fecha) }}</span>
+            <span v-if="!a.frentes && !a.materiales && !a.almacenes && !a.vales && !a.rdc_reportes">—</span>
           </td>
-          <td class="mensaje">{{ a.mensaje }}</td>
+          <td class="mensaje">
+            {{ a.mensaje }}
+            <button v-if="a.rdc_reportes && puedeAbrirReporteRdc" type="button" class="ver-reporte" @click="verReporteRdc(a.rdc_reportes.id)">
+              Ver reporte →
+            </button>
+          </td>
           <td>
             <span class="badge-estado" :class="a.estado">{{ a.estado === 'activa' ? 'Activa' : 'Resuelta' }}</span>
             <div v-if="a.estado === 'resuelta'" class="detalle-resuelta">
@@ -306,6 +327,17 @@ button.mini {
 }
 .mensaje {
   max-width: 320px;
+}
+.ver-reporte {
+  display: block;
+  margin-top: 0.3rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 .badge-nivel,
 .badge-estado {

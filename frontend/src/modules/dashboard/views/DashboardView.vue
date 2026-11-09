@@ -1,98 +1,82 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useDashboardStore } from '../store/dashboard'
 import { useAuthStore } from '../../../store/auth'
-import SupervisorPanelView from '../../vales/views/SupervisorPanelView.vue'
+import MapaActividadCard from '../components/MapaActividadCard.vue'
+import { useEsMovil } from '../../../composables/useEsMovil'
 
 const dashboard = useDashboardStore()
 const auth = useAuthStore()
-
-// El Supervisor trabaja desde el celular y no necesita este dashboard: su
-// "dashboard" es directamente su panel de stock + solicitud + historial.
-const esSupervisor = computed(() => auth.nombreRol === 'Supervisor')
+const router = useRouter()
 
 const permisos = computed(() => ({
-  rdcCampo: auth.tienePermiso('rdc.ver_todos'),
+  rdcCampo: auth.tienePermiso('rdc.ver_resumen_campo'),
   frentes: auth.tienePermiso('frentes.ver'),
-  stock: auth.tienePermiso('stock.ver'),
-  alertas: auth.tienePermiso('alertas.ver'),
 }))
 
-if (!esSupervisor.value) dashboard.cargar(permisos.value)
+// "Frentes en campo" la ven roles que la ficha de frente NO deja entrar
+// (Almacén/Supervisor tienen rdc.ver_resumen_campo, ver 20260914180000) —
+// mismo criterio exacto que la guarda de router.index.js (meta.rolesExcluidos
+// de la ruta ficha-frente), para no mandar a nadie a una ruta que le va a
+// rebotar.
+const puedeAbrirFichaFrente = computed(() => permisos.value.frentes && !['Almacen', 'Supervisor'].includes(auth.nombreRol))
+function abrirFicha(frenteId) {
+  if (!puedeAbrirFichaFrente.value || !frenteId) return
+  router.push(`/frentes/${frenteId}`)
+}
 
-const saludo = computed(() => {
-  const hora = new Date().getHours()
-  if (hora < 12) return 'Buenos días'
-  if (hora < 19) return 'Buenas tardes'
-  return 'Buenas noches'
-})
+dashboard.cargar(permisos.value)
 
-// Solo la primera letra en mayúscula (el día de la semana) — el resto
-// queda en minúscula tal como lo arma toLocaleDateString, que es lo
-// correcto en español ("domingo, 13 de setiembre de 2026"). Antes había un
-// text-transform:capitalize en el CSS que ponía mayúscula a CADA palabra,
-// incluido el conector "de" ("13 De Setiembre De 2026") — se ve mal y no
-// es cómo se escribe en español.
+// ---------------------------------------------------------------------------
+// Encabezado: fecha larga + hora REAL de la última carga de datos
+// ---------------------------------------------------------------------------
+// Solo la primera letra en mayúscula (el día de la semana): en español no se
+// escribe "13 De Setiembre De 2026".
 const fechaLegible = computed(() => {
   const texto = new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   return texto.charAt(0).toUpperCase() + texto.slice(1)
 })
-
-// "Actualizado hace X min", igual que un feed en vivo — se recalcula solo
-// cada 30s mientras la pantalla sigue abierta, sin volver a pedir nada.
-const ahora = ref(Date.now())
-let intervaloReloj = null
-onMounted(() => {
-  intervaloReloj = setInterval(() => (ahora.value = Date.now()), 30_000)
-})
-onUnmounted(() => clearInterval(intervaloReloj))
-const hace = computed(() => {
-  if (!dashboard.actualizadoEn) return ''
-  const seg = Math.floor((ahora.value - dashboard.actualizadoEn.getTime()) / 1000)
-  if (seg < 60) return 'justo ahora'
-  const min = Math.floor(seg / 60)
-  if (min < 60) return `hace ${min} min`
-  return `hace ${Math.floor(min / 60)} h`
-})
+const horaActualizado = computed(() =>
+  dashboard.actualizadoEn ? dashboard.actualizadoEn.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
+)
 
 // ---------------------------------------------------------------------------
 // Frentes en campo
 // ---------------------------------------------------------------------------
 const PERSONAL_DIRECTO = ['Capataz', 'Operario', 'Oficial', 'Peón', 'Vigía']
-const ICONOS_PERSONAL = {
-  Capataz: '<path d="M2 9.5a6 6 0 0112 0"/><rect x="1.5" y="9.5" width="13" height="2.3" rx="1"/>',
-  Operario: '<circle cx="8" cy="5" r="2.4"/><path d="M3.5 14c0-2.8 2-4.7 4.5-4.7s4.5 1.9 4.5 4.7"/>',
-  Oficial: '<path d="M2 14l4-4M13 2l1 1-8 8-2.5 1.5L5 6z"/>',
-  Peón: '<path d="M3 13l3.5-3.5M9 3l4 4-6 6-4-4z"/>',
-  Vigía: '<path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>',
-}
-const ICONO_EQUIPO = '<rect x="1.5" y="6" width="8" height="5.5" rx="1"/><path d="M9.5 8h2.3L14 10.2V11.5h-4.5"/>'
-const ICONO_GRUPO = '<circle cx="5" cy="5" r="2"/><circle cx="11" cy="5" r="2"/><path d="M1.5 14c0-2.2 1.6-4 3.5-4s3.5 1.8 3.5 4M8.5 14c0-2.2 1.6-4 3.5-4s3.5 1.8 3.5 4"/>'
 
-// En celular la tarjeta de cada frente no muestra el detalle de Personal/
-// Equipos siempre abierto (no entra en la pantalla) — arranca en dos
-// "píldoras" con el total, y se despliega la lista al tocarlas. En
-// escritorio esto no se usa: ahí las dos columnas van siempre visibles
-// (ver .fc-cols-desktop / .fc-cols-movil en el CSS).
-const detallesAbiertos = ref(new Set())
-function alternarDetalle(frenteId, tipo) {
-  const clave = `${frenteId}:${tipo}`
-  const copia = new Set(detallesAbiertos.value)
-  if (copia.has(clave)) copia.delete(clave)
-  else copia.add(clave)
-  detallesAbiertos.value = copia
+// Vista Tarjetas | Lista: se recuerda la elección de cada usuario.
+const CLAVE_VISTA = 'dnv-dashboard-vista'
+function leerVista() {
+  try {
+    return localStorage.getItem(CLAVE_VISTA) === 'lista' ? 'lista' : 'tarjetas'
+  } catch {
+    return 'tarjetas'
+  }
 }
-function detalleAbierto(frenteId, tipo) {
-  return detallesAbiertos.value.has(`${frenteId}:${tipo}`)
+const vista = ref(leerVista())
+function fijarVista(v) {
+  vista.value = v
+  try {
+    localStorage.setItem(CLAVE_VISTA, v)
+  } catch {
+    /* sin almacenamiento disponible: la elección vale solo en esta sesión */
+  }
 }
 
-// Colores estables por frente (por id, no por posición): para que un mismo
-// frente no cambie de color cada vez que la lista se reordena.
-const PALETA_FRENTE = ['#8B5CF6', '#14B8A6', '#EC4899', '#6366F1', '#06B6D4', '#F59E0B', '#84CC16', '#F43F5E']
-function colorFrente(id) {
-  let hash = 0
-  for (const c of id ?? '') hash = (hash * 31 + c.charCodeAt(0)) >>> 0
-  return PALETA_FRENTE[hash % PALETA_FRENTE.length]
+// "¿Qué frentes estaban activos tal fecha?": el selector ancla la lista a
+// cualquier día pasado; "Hoy" la vuelve a la vista en vivo.
+const hoyStr = new Date().toLocaleDateString('en-CA')
+const fechaCampoInput = ref(hoyStr)
+const viendoPasado = computed(() => dashboard.fechaFrentesCampo && dashboard.fechaFrentesCampo !== hoyStr)
+function cambiarFechaCampo() {
+  if (!fechaCampoInput.value) return
+  dashboard.cargarFrentesEnCampo(fechaCampoInput.value)
+}
+function volverAHoy() {
+  fechaCampoInput.value = hoyStr
+  dashboard.cargarFrentesEnCampo(null)
 }
 
 function personalDe(fila, categoria) {
@@ -108,15 +92,16 @@ function equiposAgrupados(fila) {
     .map(([tipo, cantidad]) => ({ tipo, cantidad }))
     .sort((a, b) => b.cantidad - a.cantidad)
 }
-const MAX_EQUIPOS_VISIBLES = 4
-function equiposVisibles(fila) {
-  return equiposAgrupados(fila).slice(0, MAX_EQUIPOS_VISIBLES)
-}
-function equiposRestantes(fila) {
-  return Math.max(0, equiposAgrupados(fila).length - MAX_EQUIPOS_VISIBLES)
-}
 function totalMaquinariaFrente(fila) {
   return fila.maquinaria.reduce((s, m) => s + m.cantidad, 0)
+}
+// Desglose del panelito de Personal: categorías con gente + "Otros" para que
+// la suma siempre cuadre con el número de la tarjeta.
+function desglosePersonal(fila) {
+  const filas = PERSONAL_DIRECTO.map((categoria) => ({ nombre: categoria, cantidad: personalDe(fila, categoria) })).filter((x) => x.cantidad > 0)
+  const otros = totalPersonalFrente(fila) - filas.reduce((s, x) => s + x.cantidad, 0)
+  if (otros > 0) filas.push({ nombre: 'Otros', cantidad: otros })
+  return filas
 }
 function horaCorta(t) {
   return t ? t.slice(0, 5) : ''
@@ -128,9 +113,96 @@ function textoRestriccion(fila) {
   return `${r.descripcion || 'Restricción de acceso'}${rango}`
 }
 
+// Contrato de cada frente: ya viene en el mapa de actividad (contrato_id /
+// contrato_nombre por frente) — no hace falta otra consulta.
+const contratoPorFrente = computed(() => {
+  const m = new Map()
+  for (const f of dashboard.mapaActividad.frentes) m.set(f.id, f.contrato_nombre ?? null)
+  return m
+})
+function siglas(nombre) {
+  if (!nombre) return ''
+  return nombre
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('')
+}
+// Contrato Marco primero y el resto (Sala Eléctrica…) al final, sin títulos
+// de grupo.
+function rangoContrato(nombre) {
+  return /marco/i.test(nombre ?? '') ? 0 : 1
+}
+
+// Un reporte de AYER es un reporte al día: los supervisores envían al día
+// siguiente. Solo hay atraso cuando falta el de ayer o uno más antiguo.
+const refFecha = computed(() => dashboard.fechaFrentesCampo ?? hoyStr)
+function diasDesde(fechaIso) {
+  const a = new Date(`${refFecha.value}T00:00:00`)
+  const b = new Date(`${fechaIso}T00:00:00`)
+  return Math.round((a - b) / 86_400_000)
+}
+
+const esMesActual = computed(() => {
+  const h = new Date()
+  return dashboard.mapaActividadAnio === h.getFullYear() && dashboard.mapaActividadMes === h.getMonth() + 1
+})
+
+const frentes = computed(() => {
+  const filas = dashboard.frentesEnCampo.map((f) => ({
+    id: f.frente?.id,
+    nombre: f.frente?.nombre ?? f.frente?.codigo ?? '—',
+    supervisor: f.supervisor,
+    capataz: f.capataz,
+    fecha: f.fecha,
+    dias: diasDesde(f.fecha),
+    fila: f,
+    restriccion: textoRestriccion(f),
+  }))
+
+  // Un frente activo que NO entró en la ventana ayer/hoy sigue siendo parte
+  // del cuadro: aparece con "Hace N días" en ámbar (último reporte del mes
+  // del mapa). Solo en la vista en vivo del mes actual.
+  if (!viendoPasado.value && esMesActual.value) {
+    const conFila = new Set(filas.map((x) => x.id))
+    const ultimo = new Map()
+    for (const r of dashboard.mapaActividad.reportes) {
+      const previo = ultimo.get(r.frente_id)
+      if (!previo || r.fecha > previo.fecha) ultimo.set(r.frente_id, r)
+    }
+    for (const f of dashboard.mapaActividad.frentes) {
+      if (f.estado !== 'activo' || conFila.has(f.id)) continue
+      const r = ultimo.get(f.id)
+      filas.push({
+        id: f.id,
+        nombre: f.nombre,
+        supervisor: r?.supervisor ?? '—',
+        capataz: r?.capataz ?? '',
+        fecha: r?.fecha ?? null,
+        dias: r ? diasDesde(r.fecha) : null,
+        fila: { personal: [], maquinaria: [] },
+        restriccion: null,
+      })
+    }
+  }
+
+  return filas
+    .map((x) => ({ ...x, contrato: contratoPorFrente.value.get(x.id) ?? null }))
+    .sort((a, b) => rangoContrato(a.contrato) - rangoContrato(b.contrato) || (a.contrato ?? '').localeCompare(b.contrato ?? '') || a.nombre.localeCompare(b.nombre))
+})
+
+function etiquetaReporte(x) {
+  if (x.dias === null) return { texto: 'Sin reporte', atrasado: true }
+  if (x.dias <= 0) return { texto: 'Hoy', atrasado: false }
+  if (x.dias === 1) return { texto: 'Ayer', atrasado: false }
+  return { texto: `Hace ${x.dias} días`, atrasado: true }
+}
+
 // ---------------------------------------------------------------------------
-// Totales "Total in site" (personal y equipos, sumados entre todos los
-// frentes en campo)
+// Totales (suma de todas las tarjetas)
 // ---------------------------------------------------------------------------
 function totalCategoria(categoria) {
   return dashboard.frentesEnCampo.reduce((acc, f) => acc + personalDe(f, categoria), 0)
@@ -146,23 +218,21 @@ const totalesMaquinaria = computed(() => {
   for (const f of dashboard.frentesEnCampo) {
     for (const m of f.maquinaria) porTipo.set(m.tipo, (porTipo.get(m.tipo) ?? 0) + m.cantidad)
   }
-  // Se muestran los 5 tipos con más unidades, pero el total de arriba suma
-  // TODO lo que hay en mina, no solo lo que entra en esos 5 renglones.
-  const lista = [...porTipo.entries()]
-    .map(([tipo, cantidad]) => ({ tipo, cantidad }))
-    .sort((a, b) => b.cantidad - a.cantidad)
-    .slice(0, 5)
+  const todos = [...porTipo.entries()].map(([tipo, cantidad]) => ({ tipo, cantidad })).sort((a, b) => b.cantidad - a.cantidad)
+  const lista = todos.slice(0, 5)
   const total = dashboard.frentesEnCampo.reduce((acc, f) => acc + totalMaquinariaFrente(f), 0)
-  return { lista, total }
+  // "Otros" junta lo que no entra en los 5 renglones, para que la suma cuadre.
+  const otros = total - lista.reduce((s, e) => s + e.cantidad, 0)
+  return { lista, otros, total }
 })
 
 // ---------------------------------------------------------------------------
 // Próximos frentes / Paralizados
 // ---------------------------------------------------------------------------
-const MESES_ABREV = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic']
-function fechaBox(fechaIso) {
+const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic']
+function diaMes(fechaIso) {
   const [, m, d] = fechaIso.split('-').map(Number)
-  return { d, m: MESES_ABREV[m - 1] }
+  return `${d} ${MESES_ABREV[m - 1]}`
 }
 function diasEntre(fechaIso) {
   const hoy = new Date()
@@ -172,848 +242,1000 @@ function diasEntre(fechaIso) {
 }
 function etiquetaProximo(fechaIso) {
   const dias = diasEntre(fechaIso)
-  if (dias <= 0) return 'Hoy'
-  if (dias === 1) return 'Mañana'
-  return `En ${dias} días`
+  if (dias <= 0) return 'hoy'
+  if (dias === 1) return 'mañana'
+  return `en ${dias} días`
 }
-function diasParalizado(updatedAt) {
-  return Math.max(0, Math.round((Date.now() - new Date(updatedAt).getTime()) / 86_400_000))
+function diasParalizado(fecha) {
+  return Math.max(0, Math.round((Date.now() - new Date(fecha).getTime()) / 86_400_000))
 }
-function etiquetaParalizado(updatedAt) {
-  const dias = diasParalizado(updatedAt)
-  if (dias === 0) return 'Hoy'
+function etiquetaParalizado(fecha) {
+  const dias = diasParalizado(fecha)
+  if (dias === 0) return 'hoy'
   if (dias === 1) return '1 día'
   return `${dias} días`
 }
+// "DD/MM/AAAA" a partir de un ISO — se corta al pedazo de fecha antes de
+// armar nada, para no depender de a qué hora cae el corte UTC/local.
+function fechaCorta(iso) {
+  if (!iso) return ''
+  const [a, m, d] = iso.slice(0, 10).split('-')
+  return `${d}/${m}/${a}`
+}
+
+// ---------------------------------------------------------------------------
+// Celular (Supervisor): "Dashboard general" compacto, solo desde el avatar
+// ---------------------------------------------------------------------------
+const esMovil = useEsMovil()
+// El mismo diseño compacto sirve para los perfiles de Administración en celular
+// (Developer, Administrador, Coordinador, Planeamiento): para ellos es la primera
+// pestaña de la barra, sin flecha de volver; el Supervisor llega desde su avatar.
+const esSupervisorMovil = computed(() => auth.nombreRol === 'Supervisor')
+const movilSup = computed(
+  () => esMovil.value && (esSupervisorMovil.value || ['Developer', 'Administrador', 'Coordinador', 'Planeamiento'].includes(auth.nombreRol))
+)
+const fechaMovil = computed(() => {
+  const t = new Date().toLocaleDateString('es-PE', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+})
+const ABREV_PERSONAL = { Operario: 'Oper.', Oficial: 'Of.', Peón: 'Peón', Capataz: 'Cap.', Vigía: 'Vig.' }
+const resumenPersonal = computed(() =>
+  totalesPersonal.value.directos
+    .filter((d) => d.total > 0 && ['Operario', 'Oficial', 'Peón'].includes(d.categoria))
+    .map((d) => `${ABREV_PERSONAL[d.categoria]} ${d.total}`)
+    .join(' · ')
+)
+const resumenEquipos = computed(() =>
+  totalesMaquinaria.value.lista
+    .slice(0, 2)
+    .map((e) => `${e.tipo.split(' ')[0].slice(0, 9)} ${e.cantidad}`)
+    .join(' · ')
+)
+const primerNombre = (n) => (n ?? '').trim().split(/\s+/)[0] ?? ''
+function irAReporte() {
+  router.push({ name: 'rdc' })
+}
+
+onMounted(() => {
+  fechaCampoInput.value = dashboard.fechaFrentesCampo ?? hoyStr
+})
 </script>
 
 <template>
-  <SupervisorPanelView v-if="esSupervisor" />
-
-  <div v-else class="dashboard">
-    <header class="page-head">
-      <div class="greet">{{ saludo }}, {{ auth.perfil?.nombre }} <span class="fecha">· {{ fechaLegible }}</span></div>
-      <div v-if="!dashboard.cargando" class="live"><span class="live-dot"></span>Actualizado {{ hace }}</div>
+  <!-- ===================== Celular: Dashboard general ===================== -->
+  <div v-if="movilSup" class="dash dm">
+    <header class="dm-top">
+      <button v-if="esSupervisorMovil" type="button" class="dm-atras" aria-label="Volver" @click="irAReporte">‹</button>
+      <div class="dm-tit">
+        <h1>{{ esSupervisorMovil ? 'Dashboard general' : 'Dashboard' }}</h1>
+        <div v-if="!dashboard.cargando" class="dm-sub">{{ fechaMovil }} · <span class="dm-pto"></span> {{ horaActualizado }}</div>
+      </div>
     </header>
 
-    <p v-if="dashboard.cargando">Cargando…</p>
+    <p v-if="dashboard.cargando" class="cargando">Cargando…</p>
+    <template v-else>
+      <div v-if="permisos.rdcCampo" class="dm-2">
+        <div class="dm-card dm-k">
+          <div class="dm-lab">PERSONAL</div>
+          <div class="dm-kv">{{ totalesPersonal.total }}</div>
+          <div class="dm-ks">{{ resumenPersonal || '—' }}</div>
+        </div>
+        <div class="dm-card dm-k">
+          <div class="dm-lab">EQUIPOS</div>
+          <div class="dm-kv">{{ totalesMaquinaria.total }}</div>
+          <div class="dm-ks">{{ resumenEquipos || '—' }}</div>
+        </div>
+      </div>
 
-    <div v-else class="grid">
-      <!-- FRENTES EN CAMPO -->
-      <section v-if="permisos.rdcCampo" class="card">
-        <div class="card-head">
-          <div>
-            <div class="card-title">Frentes en campo</div>
-            <div class="card-desc">Según el reporte diario de cada supervisor — hoy o el más reciente disponible</div>
+      <div v-if="permisos.rdcCampo" class="dm-card dm-mapa"><MapaActividadCard /></div>
+
+      <template v-if="permisos.rdcCampo">
+        <div class="dm-fh"><b>Frentes en campo</b><span class="dm-lab">{{ frentes.length }} ACTIVOS</span></div>
+        <p v-if="dashboard.cargandoFrentesCampo" class="vacio">Cargando…</p>
+        <div v-else class="dm-lista">
+          <div v-for="x in frentes" :key="x.id" class="dm-card dm-fr">
+            <div class="dm-fr1">
+              <b class="dm-fn">{{ x.nombre }}</b>
+              <span v-if="x.contrato" class="ct" :title="x.contrato" style="margin: 0">{{ siglas(x.contrato) }}</span>
+              <span class="rep" :class="etiquetaReporte(x).atrasado ? 'tarde' : 'dia'">{{ etiquetaReporte(x).texto }}</span>
+            </div>
+            <div class="dm-fr2">
+              <span class="dm-fs">{{ x.supervisor }}<template v-if="x.capataz"> · {{ primerNombre(x.capataz) }}</template></span>
+              <span class="dm-fp">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5" /><path d="M3 20v-1a5 5 0 015-5h2a5 5 0 015 5v1" /></svg>{{ totalPersonalFrente(x.fila) }}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7.5 18.5a1.5 1.5 0 100-.01M17.5 18.5a1.5 1.5 0 100-.01" /></svg>{{ totalMaquinariaFrente(x.fila) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div v-if="permisos.frentes && (dashboard.frentesParalizados.length || dashboard.frentesProximos.length)" class="dm-card dm-pp">
+        <template v-if="dashboard.frentesParalizados.length">
+          <div class="dm-ppt"><b>Paralizados</b><span class="dm-pill rojo">{{ dashboard.frentesParalizados.length }}</span></div>
+          <div class="dm-pps">{{ dashboard.frentesParalizados.map((f) => `${f.nombre} · ${etiquetaParalizado(f.fecha_paralizacion ?? f.updated_at)}`).join('  |  ') }}</div>
+        </template>
+        <template v-if="dashboard.frentesProximos.length">
+          <div class="dm-ppt" :style="dashboard.frentesParalizados.length ? 'margin-top: 10px' : ''"><b>Próximos</b><span class="dm-pill azul">{{ dashboard.frentesProximos.length }}</span></div>
+          <div class="dm-pps">
+            <div v-for="f in dashboard.frentesProximos" :key="f.id">{{ f.nombre }} · inicia el {{ diaMes(f.fecha_inicio) }} · {{ etiquetaProximo(f.fecha_inicio) }}</div>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+
+  <div v-else class="dash">
+    <main>
+      <div class="cab">
+        <h1>Dashboard</h1>
+        <div v-if="!dashboard.cargando" class="meta-linea">
+          <span>{{ fechaLegible }}</span><span aria-hidden="true">·</span>
+          <span class="act"><span class="punto"></span>Actualizado a las {{ horaActualizado }}</span>
+        </div>
+        <a class="manuales" href="https://sites.google.com/view/desnivel-docs/inicio?pli=1&authuser=0" target="_blank" rel="noopener noreferrer">Manuales ↗</a>
+      </div>
+
+      <p v-if="dashboard.cargando" class="cargando">Cargando…</p>
+
+      <section v-else class="dos-col">
+        <!-- IZQUIERDA -->
+        <div class="izq">
+          <MapaActividadCard v-if="permisos.rdcCampo" />
+
+          <!-- FRENTES EN CAMPO -->
+          <div v-if="permisos.rdcCampo" class="frentes-campo">
+            <div class="fc-cab">
+              <h2>Frentes en campo</h2>
+              <div class="fc-ctrl">
+                <div class="grupo-seg" role="group" aria-label="Vista de frentes">
+                  <button type="button" class="seg" :class="{ on: vista === 'tarjetas' }" :aria-pressed="vista === 'tarjetas'" @click="fijarVista('tarjetas')">Tarjetas</button>
+                  <button type="button" class="seg" :class="{ on: vista === 'lista' }" :aria-pressed="vista === 'lista'" @click="fijarVista('lista')">Lista</button>
+                </div>
+                <input v-model="fechaCampoInput" type="date" class="fecha-sel" :max="hoyStr" aria-label="Fecha" @change="cambiarFechaCampo" />
+                <button v-if="viendoPasado" type="button" class="seg" @click="volverAHoy">Hoy</button>
+              </div>
+            </div>
+
+            <p v-if="dashboard.cargandoFrentesCampo" class="vacio">Cargando…</p>
+            <p v-else-if="!frentes.length" class="vacio">
+              {{ viendoPasado ? 'Ningún frente tuvo reporte diario en esa fecha.' : 'Ningún frente activo ni con reporte diario reciente.' }}
+            </p>
+
+            <!-- TARJETAS -->
+            <div v-else-if="vista === 'tarjetas'" class="tarjetas">
+              <article
+                v-for="x in frentes"
+                :key="x.id"
+                class="dc"
+                :class="{ clic: puedeAbrirFichaFrente }"
+                :tabindex="puedeAbrirFichaFrente ? 0 : undefined"
+                :role="puedeAbrirFichaFrente ? 'link' : undefined"
+                @click="abrirFicha(x.id)"
+                @keydown.enter="abrirFicha(x.id)"
+              >
+                <div class="dc-nombre" :title="x.nombre">{{ x.nombre }}</div>
+                <div class="dc-fila">
+                  <div class="dc-sup">{{ x.supervisor }}</div>
+                  <span class="rep" :class="etiquetaReporte(x).atrasado ? 'tarde' : 'dia'">{{ etiquetaReporte(x).texto }}</span>
+                </div>
+                <div class="dc-esp"></div>
+                <div class="dc-nums">
+                  <div class="dc-cap" :title="x.capataz">
+                    <template v-if="x.capataz">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Capataz"><path d="M4 17h16M6 17v-3a6 6 0 0112 0v3M12 8V5M9.5 9.5L8 8M14.5 9.5L16 8" /></svg><span class="dc-cap-n">{{ x.capataz }}</span>
+                    </template>
+                  </div>
+                  <span class="hv" tabindex="0" :aria-label="`Personal ${totalPersonalFrente(x.fila)}, ver detalle`">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Personal"><path d="M16 20v-1a4 4 0 00-4-4H8a4 4 0 00-4 4v1M10 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7M20 20v-1a3 3 0 00-2-2.8M15 4.2a3.5 3.5 0 010 6.6" /></svg>{{ totalPersonalFrente(x.fila) }}
+                    <span class="pop">
+                      <span class="pt">PERSONAL</span>
+                      <span v-if="!desglosePersonal(x.fila).length" class="pr"><span>Sin registro</span></span>
+                      <span v-for="p in desglosePersonal(x.fila)" :key="p.nombre" class="pr"><span>{{ p.nombre }}</span><b>{{ p.cantidad }}</b></span>
+                    </span>
+                  </span>
+                  <span class="hv" tabindex="0" :aria-label="`Equipos ${totalMaquinariaFrente(x.fila)}, ver detalle`">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Equipos"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7.5 18.5a1.5 1.5 0 100-.01M17.5 18.5a1.5 1.5 0 100-.01" /></svg>{{ totalMaquinariaFrente(x.fila) }}
+                    <span class="pop">
+                      <span class="pt">EQUIPOS</span>
+                      <span v-if="!equiposAgrupados(x.fila).length" class="pr"><span>Sin equipos registrados</span></span>
+                      <span v-for="e in equiposAgrupados(x.fila)" :key="e.tipo" class="pr"><span>{{ e.tipo }}</span><b>{{ e.cantidad }}</b></span>
+                    </span>
+                  </span>
+                  <span v-if="x.contrato" class="ct" :title="x.contrato" style="margin: 0; align-self: center">{{ siglas(x.contrato) }}</span>
+                </div>
+                <div v-if="x.restriccion" class="restr" :title="x.restriccion">Restricción: {{ x.restriccion }}</div>
+              </article>
+            </div>
+
+            <!-- LISTA -->
+            <div v-else class="lista">
+              <div class="l-fila l-cab">
+                <span>FRENTE</span><span>SUPERVISOR</span><span>CAPATAZ</span><span>REPORTE</span><span class="der">PERSONAL</span><span class="der">EQUIPOS</span>
+              </div>
+              <div
+                v-for="x in frentes"
+                :key="x.id"
+                class="l-fila dd"
+                :class="{ clic: puedeAbrirFichaFrente }"
+                :tabindex="puedeAbrirFichaFrente ? 0 : undefined"
+                :role="puedeAbrirFichaFrente ? 'link' : undefined"
+                @click="abrirFicha(x.id)"
+                @keydown.enter="abrirFicha(x.id)"
+              >
+                <span class="l-nombre">{{ x.nombre }}<span v-if="x.contrato" class="ct" :title="x.contrato" style="margin: 0 0 0 8px">{{ siglas(x.contrato) }}</span></span>
+                <span class="l-sup">{{ x.supervisor }}</span>
+                <span class="l-cap">{{ x.capataz }}</span>
+                <span class="rep" :class="etiquetaReporte(x).atrasado ? 'tarde' : 'dia'">{{ etiquetaReporte(x).texto }}</span>
+                <span class="hv der" tabindex="0" :aria-label="`Personal ${totalPersonalFrente(x.fila)}, ver detalle`">{{ totalPersonalFrente(x.fila) }}
+                  <span class="pop">
+                    <span class="pt">PERSONAL</span>
+                    <span v-if="!desglosePersonal(x.fila).length" class="pr"><span>Sin registro</span></span>
+                    <span v-for="p in desglosePersonal(x.fila)" :key="p.nombre" class="pr"><span>{{ p.nombre }}</span><b>{{ p.cantidad }}</b></span>
+                  </span>
+                </span>
+                <span class="hv der" tabindex="0" :aria-label="`Equipos ${totalMaquinariaFrente(x.fila)}, ver detalle`">{{ totalMaquinariaFrente(x.fila) }}
+                  <span class="pop">
+                    <span class="pt">EQUIPOS</span>
+                    <span v-if="!equiposAgrupados(x.fila).length" class="pr"><span>Sin equipos registrados</span></span>
+                    <span v-for="e in equiposAgrupados(x.fila)" :key="e.tipo" class="pr"><span>{{ e.tipo }}</span><b>{{ e.cantidad }}</b></span>
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <p v-if="!dashboard.frentesEnCampo.length" class="vacio">Ningún frente tiene reporte diario de ayer ni de hoy todavía.</p>
-
-        <div v-else class="frentes-scroll">
-          <div v-for="f in dashboard.frentesEnCampo" :key="f.frente?.id" class="frente-card">
-            <div class="fc-top">
-              <span class="fc-dot" :style="{ background: colorFrente(f.frente?.id) }"></span>
-              <span class="fc-code">{{ f.frente?.codigo ?? f.frente?.nombre }}</span>
-              <span class="fc-status" :class="{ ayer: !f.esHoy }"><span class="lamp"></span>{{ f.esHoy ? 'HOY' : 'AYER' }}</span>
+        <!-- DERECHA: sin cajas -->
+        <div class="der-col">
+          <div v-if="permisos.rdcCampo && dashboard.frentesEnCampo.length">
+            <div class="tot2">
+              <div><div class="tot-l">Personal</div><div class="tot-v">{{ totalesPersonal.total }}</div></div>
+              <div><div class="tot-l">Equipos</div><div class="tot-v">{{ totalesMaquinaria.total }}</div></div>
             </div>
-            <div class="fc-sup-name">{{ f.supervisor }}</div>
-            <div v-if="f.capataz" class="fc-sup-cap">Capataz {{ f.capataz }}</div>
-
-            <!-- Escritorio: las dos columnas siempre visibles (hay lugar de sobra). -->
-            <div class="fc-cols fc-cols-desktop">
-              <div class="fc-col">
-                <div class="fc-col-label">Personal ({{ totalPersonalFrente(f) }})</div>
-                <div v-for="categoria in PERSONAL_DIRECTO" :key="categoria" class="role-row">
-                  <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[categoria]"></svg>
-                  <span class="lbl">{{ categoria }}</span>
-                  <span class="cnt">{{ personalDe(f, categoria) }}</span>
-                </div>
+            <div class="tot2 listas">
+              <div>
+                <div v-for="d in totalesPersonal.directos" :key="d.categoria" class="fila-r"><span class="fr-l">{{ d.categoria }}</span><span class="fr-n">{{ d.total }}</span></div>
+                <div v-if="totalesPersonal.otros" class="fila-r"><span class="fr-l">Otros</span><span class="fr-n">{{ totalesPersonal.otros }}</span></div>
               </div>
-              <div class="fc-col">
-                <div class="fc-col-label">Equipos ({{ totalMaquinariaFrente(f) }})</div>
-                <div v-if="!equiposAgrupados(f).length" class="eq-vacio">Sin equipos registrados</div>
-                <div v-for="eq in equiposVisibles(f)" :key="eq.tipo" class="eq-row">
-                  <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-                  <span class="name">{{ eq.tipo }}</span>
-                  <span class="cnt">{{ eq.cantidad }}</span>
-                </div>
-                <div v-if="equiposRestantes(f)" class="eq-row">
-                  <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-                  <span class="name">+ {{ equiposRestantes(f) }} más</span>
-                  <span class="cnt"></span>
-                </div>
+              <div>
+                <div v-for="e in totalesMaquinaria.lista" :key="e.tipo" class="fila-r"><span class="fr-l elip">{{ e.tipo }}</span><span class="fr-n">{{ e.cantidad }}</span></div>
+                <div v-if="totalesMaquinaria.otros" class="fila-r"><span class="fr-l elip">Otros</span><span class="fr-n">{{ totalesMaquinaria.otros }}</span></div>
               </div>
             </div>
+          </div>
 
-            <!-- Celular: dos píldoras con el total, se despliegan al tocarlas
-                 (no entran las dos columnas completas en una pantalla angosta). -->
-            <div class="fc-stats fc-cols-movil">
-              <button
-                type="button"
-                class="fc-stat"
-                :class="{ open: detalleAbierto(f.frente?.id, 'personal') }"
-                @click="alternarDetalle(f.frente?.id, 'personal')"
-              >
-                <svg viewBox="0 0 16 16" v-html="ICONO_GRUPO"></svg>
-                <span class="lbl">Personal</span>
-                <span class="num">{{ totalPersonalFrente(f) }}</span>
-                <svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3"/></svg>
-              </button>
-              <button
-                type="button"
-                class="fc-stat"
-                :class="{ open: detalleAbierto(f.frente?.id, 'equipos') }"
-                @click="alternarDetalle(f.frente?.id, 'equipos')"
-              >
-                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-                <span class="lbl">Equipos</span>
-                <span class="num">{{ totalMaquinariaFrente(f) }}</span>
-                <svg class="chev" viewBox="0 0 10 10"><path d="M2 3.5l3 3 3-3"/></svg>
-              </button>
-            </div>
-            <div v-if="detalleAbierto(f.frente?.id, 'personal')" class="fc-detail fc-cols-movil">
-              <div v-for="categoria in PERSONAL_DIRECTO" :key="categoria" class="fc-detail-row">
-                <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[categoria]"></svg>
-                <span class="lbl">{{ categoria }}</span>
-                <span class="cnt">{{ personalDe(f, categoria) }}</span>
+          <div v-if="permisos.frentes && dashboard.frentesParalizados.length" class="sec-borde">
+            <h2 class="h2-chico">Frentes paralizados</h2>
+            <div v-for="f in dashboard.frentesParalizados" :key="f.id" class="mini-fila">
+              <div>
+                <div class="mini-n">{{ f.nombre }}</div>
+                <div class="mini-s">desde {{ fechaCorta(f.fecha_paralizacion ?? f.updated_at) }}</div>
               </div>
+              <span class="mini-rojo">{{ etiquetaParalizado(f.fecha_paralizacion ?? f.updated_at) }}</span>
             </div>
-            <div v-if="detalleAbierto(f.frente?.id, 'equipos')" class="fc-detail fc-cols-movil">
-              <div v-if="!equiposAgrupados(f).length" class="eq-vacio">Sin equipos registrados</div>
-              <div v-for="eq in equiposAgrupados(f)" :key="eq.tipo" class="fc-detail-row">
-                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-                <span class="lbl">{{ eq.tipo }}</span>
-                <span class="cnt">{{ eq.cantidad }}</span>
-              </div>
-            </div>
+          </div>
 
-            <div v-if="f.restriccion" class="fc-restriccion">
-              <svg viewBox="0 0 16 16"><path d="M8 1.5L1.5 13.5h13L8 1.5z"/><path d="M8 6.5v3"/><circle cx="8" cy="11.2" r="0.6" fill="currentColor" stroke="none"/></svg>
-              <div class="fc-restriccion-text"><b>Restricción:</b> {{ textoRestriccion(f) }}</div>
+          <div v-if="permisos.frentes && dashboard.frentesProximos.length" class="sec-borde">
+            <h2 class="h2-chico">Próximos frentes</h2>
+            <div v-for="f in dashboard.frentesProximos" :key="f.id" class="mini-fila">
+              <div>
+                <div class="mini-n">{{ f.nombre }}</div>
+                <div class="mini-s">inicia el {{ diaMes(f.fecha_inicio) }}<template v-if="f.codigo || f.area"> · {{ f.codigo || f.area }}</template></div>
+              </div>
+              <span class="mini-amb">{{ etiquetaProximo(f.fecha_inicio) }}</span>
             </div>
           </div>
         </div>
       </section>
-
-      <!-- COLUMNA DERECHA -->
-      <div class="side-col">
-        <section v-if="permisos.frentes && dashboard.frentesProximos.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Próximos frentes</div></div>
-          <div class="mini-body">
-            <div v-for="f in dashboard.frentesProximos" :key="f.id" class="mini-row">
-              <div class="prox-date"><div class="d">{{ fechaBox(f.fecha_inicio).d }}</div><div class="m">{{ fechaBox(f.fecha_inicio).m }}</div></div>
-              <div class="mini-info">
-                <div class="mini-name">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</div>
-                <div class="mini-sub">{{ f.area ?? 'Sin área asignada' }}</div>
-              </div>
-              <span class="mini-chip soon">{{ etiquetaProximo(f.fecha_inicio) }}</span>
-            </div>
-          </div>
-        </section>
-
-        <section v-if="permisos.frentes && dashboard.frentesParalizados.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Frentes paralizados</div></div>
-          <div class="mini-body">
-            <div v-for="f in dashboard.frentesParalizados" :key="f.id" class="mini-row">
-              <div class="stop-icon"><svg viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9" rx="2"/><path d="M1.5 10.5h13"/></svg></div>
-              <div class="mini-info">
-                <div class="mini-name">{{ f.codigo ? f.codigo + ' — ' : '' }}{{ f.nombre }}</div>
-                <div class="mini-sub">{{ f.area ?? 'Sin área asignada' }}</div>
-              </div>
-              <span class="mini-chip stop">{{ etiquetaParalizado(f.updated_at) }}</span>
-            </div>
-          </div>
-        </section>
-
-        <div v-if="permisos.rdcCampo && dashboard.frentesEnCampo.length" class="totals-row">
-          <section class="card">
-            <div class="card-head compacto"><div class="card-title chico">Personal</div><div class="summary-num">{{ totalesPersonal.total }}</div></div>
-            <div class="summary-grid una-col">
-              <div v-for="d in totalesPersonal.directos" :key="d.categoria" class="role-row">
-                <svg viewBox="0 0 16 16" v-html="ICONOS_PERSONAL[d.categoria]"></svg>
-                <span class="lbl">{{ d.categoria }}</span>
-                <span class="cnt">{{ d.total }}</span>
-              </div>
-              <div v-if="totalesPersonal.otros" class="role-row">
-                <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></svg>
-                <span class="lbl">Otros</span>
-                <span class="cnt">{{ totalesPersonal.otros }}</span>
-              </div>
-            </div>
-          </section>
-
-          <section class="card">
-            <div class="card-head compacto"><div class="card-title chico">Equipos</div><div class="summary-num">{{ totalesMaquinaria.total }}</div></div>
-            <div class="summary-grid una-col">
-              <div v-for="eq in totalesMaquinaria.lista" :key="eq.tipo" class="eq-row">
-                <svg viewBox="0 0 16 16" v-html="ICONO_EQUIPO"></svg>
-                <span class="name">{{ eq.tipo }}</span>
-                <span class="cnt">{{ eq.cantidad }}</span>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <section v-if="permisos.stock && dashboard.stockCritico.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Materiales con stock crítico</div></div>
-          <div class="mat-body">
-            <div class="mat-hero"><div class="mat-num">{{ dashboard.stockCritico.length }}</div><div class="mat-label">materiales bajo el mínimo</div></div>
-            <div class="mat-list">
-              <div v-for="(m, i) in dashboard.stockCritico.slice(0, 6)" :key="i" class="mat-list-row">
-                <span class="n">{{ m.material_codigo }} — {{ m.material_descripcion }}</span>
-                <span class="q">{{ m.cantidad_disponible }} {{ m.material_unidad }}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section v-if="permisos.alertas && dashboard.alertasRecientes.length" class="card">
-          <div class="card-head compacto"><div class="card-title chico">Alertas</div></div>
-          <div class="mini-body">
-            <div v-for="a in dashboard.alertasRecientes" :key="a.id" class="mini-row">
-              <div class="alerta-icon" :class="a.nivel === 'critica' ? 'danger' : a.nivel === 'info' ? 'info' : 'warn'">
-                <svg viewBox="0 0 16 16"><path d="M8 1.5L1.5 13.5h13L8 1.5z"/><path d="M8 6v4M8 11v1"/></svg>
-              </div>
-              <div>
-                <div class="alerta-title">{{ a.mensaje }}</div>
-                <div class="alerta-sub">{{ new Date(a.created_at).toLocaleString('es-PE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}</div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
+    </main>
   </div>
 </template>
 
 <style scoped>
-.dashboard {
-  padding: 1.25rem 1.75rem 2rem;
+/* Mismos tokens que el resto de módulos (Planeamiento): tarjetas = superficie
+   + borde de 1px de la app; las celdas del mapa se derivan del fondo. */
+.dash {
+  --sf: var(--color-surface);
+  --so: var(--color-surface-2);
+  --ln: var(--color-border);
+  --tx: var(--color-text);
+  --mu: var(--color-text-muted);
+  --em: color-mix(in srgb, var(--color-bg), var(--color-text) 14%);
+  --fu: color-mix(in srgb, var(--color-bg), var(--color-text) 6%);
+  --ok: #4ade80;
+  --am: #f5b93a;
+  --rj: #f87171;
+  --sombra-pop: 0 12px 28px rgba(0, 0, 0, 0.45);
+  color: var(--tx);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-theme='light'] .dash {
+  --ok: #1b8a4c;
+  --am: #b86f00;
+  --rj: #b42318;
+  --sombra-pop: 0 12px 28px rgba(17, 17, 17, 0.16);
+}
+.dash * {
+  box-sizing: border-box;
+}
+.dash button,
+.dash select,
+.dash input {
+  font-family: inherit;
+}
+.dash button {
+  cursor: pointer;
+}
+.dash :focus-visible {
+  outline: 2px solid #f6a800;
+  outline-offset: 2px;
+}
+/* Mismo contenedor y padding que Planeamiento (.pl); abajo, 24px. */
+main {
+  width: 100%;
+  max-width: 1800px;
+  padding: 32px 40px 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  height: 100%;
-  min-height: 0;
+  gap: 24px;
 }
-.page-head {
+.cab {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-  gap: 0.75rem;
   flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 18px;
+  row-gap: 4px;
 }
-.greet {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-.greet span {
-  font-weight: 400;
-  color: var(--color-text-muted);
-}
-.live {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-success);
-  white-space: nowrap;
-}
-.live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success);
-}
-
-.grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 0.9rem;
-  min-height: 0;
-}
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.card-head {
-  padding: 0.85rem 1rem 0.6rem;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.6rem;
-  flex-shrink: 0;
-}
-.card-head.compacto {
-  padding-bottom: 0.4rem;
-}
-.card-title {
-  font-size: 1.02rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.card-title.chico {
-  font-size: 0.94rem;
-}
-.card-desc {
-  font-size: 0.82rem;
-  color: var(--color-text-muted);
-  margin-top: 0.15rem;
-}
-.vacio {
-  padding: 0 1rem 1rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-/* FRENTES — grid de 2 columnas */
-.frentes-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 1rem 0.9rem;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
-  align-content: start;
-}
-.frente-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  padding: 0.75rem 0.8rem;
-}
-.fc-top {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-.fc-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.fc-code {
-  font-size: 1.1rem;
+h1 {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.15;
   font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--color-text);
+  letter-spacing: -0.02em;
 }
-.fc-status {
+h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+.cargando,
+.vacio {
+  color: var(--mu);
+  font-size: 14px;
+  margin: 0;
+}
+.manuales {
   margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mu);
+  text-decoration: none;
+  opacity: 0.7;
+}
+.manuales:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+.meta-linea {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-success);
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mu);
 }
-.fc-status .lamp {
+.act {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.punto {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 0 3px var(--color-success-soft);
-}
-.fc-status.ayer {
-  color: var(--color-warning);
-}
-.fc-status.ayer .lamp {
-  background: var(--color-warning);
-  box-shadow: 0 0 0 3px var(--color-warning-soft);
-}
-.fc-sup-name {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin-top: 0.3rem;
-}
-.fc-sup-cap {
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-  margin-top: 0.05rem;
+  background: #22c55e;
 }
 
-.fc-cols {
+/* Dos columnas: izquierda flexible, derecha fija de 272px con línea vertical */
+.dos-col {
   display: flex;
-  gap: 0.9rem;
-  margin-top: 0.55rem;
-}
-.fc-col {
-  flex: 1;
-  min-width: 0;
-}
-.fc-col-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  margin-bottom: 0.3rem;
-}
-.role-row,
-.eq-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.12rem 0;
-}
-.role-row svg,
-.eq-row svg {
-  width: 13px;
-  height: 13px;
-  stroke: var(--color-text-muted);
-  stroke-width: 1.8;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-}
-.role-row .lbl {
-  flex: 1;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-.role-row .cnt,
-.eq-row .cnt {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-.eq-row .name {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.eq-vacio {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-/* Por defecto (escritorio) se ve la versión de dos columnas siempre
-   abiertas; la de píldoras colapsables es solo para celular angosto — se
-   invierte dentro del media query de abajo. Selector compuesto (no solo
-   ".fc-cols-movil") a propósito: así gana siempre por especificidad,
-   sin depender del orden en que aparecen las reglas en la hoja de estilos
-   frente al display:flex propio de .fc-stats/.fc-detail. */
-.fc-stats.fc-cols-movil,
-.fc-detail.fc-cols-movil {
-  display: none;
-}
-.fc-stats {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.55rem;
-}
-.fc-stat {
-  flex: 1;
-  min-width: 0;
-  background: var(--color-surface-2);
-  border: none;
-  border-radius: var(--radius-control);
-  padding: 0.45rem 0.55rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-.fc-stat svg {
-  width: 14px;
-  height: 14px;
-  stroke: var(--color-text-muted);
-  stroke-width: 1.8;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-}
-.fc-stat .lbl {
-  flex: 1;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  text-align: left;
-}
-.fc-stat .num {
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--color-text);
-}
-.fc-stat .chev {
-  width: 10px;
-  height: 10px;
-  stroke: var(--color-text-muted);
-  stroke-width: 2;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  transition: transform 0.15s;
-}
-.fc-stat.open {
-  background: var(--color-primary-soft);
-}
-.fc-stat.open .chev {
-  transform: rotate(180deg);
-  stroke: var(--color-primary);
-}
-.fc-detail {
-  margin-top: 0.5rem;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-control);
-  padding: 0.5rem 0.65rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-.fc-detail-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.fc-detail-row svg {
-  width: 13px;
-  height: 13px;
-  stroke: var(--color-text-muted);
-  stroke-width: 1.8;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-}
-.fc-detail-row .lbl {
-  flex: 1;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-.fc-detail-row .cnt {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.fc-restriccion {
-  margin-top: 0.6rem;
-  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 0;
   align-items: flex-start;
-  gap: 0.4rem;
-  background: var(--color-danger-soft);
-  border: 1px solid var(--color-danger);
-  border-radius: var(--radius-control);
-  padding: 0.4rem 0.55rem;
 }
-.fc-restriccion svg {
-  width: 13px;
-  height: 13px;
-  stroke: var(--color-danger);
-  stroke-width: 2;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-.fc-restriccion-text {
-  font-size: 0.8rem;
-  color: var(--color-danger);
-  line-height: 1.35;
-}
-.fc-restriccion-text b {
-  font-weight: 700;
-}
-
-/* COLUMNA DERECHA */
-.side-col {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.mini-row {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.45rem 1rem;
-  border-bottom: 1px solid var(--color-border);
-}
-.mini-row:last-child {
-  border-bottom: none;
-}
-.mini-body {
-  padding: 0.1rem 0 0.4rem;
-}
-
-.prox-date {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-control);
-  background: var(--color-info-soft);
-  color: var(--color-info);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.prox-date .d {
-  font-size: 0.82rem;
-  font-weight: 800;
-  line-height: 1;
-}
-.prox-date .m {
-  font-size: 0.56rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-.mini-info {
-  flex: 1;
+.izq {
+  flex: 999 1 720px;
   min-width: 0;
-}
-.mini-name {
-  font-size: 0.84rem;
-  font-weight: 700;
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.mini-sub {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  margin-top: 0.05rem;
-}
-.mini-chip {
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 0.12rem 0.45rem;
-  border-radius: var(--radius-pill);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.mini-chip.soon {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-.mini-chip.stop {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.stop-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-control);
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.stop-icon svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  stroke-width: 1.9;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.totals-row {
-  display: flex;
-  gap: 0.6rem;
-}
-.totals-row .card {
-  flex: 1;
-  min-width: 0;
-}
-.summary-num {
-  font-size: 0.94rem;
-  font-weight: 800;
-  color: var(--color-primary);
-}
-.summary-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.1rem 0.75rem;
-  padding: 0 1rem 0.75rem;
-}
-.summary-grid.una-col {
-  grid-template-columns: 1fr;
-}
-
-.mat-body {
-  padding: 0.6rem 1rem 0.75rem;
-}
-.mat-hero {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-.mat-num {
-  font-size: 1.55rem;
-  font-weight: 800;
-  color: var(--color-primary);
-}
-.mat-label {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  line-height: 1.25;
-}
-.mat-list {
-  margin-top: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 28px;
+  padding-right: 28px;
 }
-.mat-list-row {
+
+/* Frentes en campo */
+.frentes-campo {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fc-cab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  font-size: 0.8rem;
+  margin-bottom: 8px;
 }
-.mat-list-row .n {
-  color: var(--color-text);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mat-list-row .q {
-  color: var(--color-danger);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.alerta-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-control);
+.fc-ctrl {
   display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 10px;
 }
-.alerta-icon svg {
-  width: 13px;
-  height: 13px;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.grupo-seg {
+  display: flex;
+  gap: 2px;
 }
-.alerta-icon.warn {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
-}
-.alerta-icon.danger {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-.alerta-icon.info {
-  background: var(--color-info-soft);
-  color: var(--color-info);
-}
-.alerta-title {
-  font-size: 0.82rem;
+.seg {
+  border: 0;
+  background: transparent;
+  color: var(--mu);
+  font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
 }
-.alerta-sub {
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
-  margin-top: 0.05rem;
-  text-transform: capitalize;
+.seg:hover {
+  color: var(--tx);
+  background: var(--so);
+}
+.seg.on {
+  background: var(--tx);
+  color: var(--color-bg);
+}
+.fecha-sel {
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mu);
+  padding: 6px 4px;
+  color-scheme: dark;
+}
+:root[data-theme='light'] .fecha-sel {
+  color-scheme: light;
 }
 
-/* El layout de dos paneles con scroll independiente (uno para "Frentes en
-   campo", otro para la columna derecha) solo tiene sentido en escritorio,
-   con el sidebar fijo y el viewport completo a la vista. Apenas el grid
-   pasa a una sola columna, esa idea deja de aplicar: acá abajo se apaga
-   del todo (alto automático, sin recortar nada) y la página entera pasa a
-   desplazarse de una — la misma pantalla que ya usa el resto del Sistema
-   en celular. Sin esto, cualquier tarjeta que no entrara en el alto fijo
-   quedaba cortada (le pasó a "Próximos frentes"/"Paralizados") y Alertas,
-   al ser la última, quedaba directamente inalcanzable debajo de la barra
-   de pestañas flotante — y esto solo iba a empeorar a medida que se
-   agreguen más tarjetas, no es una excepción de hoy.
-   */
-@media (max-width: 980px) {
-  .dashboard {
-    height: auto;
-    /* La barra de pestañas flotante de App.vue existe en todo este rango
-       (aparece por debajo de 1024px) — sin este espacio, la última
-       tarjeta (Alertas) queda tapada debajo de ella sin poder bajar más.
-       Mismo valor que ya usa el resto del Sistema en celular (RDC, Vales).
-       padding-bottom aparte (no en el shorthand `padding`) a propósito:
-       así el 640px de abajo puede tocar el resto del padding sin tener
-       que repetir este valor ni arriesgarse a resetearlo por accidente. */
-    padding-bottom: 108px;
-  }
-  .grid {
-    grid-template-columns: 1fr;
-    flex: none;
-  }
-  .card {
-    overflow: visible;
-  }
-  .frentes-scroll {
-    flex: none;
-    overflow-y: visible;
-  }
-  .side-col {
-    overflow-y: visible;
+/* Tarjetas: 3 columnas fijas en escritorio */
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 1100px) {
+  .tarjetas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 640px) {
-  .dashboard {
-    padding-top: 1rem;
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+  .tarjetas {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .page-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
+}
+.dc {
+  background: var(--sf);
+  border: 1px solid var(--ln);
+  border-radius: 18px;
+  padding: 15px 14px;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s;
+}
+.dc.clic {
+  cursor: pointer;
+}
+.dc:hover {
+  border-color: var(--mu);
+}
+.dc-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.dc-nombre {
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 800;
+  min-width: 0;
+}
+.rep {
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rep.dia {
+  color: var(--ok);
+}
+.rep.tarde {
+  color: var(--am);
+}
+.dc-sup {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dc-esp {
+  flex: 1;
+  min-height: 8px;
+}
+.dc-nums {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.dc-nums .hv svg {
+  color: var(--mu);
+}
+.dc-cap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--mu);
+  font-weight: 500;
+}
+.dc-cap svg {
+  flex: 0 0 auto;
+}
+.dc-cap-n {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.restr {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--am);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ct {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--mu);
+  background: var(--so);
+  border-radius: 5px;
+  padding: 2px 5px;
+  vertical-align: 1px;
+}
+
+/* Panelito flotante: solo hover / foco, sin estado. Abre hacia la izquierda
+   (right:0) y hacia ARRIBA, para que no se corte por el borde inferior de la
+   pantalla ni fuerce scroll. */
+.hv {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+  border-radius: 8px;
+  outline: none;
+}
+.hv .pop {
+  display: none;
+  position: absolute;
+  right: 0;
+  left: auto;
+  bottom: calc(100% + 8px);
+  top: auto;
+  z-index: 30;
+  min-width: 190px;
+  background: var(--sf);
+  color: var(--tx);
+  border-radius: 14px;
+  border: 1px solid var(--ln);
+  padding: 12px 14px;
+  box-shadow: var(--sombra-pop);
+  font-size: 13px;
+  font-weight: 500;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.hv:hover .pop,
+.hv:focus-visible .pop {
+  display: flex;
+}
+.hv .pt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mu);
+  margin-bottom: 4px;
+}
+.hv .pr {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.hv .pr b {
+  font-weight: 800;
+}
+.hv:focus-visible {
+  box-shadow: 0 0 0 2px #f6a800;
+}
+
+/* Lista */
+.l-fila {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) 100px 80px 80px;
+  column-gap: 16px;
+  align-items: center;
+}
+.l-cab {
+  padding: 0 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--mu);
+  border-bottom: 1px solid var(--ln);
+}
+.dd {
+  height: 40px;
+  padding: 0 4px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--ln);
+}
+.dd.clic {
+  cursor: pointer;
+}
+.dd:hover {
+  background: var(--so);
+}
+.l-nombre {
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.l-sup {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.l-cap {
+  color: var(--mu);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.der {
+  justify-self: end;
+  text-align: right;
+}
+.l-cab .der {
+  justify-self: stretch;
+}
+.dd .hv.der {
+  font-weight: 800;
+}
+.dd .rep {
+  font-size: 13px;
+}
+
+/* Columna derecha: fija de 272px, línea vertical, sin cajas */
+.der-col {
+  flex: 0 0 272px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding-left: 28px;
+  border-left: 1px solid var(--ln);
+  align-self: stretch;
+}
+.tot2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.tot2.listas {
+  margin-top: 18px;
+}
+.tot-l {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mu);
+}
+.tot-v {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.fila-r {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.fr-l {
+  color: var(--mu);
+  font-weight: 500;
+}
+.fr-l.elip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 8px;
+}
+.fr-n {
+  font-weight: 800;
+}
+.sec-borde {
+  border-top: 1px solid var(--ln);
+  padding-top: 24px;
+}
+.h2-chico {
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+.mini-fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+.mini-n {
+  font-size: 14px;
+  font-weight: 700;
+}
+.mini-s {
+  font-size: 12px;
+  color: var(--mu);
+  font-weight: 500;
+}
+.mini-rojo {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--rj);
+  white-space: nowrap;
+}
+.mini-amb {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--am);
+  white-space: nowrap;
+}
+
+/* Pantalla baja (alto útil < 700px): solo se reduce espacio, no información */
+@media (max-height: 700px) {
+  .dc {
+    min-height: 92px;
+    padding: 12px 14px;
   }
-  /* La fecha completa ("domingo, 13 de setiembre de 2026") no entra
-     cómoda en una pantalla angosta — en el mockup del celular el
-     encabezado ni la muestra, solo el saludo y "Actualizado hace…". */
-  .greet .fecha {
+  main {
+    padding: 18px 40px 12px 28px;
+    gap: 14px;
+  }
+  .izq {
+    gap: 16px;
+  }
+  .der-col {
+    gap: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .izq {
+    padding-right: 0;
+  }
+  .der-col {
+    flex: 1 1 100%;
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--ln);
+    padding-top: 20px;
+  }
+}
+@media (max-width: 760px) {
+  main {
+    padding: 20px 16px 96px;
+  }
+  .l-fila {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 80px 56px 56px;
+  }
+  .l-fila > :nth-child(3) {
     display: none;
   }
-  .frentes-scroll {
-    grid-template-columns: 1fr;
-    padding: 0 0.8rem 0.8rem;
-  }
-  /* Acá se invierte: la versión de dos columnas siempre abiertas no entra
-     cómoda en una pantalla angosta — se usan las píldoras colapsables. */
-  .fc-cols.fc-cols-desktop {
-    display: none;
-  }
-  .fc-stats.fc-cols-movil,
-  .fc-detail.fc-cols-movil {
-    display: flex;
-  }
-  .totals-row {
-    gap: 0.5rem;
-  }
+}
+
+/* ---- Celular: Dashboard general ---- */
+.dm {
+  --card-ln: var(--ln);
+  min-height: 100%;
+  padding: 0 16px calc(104px + env(safe-area-inset-bottom, 0px));
+}
+.dm-top {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--color-bg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 12px 16px 10px;
+}
+.dm-atras {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--sf);
+  box-shadow: 0 0 0 1px var(--ln);
+  color: var(--tx);
+  font-size: 20px;
+  padding: 0;
+  touch-action: manipulation;
+}
+.dm-tit h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.dm-sub {
+  font-size: 12px;
+  color: var(--mu);
+  font-weight: 600;
+}
+.dm-pto {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+.dm-card {
+  background: var(--sf);
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px var(--ln);
+  padding: 14px;
+}
+.dm-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.dm-k {
+  padding: 12px 14px;
+  min-width: 0;
+}
+.dm-lab {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  color: var(--mu);
+}
+.dm-kv {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.dm-ks {
+  font-size: 11.5px;
+  color: var(--mu);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-mapa {
+  padding: 14px 12px;
+  margin-bottom: 12px;
+}
+.dm-fh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 2px 10px;
+  font-size: 15px;
+}
+.dm-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dm-fr {
+  padding: 12px 14px;
+}
+.dm-fr1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dm-fn {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.dm-fr2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--mu);
+  font-weight: 600;
+}
+.dm-fs {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dm-fp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tx);
+  font-weight: 800;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.dm-pp {
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+.dm-ppt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.dm-pps {
+  font-size: 12px;
+  color: var(--mu);
+  font-weight: 600;
+  margin-top: 4px;
+}
+.dm-pill {
+  font-size: 11.5px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.dm-pill.rojo {
+  background: rgba(239, 68, 68, 0.16);
+  color: #e5484d;
+}
+.dm-pill.azul {
+  background: rgba(76, 141, 246, 0.16);
+  color: #4c8df6;
 }
 </style>

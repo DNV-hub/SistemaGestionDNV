@@ -4,13 +4,13 @@ import { useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { ENVIO, ESTADO } from '../services/rdcDb'
 import { hoyLocal } from '../services/rdcRepository'
+import { explicarErrorSync } from '../services/rdcErrores'
 import { descargarWorkbook } from '../services/rdcExcel'
 import {
   fmtHm,
   nombreDe,
   partidasEjecutadas,
   standbyRegistrados,
-  textoWhatsapp,
   tiempoEfectivoMin,
   totalPersonal,
   totalStandbyMin,
@@ -20,7 +20,6 @@ const rdc = useRdcStore()
 const router = useRouter()
 const reporte = computed(() => rdc.actual)
 const enviando = ref(false)
-const copiado = ref(false)
 
 // ---------------------------------------------------------------------------
 // Métricas y metrados — misma agrupación que usa el texto de WhatsApp, para
@@ -29,7 +28,6 @@ const copiado = ref(false)
 // que es como lo rotulaba el resumen del RDC original.
 // ---------------------------------------------------------------------------
 const ejecutadas = computed(() => partidasEjecutadas(reporte.value))
-const texto = computed(() => textoWhatsapp(reporte.value, rdc.catalogos))
 
 const colorSub = (sub) =>
   sub === '1. Preliminares' ? 'var(--blue-text)' : sub === '2. Críticas' ? 'var(--amber)' : sub === '3. Complementarias' ? 'var(--green)' : 'var(--text2)'
@@ -115,6 +113,13 @@ const faltantes = computed(() => {
   if (!reporte.value.sectorId) f.push('el sector')
   if (!reporte.value.frenteId) f.push('el frente')
   if (!reporte.value.supervisorId) f.push('el supervisor responsable')
+  // Pedido de campo: las bolsas de cemento de Inyección solo son
+  // obligatorias el día que de verdad se reportó Inyección — un día sin
+  // ningún perno inyectado no tiene nada que contar.
+  const huboInyeccion = (reporte.value.elementos ?? []).some((e) => e.elemento === 'Perno' && e.actividad === 'Inyección')
+  if (huboInyeccion && (reporte.value.inyBolsasCemento === null || reporte.value.inyBolsasCemento === '')) {
+    f.push('las bolsas de cemento usadas en Inyección')
+  }
   return f
 })
 
@@ -128,27 +133,6 @@ const estadoEnvio = computed(() => {
 
 function descargar() {
   descargarWorkbook(reporte.value, rdc.catalogos)
-}
-
-async function copiar() {
-  await navigator.clipboard.writeText(texto.value)
-  copiado.value = true
-  setTimeout(() => (copiado.value = false), 2000)
-}
-
-/** El original ofrecía "Compartir" además de "Copiar" — usa la hoja de
- * compartir nativa del teléfono cuando existe, y si no, cae a copiar (que es
- * lo único disponible en un navegador de escritorio). */
-async function compartir() {
-  if (navigator.share) {
-    try {
-      await navigator.share({ text: texto.value, title: 'Reporte Diario de Campo' })
-      return
-    } catch {
-      /* el usuario canceló la hoja de compartir — no es un error */
-    }
-  }
-  await copiar()
 }
 
 /** Si la fecha no es la de hoy se pide confirmación explícita — frena el
@@ -174,6 +158,10 @@ async function terminar() {
   } finally {
     enviando.value = false
   }
+}
+
+async function reintentar() {
+  await rdc.sincronizarAhora()
 }
 
 function volverALista() {
@@ -286,15 +274,6 @@ function volverALista() {
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-title"><i class="ti ti-brand-whatsapp" />Reporte WhatsApp</div>
-      <div class="field"><textarea :value="texto" readonly class="wsp-textarea" /></div>
-      <div class="bottom-actions" style="margin-top: 10px">
-        <button type="button" class="btn-primary" @click="copiar"><i class="ti ti-copy" />{{ copiado ? 'Copiado ✓' : 'Copiar' }}</button>
-        <button type="button" class="secondary-btn" @click="compartir"><i class="ti ti-share" />Compartir</button>
-      </div>
-    </div>
-
     <div class="card" style="margin-top: 12px">
       <div class="card-title"><i class="ti ti-send" />Enviar reporte a la oficina</div>
 
@@ -317,9 +296,28 @@ function volverALista() {
         <div class="alert" :class="estadoEnvio === 'enviado' ? 'alert-green' : estadoEnvio === 'error' ? 'alert-red' : 'alert-amber'">
           <i class="ti" :class="estadoEnvio === 'enviado' ? 'ti-circle-check' : estadoEnvio === 'error' ? 'ti-alert-triangle' : 'ti-cloud-off'" />
           <span v-if="estadoEnvio === 'enviado'">Reporte enviado — llegó al Sistema y a SharePoint.</span>
-          <span v-else-if="estadoEnvio === 'error'">Hubo un problema al enviarlo. Está guardado y se reintentará solo; tu información no se perdió.</span>
+          <template v-else-if="estadoEnvio === 'error'">
+            <span>
+              Hubo un problema al enviarlo — <strong>no es falta de señal</strong>, es otra cosa (se reintenta solo, pero
+              con el mismo problema cada vez). Tu información no se perdió, sigue guardada acá.
+            </span>
+            <br />
+            <small v-if="reporte.errorSupabase">Sistema: {{ explicarErrorSync(reporte.errorSupabase) }}</small>
+            <br v-if="reporte.errorSupabase && reporte.sharepointError" />
+            <small v-if="reporte.sharepointError">SharePoint: {{ explicarErrorSync(reporte.sharepointError) }}</small>
+          </template>
           <span v-else>Guardado y en cola. Se enviará en cuanto haya señal.</span>
         </div>
+        <button
+          v-if="estadoEnvio === 'error'"
+          type="button"
+          class="secondary-btn"
+          style="width: 100%; justify-content: center; margin-top: 8px"
+          :disabled="rdc.sincronizando"
+          @click="reintentar"
+        >
+          <i class="ti ti-refresh" />{{ rdc.sincronizando ? 'Reintentando…' : 'Reintentar ahora' }}
+        </button>
         <button type="button" class="export-btn" style="width: 100%; justify-content: center; margin-top: 8px" @click="descargar">
           <i class="ti ti-download" />Descargar mi copia (Excel)
         </button>

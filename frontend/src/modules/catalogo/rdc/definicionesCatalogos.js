@@ -124,8 +124,31 @@ export const CATALOGOS_RDC = [
     columnas: [
       { clave: 'codigo_edt', etiqueta: 'Código EDT', tipo: 'texto', requerido: true },
       { clave: 'nombre', etiqueta: 'Nombre', tipo: 'texto', requerido: true },
-      { clave: 'unidad', etiqueta: 'Unidad', tipo: 'texto', requerido: true },
-      { clave: 'seccion', etiqueta: 'Sección', tipo: 'texto' },
+      { clave: 'seccion', etiqueta: 'Grupo', tipo: 'texto' },
+      { clave: 'unidad', etiqueta: 'U.M.', tipo: 'texto', requerido: true },
+      { clave: 'metrado_previsto', etiqueta: 'Previsto', tipo: 'numero' },
+      // Cómo se calcula el acumulado de esta partida (Fase 3/4): digitado =
+      // el supervisor tipea la cantidad de hoy; los otros tres se derivan
+      // solos de lo que ya reporta el bloque de pernos/malla/cable del RDC.
+      { clave: 'tipo_medicion', etiqueta: 'Medición', tipo: 'seleccion', opciones: 'tipoMedicion', requerido: true },
+      // Solo hacen falta cuando Medición es "Suma de paños"/"Suma de tramos"
+      // (la base lo exige con un check) — para "Conteo de pernos" no se
+      // necesita tipo_filtro porque un perno no tiene "tipos" distintos como
+      // sí los tiene la malla o el cable.
+      { clave: 'zona_filtro', etiqueta: 'Zona (opcional)', tipo: 'texto' },
+      { clave: 'tipo_filtro', etiqueta: 'Tipo (malla/cable)', tipo: 'texto' },
+      // Solo para "Suma de ML de pernos" (la base lo exige con un check):
+      // ubicación de rdc_reporte_elementos a sumar — admite varias
+      // separadas por coma (ej. "Pie,Pie de banqueta"), mismo criterio que
+      // rdc_prefijos.prefijo. Los factores ponderan Perforación/Inyección —
+      // 1/0 por defecto da el ML completo para una partida de solo
+      // perforación, sin que haga falta configurar nada.
+      { clave: 'ubicacion_filtro', etiqueta: 'Ubicación (pernos)', tipo: 'texto' },
+      { clave: 'factor_perforacion', etiqueta: 'Factor perforación', tipo: 'numero' },
+      { clave: 'factor_inyeccion', etiqueta: 'Factor inyección', tipo: 'numero' },
+      { clave: 'rendimiento_cantidad', etiqueta: 'Rend. ref. (cant./persona-día)', tipo: 'numero' },
+      { clave: 'rendimiento_minimo', etiqueta: 'Rend. mínimo', tipo: 'numero' },
+      { clave: 'rendimiento_maximo', etiqueta: 'Rend. máximo', tipo: 'numero' },
       { clave: 'orden', etiqueta: 'Orden', tipo: 'numero' },
     ],
   },
@@ -163,6 +186,18 @@ export const OPCIONES_FIJAS = {
   bloquePartida: [
     { value: 1, label: '1 — Preliminares' },
     { value: 3, label: '3 — Complementarias' },
+  ],
+  // 'digitado' ya no se ofrece acá a propósito: quedó obsoleto (ver
+  // DICCIONARIO_DATOS.md) — el bloque del RDC que lo hacía funcionar se
+  // quitó, y las partidas que todavía lo tenían se reclasificaron. El valor
+  // sigue siendo válido en la base (constraint sin tocar) por si queda
+  // alguna fila histórica, pero nadie debería poder elegirlo de nuevo.
+  tipoMedicion: [
+    { value: 'solo_seguimiento', label: 'Solo seguimiento (no sale en el RDC)' },
+    { value: 'conteo_pernos', label: 'Conteo de pernos' },
+    { value: 'suma_ml_pernos', label: 'Suma de ML de pernos (por ubicación)' },
+    { value: 'suma_panos_malla', label: 'Suma de paños de malla' },
+    { value: 'suma_tramos_cable', label: 'Suma de tramos de cable' },
   ],
   estadoFrente: [
     { value: 'planificado', label: 'Planificado' },

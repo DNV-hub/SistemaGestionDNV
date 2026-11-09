@@ -8,7 +8,7 @@ import { defineStore } from 'pinia'
 export const useValeNuevoStore = defineStore('valeNuevo', {
   state: () => ({
     frenteId: '',
-    lineas: [], // [{ material_id, codigo, descripcion, unidad, cantidad, disponible }]
+    lineas: [], // [{ material_id, descripcion, unidad, cantidad, disponible }]
     observaciones: '',
     actividad: '',
   }),
@@ -28,7 +28,6 @@ export const useValeNuevoStore = defineStore('valeNuevo', {
       if (this.lineas.some((l) => l.material_id === material.id)) return
       this.lineas.push({
         material_id: material.id,
-        codigo: material.codigo,
         descripcion: material.descripcion,
         unidad: material.unidad,
         cantidad: 1,

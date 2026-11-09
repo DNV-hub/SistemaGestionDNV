@@ -309,6 +309,48 @@
   color: var(--text3);
   font-weight: 400;
 }
+/* Widget "Avance" (pernos) dentro de Actividades críticas — 3 columnas que
+   siempre caben en una pantalla de celular, a diferencia de la tabla de 5
+   columnas que reemplaza (Zona/Perforados/Inyectados/Pendientes/Antigüedad
+   se salía de la pantalla). */
+.rdc-app .avance-pernos {
+  display: flex;
+  gap: 8px;
+}
+.rdc-app .avance-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--surface2);
+  border-radius: var(--r-sm);
+}
+.rdc-app .avance-valor {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.rdc-app .avance-valor.verde {
+  color: var(--green-text);
+}
+.rdc-app .avance-valor.roja {
+  color: var(--red-text);
+}
+.rdc-app .avance-sobre {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text3);
+}
+.rdc-app .avance-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text3);
+}
 
 /* Textarea del reporte de WhatsApp. Necesita ganarle en especificidad a la
    regla genérica ".field textarea" del tema (min-height:72px, font de la app,

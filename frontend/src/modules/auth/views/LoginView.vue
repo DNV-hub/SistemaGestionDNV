@@ -46,7 +46,7 @@ async function onSubmit() {
     <section class="panel-form">
       <form class="tarjeta" @submit.prevent="onSubmit">
         <h2>Bienvenido de vuelta</h2>
-        <p class="subtitulo">Ingresa tus credenciales para acceder al sistema de gestión.</p>
+        <p class="subtitulo">Ingresa tus credenciales para acceder.</p>
 
         <label>
           Correo electrónico
@@ -81,9 +81,8 @@ async function onSubmit() {
           {{ enviando ? 'Ingresando…' : 'Ingresar al sistema' }}
         </button>
 
-        <p class="restringido">
-          Acceso restringido — solo personal autorizado de <strong>Grupo Desnivel</strong> puede iniciar sesión.
-        </p>
+        <p class="restringido">Acceso restringido — solo personal autorizado.</p>
+        <p class="firma" aria-hidden="true">by Lu</p>
       </form>
     </section>
   </div>
@@ -296,8 +295,14 @@ input:focus {
   color: var(--color-text-muted);
   line-height: 1.5;
 }
-.restringido strong {
-  color: var(--color-text);
+.firma {
+  margin: 0.15rem 0 0;
+  text-align: center;
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  opacity: 0.35;
+  letter-spacing: 0.04em;
+  user-select: none;
 }
 .error {
   margin: 0;
@@ -306,13 +311,45 @@ input:focus {
 }
 
 @media (max-width: 860px) {
+  /* minmax(0, 1fr): con 1fr a secas la columna crece hasta el ancho mínimo de
+     su contenido y el formulario se salía de la pantalla por la derecha. */
+  /* Fija a la pantalla: antes la página era un poco más alta que el teléfono y
+     se podía arrastrar arriba y abajo sin nada que ver. Si en un teléfono muy
+     bajo no cupiera, solo entonces scrollea por dentro (sin rebote). */
   .pagina {
-    grid-template-columns: 1fr;
+    position: fixed;
+    inset: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: none;
   }
+  /* 16px mínimo: con menos, iOS hace zoom solo al tocar un campo. */
+  input[type='email'],
+  input[type='password'],
+  input[type='text'] {
+    font-size: 16px;
+  }
+  /* La app instalada en iPhone dibuja bajo la barra de estado / la isla
+     (viewport-fit=cover + status-bar black-translucent): sin este margen el
+     logo quedaba escondido detrás de ella. */
   .hero {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
-    padding: 2rem 1.5rem;
+    padding: calc(1.5rem + env(safe-area-inset-top)) calc(1.25rem + env(safe-area-inset-right)) 1.5rem calc(1.25rem + env(safe-area-inset-left));
+    justify-content: flex-start;
+  }
+  .panel-form {
+    min-width: 0;
+    place-items: start center;
+    padding: 1.75rem calc(1.25rem + env(safe-area-inset-right)) calc(1.5rem + env(safe-area-inset-bottom)) calc(1.25rem + env(safe-area-inset-left));
+  }
+  .tarjeta {
+    min-width: 0;
+  }
+  .fila-opciones {
+    flex-wrap: wrap;
   }
 }
 </style>

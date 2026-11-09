@@ -23,6 +23,12 @@
   --color-info-soft: rgba(96, 165, 250, 0.1);
   --color-neutral-soft: rgba(156, 163, 175, 0.14);
 
+  /* ---------- Cápsulas de característica (Procura / Pernos) ---------- */
+  --cap-procura-bg: rgba(246, 168, 0, 0.16);
+  --cap-procura-fg: #f5b93a;
+  --cap-pernos-bg: rgba(139, 124, 255, 0.16);
+  --cap-pernos-fg: #a99bff;
+
   /* ---------- Superficie / texto (modo oscuro, por defecto) ---------- */
   --color-bg: #111315;
   --color-surface: #1a1c1e;
@@ -33,6 +39,7 @@
 
   /* ---------- Sidebar: fijo, no cambia con el tema ---------- */
   --sidebar-bg: #0d0f10;
+  --sidebar-surface-2: #202327;
   --sidebar-border: #2d3139;
   --sidebar-text: #f1f3f5;
   --sidebar-text-muted: #9ca3af;
@@ -60,5 +67,9 @@
   --color-text-muted: #6b7280;
 
   --color-primary-soft: rgba(245, 168, 0, 0.14);
+  --cap-procura-bg: #fff3d6;
+  --cap-procura-fg: #8a5400;
+  --cap-pernos-bg: #eee8fd;
+  --cap-pernos-fg: #5b3fd1;
   --shadow-card: 0 1px 2px rgba(17, 19, 21, 0.05), 0 8px 20px rgba(17, 19, 21, 0.06);
 }

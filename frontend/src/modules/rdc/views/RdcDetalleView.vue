@@ -1,15 +1,16 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { useAuthStore } from '../../../store/auth'
 import { obtenerReporteCompleto } from '../services/rdcService'
 import { descargarWorkbook } from '../services/rdcExcel'
 import { ENVIO } from '../services/rdcDb'
-import { fmtHm, nombreDe, partidasEjecutadas, textoWhatsapp, tiempoEfectivoMin, totalPersonal, totalStandbyMin } from '../services/rdcCalculos'
+import { bitacoraCompleta, fmtHm, nombreDe, partidasEjecutadas, standbyRegistrados, textoWhatsapp, tiempoEfectivoMin, totalPersonal, totalStandbyMin } from '../services/rdcCalculos'
 import '../estilos/rdc-tema.css'
 import '../estilos/tabler-rdc.css'
 import '../estilos/complementos.css'
+import '../estilos/rdc-referencia.css'
 
 const rdc = useRdcStore()
 const auth = useAuthStore()
@@ -20,7 +21,16 @@ const reporte = ref(null)
 const cargando = ref(true)
 const error = ref('')
 
-onMounted(async () => {
+// Función, no un onMounted suelto: Vue Router reutiliza el componente al
+// navegar entre dos rutas 'rdc-detalle' con distinto :id (mismo registro de
+// ruta, solo cambia el parámetro) — sin esto, pasar de un reporte a otro
+// (ej. desde el aviso de "ya existe un reporte duplicado" del propio RDC)
+// dejaba la pantalla congelada mostrando el reporte VIEJO, aunque la URL ya
+// apuntara al nuevo.
+async function cargarReporte() {
+  cargando.value = true
+  error.value = ''
+  reporte.value = null
   if (!rdc.catalogos) await rdc.iniciar()
 
   // Primero el dispositivo: si el reporte se llenó acá, esa copia trae el
@@ -36,7 +46,9 @@ onMounted(async () => {
     }
   }
   cargando.value = false
-})
+}
+onMounted(cargarReporte)
+watch(() => route.params.id, cargarReporte)
 
 const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
 const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
@@ -90,63 +102,135 @@ async function corregir() {
   await rdc.corregir(reporte.value.id)
   router.push({ name: 'rdc-editar', params: { id: reporte.value.id } })
 }
+
+const bitacora = computed(() => (reporte.value ? bitacoraCompleta(reporte.value) : []))
+const paradas = computed(() => (reporte.value ? standbyRegistrados(reporte.value) : []))
+const totalStandby = computed(() => (reporte.value ? fmtHm(totalStandbyMin(reporte.value)) : '0h 00m'))
+const programadas = computed(() => (reporte.value?.programacion ?? []).filter((p) => p.tipo === 'programada'))
+const textoWsp = computed(() => (reporte.value ? textoWhatsapp(reporte.value, rdc.catalogos) : ''))
+
+const copiado = ref(false)
+async function copiar() {
+  await navigator.clipboard.writeText(textoWsp.value)
+  copiado.value = true
+  setTimeout(() => (copiado.value = false), 2000)
+}
 </script>
 
 <template>
-  <div class="rdc-app">
-    <div class="app">
-      <div class="barra-superior">
-        <button class="volver" @click="router.push({ name: 'rdc' })"><i class="ti ti-arrow-left" /> Mis reportes</button>
-      </div>
-
+  <div class="rdc-app rdc-ref">
+    <div class="rx-pagina sin-pad">
       <p v-if="cargando" class="empty-msg">Cargando…</p>
       <div v-else-if="error" class="alert alert-red"><i class="ti ti-alert-triangle" /><span>{{ error }}</span></div>
 
       <template v-else-if="reporte">
-        <div class="card">
-          <div class="reporte-fila">
+        <div class="rx-hd">
+          <div class="rx-row" style="gap: 14px">
+            <button type="button" class="rb" style="padding: 0 14px" @click="router.push({ name: 'rdc' })">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+              Reportes
+            </button>
             <div>
-              <div class="reporte-frente">{{ nombre('frentes', reporte.frenteId) }}</div>
-              <div class="reporte-meta">
-                {{ fmtFecha(reporte.fecha) }} · {{ nombre('sectores', reporte.sectorId) }} ·
-                {{ nombre('supervisores', reporte.supervisorId) }}
+              <div class="rx-titulo">
+                {{ nombre('frentes', reporte.frenteId) }}
+                <span class="rpl" :class="estadoEnvio === 'enviado' ? 'ok' : estadoEnvio === 'error' ? 'er' : 'dr'">
+                  {{ estadoEnvio === 'enviado' ? 'Enviado' : estadoEnvio === 'error' ? 'Con problemas' : 'Pendiente' }}
+                </span>
+              </div>
+              <div class="rmu rx-sub">
+                {{ fmtFecha(reporte.fecha) }} · {{ nombre('sectores', reporte.sectorId) }} · {{ nombre('supervisores', reporte.supervisorId) }}
               </div>
             </div>
-            <span class="estado-pill" :class="estadoEnvio">
-              {{ estadoEnvio === 'enviado' ? 'Enviado' : estadoEnvio === 'error' ? 'Con problemas' : 'Pendiente' }}
-            </span>
           </div>
-          <p v-if="reporte.sharepointError" class="note" style="color: var(--red-text)">SharePoint: {{ reporte.sharepointError }}</p>
-        </div>
-
-        <div class="metricas" style="margin-bottom: 12px">
-          <div v-for="m in metricas" :key="m.etiqueta" class="metrica">
-            <span class="valor">{{ m.valor }}</span>
-            <span class="etiqueta">{{ m.etiqueta }}</span>
+          <div class="rx-row" style="gap: 10px">
+            <button type="button" class="rb" @click="descargarWorkbook(reporte, rdc.catalogos)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg>
+              Descargar Excel
+            </button>
+            <button v-if="puedeCorregir" type="button" class="rb pri" @click="corregir">Corregir y reenviar</button>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-title"><i class="ti ti-ruler" />Metrados ejecutados</div>
-          <ul v-if="ejecutadas.length" class="lista-filas">
-            <li v-for="(p, i) in ejecutadas" :key="i">
-              <span>{{ p.nombre }}</span>
-              <strong>{{ p.met }} {{ p.um }}</strong>
-            </li>
-          </ul>
-          <p v-else class="empty-msg">Sin metrados registrados.</p>
+        <p v-if="reporte.sharepointError" class="alert alert-red" style="margin: 0"><span>SharePoint: {{ reporte.sharepointError }}</span></p>
+
+        <div class="rgrid-k" style="grid-template-columns: repeat(auto-fit, minmax(110px, 1fr))">
+          <div v-for="m in metricas" :key="m.etiqueta" class="rkpi">
+            <div class="rmu rx-kl">{{ m.etiqueta }}</div>
+            <div class="rx-kv" :style="m.etiqueta === 'Stand by' && totalStandby !== '0h 00m' ? 'color: var(--am-fg)' : ''">{{ m.valor }}</div>
+          </div>
         </div>
 
-        <div class="card">
-          <div class="card-title"><i class="ti ti-brand-whatsapp" />Reporte para WhatsApp</div>
-          <pre class="wsp">{{ textoWhatsapp(reporte, rdc.catalogos) }}</pre>
-        </div>
+        <div class="rx-two">
+          <div class="rx-main">
+            <div class="rp">
+              <div class="rsh">METRADOS EJECUTADOS</div>
+              <div v-if="ejecutadas.length">
+                <div
+                  v-for="(p, i) in ejecutadas"
+                  :key="i"
+                  class="rrow"
+                  :style="`grid-template-columns: 1fr 110px 60px; border-radius: 0; ${i < ejecutadas.length - 1 ? 'border-bottom: 1px solid var(--ln);' : ''}`"
+                >
+                  <span class="wrap" style="font-weight: 600">{{ p.nombre }}</span>
+                  <span style="text-align: right; font-weight: 800">{{ p.met }}</span>
+                  <span class="rmu" style="padding-left: 10px; font-weight: 600">{{ p.um }}</span>
+                </div>
+              </div>
+              <div v-else class="rem">Sin metrados registrados.</div>
+            </div>
 
-        <div class="botones">
-          <button class="secondary-btn" @click="descargarWorkbook(reporte, rdc.catalogos)">
-            <i class="ti ti-file-spreadsheet" /> Descargar Excel
-          </button>
-          <button v-if="puedeCorregir" class="btn-primary" @click="corregir"><i class="ti ti-pencil" /> Corregir y reenviar</button>
+            <div class="rp">
+              <div class="rsh">BITÁCORA DE ACTIVIDADES</div>
+              <div v-if="!bitacora.length && !paradas.length" class="rem">Sin registros de bitácora.</div>
+              <div v-for="(b, i) in bitacora" :key="`b${i}`" class="rx-bit">
+                <span class="rmu" style="font-weight: 700">{{ b.hi || '—' }}<template v-if="b.hf"> – {{ b.hf }}</template></span>
+                <span style="font-weight: 600">{{ b.texto }}</span>
+              </div>
+              <div v-for="s in paradas" :key="`s${s.item}`" class="rin rx-standby">
+                <div class="rx-sb-t">STAND BY · {{ fmtHm(s.minutos) }}</div>
+                <div class="rx-sb-d">
+                  <template v-if="s.desde">{{ s.desde }}<template v-if="s.hasta"> a {{ s.hasta }}</template> · </template>{{ s.actividad || 'Sin actividad registrada' }}
+                </div>
+                <div class="rmu" style="font-size: 13px">Causa: {{ s.causa || '—' }}<template v-if="s.responsable"> · Liberó: {{ s.responsable }}</template></div>
+                <div v-if="s.comentario" class="rmu" style="font-size: 13px">{{ s.comentario }}</div>
+              </div>
+            </div>
+
+            <div class="rp">
+              <div class="rsh">PROGRAMACIÓN · OBSERVACIONES · REQUERIMIENTOS</div>
+              <div class="rx-g2">
+                <div>
+                  <div class="rl">Programación mañana</div>
+                  <div v-if="programadas.length" class="rx-txt">
+                    <div v-for="(p, i) in programadas" :key="i">{{ p.etiqueta }}<template v-if="p.descripcion"> — {{ p.descripcion }}</template></div>
+                  </div>
+                  <div v-else class="rmu rx-txt">—</div>
+                </div>
+                <div>
+                  <div class="rl">Observaciones</div>
+                  <div class="rx-txt" :class="{ rmu: !reporte.observaciones }">{{ reporte.observaciones || '—' }}</div>
+                </div>
+                <div>
+                  <div class="rl">Requerimientos</div>
+                  <div class="rx-txt" :class="{ rmu: !reporte.requerimientos }">{{ reporte.requerimientos || '—' }}</div>
+                </div>
+                <div v-if="reporte.restricciones">
+                  <div class="rl">Restricciones</div>
+                  <div class="rx-txt">{{ reporte.restricciones }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="rx-side" aria-label="Reporte para WhatsApp">
+            <div class="rp" style="gap: 14px">
+              <div class="rx-row" style="justify-content: space-between">
+                <div class="rsh">REPORTE PARA WHATSAPP</div>
+                <button type="button" class="rb sm" @click="copiar">{{ copiado ? 'Copiado ✓' : 'Copiar' }}</button>
+              </div>
+              <pre class="rx-pre" style="max-height: 560px">{{ textoWsp }}</pre>
+            </div>
+          </aside>
         </div>
       </template>
     </div>
@@ -154,68 +238,55 @@ async function corregir() {
 </template>
 
 <style scoped>
-.app {
-  padding: 0 12px 24px;
-}
-/* Ver el mismo comentario en FotosView.vue: esta regla scoped empataba en
-   especificidad con la global .rdc-app .app de rdc-tema.css que reservaba
-   espacio para la barra de pestañas flotante, y ganaba por orden de
-   aparición — tapando lo último del contenido. */
-@media (max-width: 1024px) {
-  .app {
-    padding-bottom: 132px;
-  }
-}
-.barra-superior {
-  padding: 12px 0 4px;
-}
-.volver {
-  display: inline-flex;
+.rx-titulo {
+  font-size: 20px;
+  font-weight: 800;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-family: inherit;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rx-sub {
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  padding: 4px 0;
+  margin-top: 3px;
 }
-.reporte-fila {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-.reporte-frente {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
-.reporte-meta {
+.rx-kl {
   font-size: 12px;
-  color: var(--text3);
-  margin-top: 2px;
+  font-weight: 600;
 }
-.estado-pill {
-  font-size: 10px;
+.rx-kv {
+  font-size: 28px;
   font-weight: 800;
-  padding: 4px 9px;
-  border-radius: 20px;
+  margin-top: 4px;
   white-space: nowrap;
-  flex-shrink: 0;
 }
-.estado-pill.pendiente {
-  background: var(--amber-bg);
-  color: var(--amber-text);
+.rx-bit {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ln);
+  font-size: 14px;
 }
-.estado-pill.enviado {
-  background: var(--green-bg);
-  color: var(--green-text);
+.rx-standby {
+  padding: 14px 16px;
+  border-left: 4px solid #f6a800;
+  border-radius: 6px 14px 14px 6px;
 }
-.estado-pill.error {
-  background: var(--red-bg);
-  color: var(--red-text);
+.rx-sb-t {
+  font-size: 13px;
+  font-weight: 800;
+}
+.rx-sb-d {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 4px 0;
+}
+.rx-txt {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 </style>

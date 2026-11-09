@@ -155,44 +155,107 @@ export function partidasEjecutadas(reporte) {
 // Bitácora
 // ---------------------------------------------------------------------------
 
-/** Frases que se generan solas desde los metrados ("Se realizaron
- * perforaciones con un total de 42 ML — Pernos: …"). No se guardan en la base:
- * son texto derivado y se vuelven a componer cada vez, así nunca quedan
- * desfasadas de los metrados que las originaron. */
+const unirY = (lista) => (lista.length < 2 ? lista.join('') : `${lista.slice(0, -1).join(', ')} y ${lista[lista.length - 1]}`)
+const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100
+
+/** Ajustes del supervisor sobre las frases automáticas (texto editado y "en
+ * curso"). Viven solo en el reporte local (no hay columna para ellos en
+ * Supabase): si el reporte se vuelve a bajar del servidor, las frases vuelven
+ * a su texto generado, nunca se duplican. */
+const ajustesBitacora = (reporte) => reporte?.bitacoraAjustes ?? { textos: {}, enCurso: {} }
+
+/** Frases que se generan solas desde los metrados ("Se realizó la perforación
+ * de pernos E-B5/P30 y E-B5/P31 con un total de 6 ML."). No se guardan en la
+ * base: son texto derivado y se vuelven a componer cada vez, así nunca quedan
+ * desfasadas de los metrados que las originaron.
+ *
+ * Cada entrada lleva una `clave` estable (partida o grupo) para poder
+ * ajustarla, y `resaltar` con los valores que se destacan en pantalla. */
 export function entradasAutomaticas(reporte) {
   const entradas = []
   const orden = (h) => (h ? aMinutos(h) ?? Infinity : Infinity)
+  const { textos, enCurso } = ajustesBitacora(reporte)
+  const poner = (e) => {
+    const editado = textos[e.clave]
+    entradas.push({ ...e, texto: editado || e.texto, editado: !!editado, original: e.texto, clave_orden: orden(e.hi) })
+  }
 
-  const porBloque = (bloque) =>
+  const porBloque = (bloque, seccion) =>
     (reporte.metrados ?? [])
       .filter((m) => m.bloque === bloque && Number(m.cantidad) > 0)
-      .forEach((m) =>
-        entradas.push({
-          clave: orden(m.horaInicio),
+      .forEach((m) => {
+        const valor = `${Number(m.cantidad)} ${m.unidad}`
+        poner({
+          clave: `p:${m.partidaCodigo || m.id}`,
+          seccion,
+          parte: m.partidaNombre,
           hi: m.horaInicio ?? '',
           hf: m.horaFin ?? '',
-          texto: `Se realizó ${m.partidaNombre} con un total de ${Number(m.cantidad)} ${m.unidad}`,
-        }),
-      )
+          texto: `Se realizó ${m.partidaNombre} con un total de ${valor}.`,
+          resaltar: [valor],
+        })
+      })
 
-  porBloque('1')
+  porBloque('1', 'pre')
 
-  const frases = {
-    Perforaciones: (t, c) => `Se realizaron perforaciones con un total de ${t} ML — Pernos: ${c}`,
-    Inyecciones: (t, c) => `Se realizaron inyecciones con un total de ${t} ML — Pernos: ${c}`,
-    'Instalación de mallas': (t, c) => `Se realizó la instalación de malla con un total de ${t} M2, con los paños: ${c}`,
-    'Instalación de cable': (t, c) => `Se instalaron cables con un total de ${t} ML: ${c}`,
-    'Ensayos Pull Test': (t, c) => `Se realizaron ${t} ensayos de Pull Test — Pernos: ${c}`,
-  }
   gruposCriticos(reporte).forEach((g) => {
-    const codigos = g.items.map((c) => c.codigo || '—').join(', ')
-    const total = g.partida === 'Ensayos Pull Test' ? g.unidades : g.cantidad
-    entradas.push({ clave: orden(g.horaInicio), hi: g.horaInicio, hf: g.horaFin, texto: frases[g.partida](total, codigos) })
+    const comun = { seccion: 'cri', hi: g.horaInicio, hf: g.horaFin }
+    if (g.partida === 'Perforaciones' || g.partida === 'Inyecciones') {
+      const clave = g.partida === 'Perforaciones' ? 'g:perf' : 'g:iny'
+      const sust = g.partida === 'Perforaciones' ? 'perforación' : 'inyección'
+      const codigos = unirY(g.items.map((c) => c.codigo || '—'))
+      const total = `${g.cantidad} ML`
+      poner({
+        ...comun,
+        clave,
+        parte: g.partida === 'Perforaciones' ? 'Perforación' : 'Inyección',
+        conmutaCurso: true,
+        enCurso: !!enCurso[clave],
+        texto: `${enCurso[clave] ? 'Se viene realizando' : 'Se realizó'} la ${sust} de pernos ${codigos} con un total de ${total}.`,
+        resaltar: [codigos, total],
+      })
+    } else if (g.partida === 'Instalación de mallas') {
+      g.items.forEach((c) => {
+        const total = `${redondear(c.cantidad)} M2`
+        poner({
+          ...comun,
+          hi: c.horaInicio ?? '',
+          hf: c.horaFin ?? '',
+          clave: `e:${c.id}`,
+          parte: 'Malla',
+          texto: `Se instaló malla${c.tipo ? ` ${c.tipo}` : ''}${c.codigo ? ` (${c.codigo})` : ''}, total ${total}.`,
+          resaltar: [total],
+        })
+      })
+    } else if (g.partida === 'Instalación de cable') {
+      g.items.forEach((c) => {
+        const total = `${redondear(c.cantidad)} ML`
+        poner({
+          ...comun,
+          hi: c.horaInicio ?? '',
+          hf: c.horaFin ?? '',
+          clave: `e:${c.id}`,
+          parte: 'Cable',
+          texto: `Se instaló cable${c.tipo ? ` de ${c.tipo}` : ''}${c.codigo ? ` en ${c.codigo}` : ''}, total ${total}.`,
+          resaltar: [total],
+        })
+      })
+    } else {
+      const codigos = unirY(g.items.map((c) => c.codigo || '—'))
+      const total = `${g.unidades} UND`
+      poner({
+        ...comun,
+        clave: 'g:pull',
+        parte: 'Pull Test',
+        texto: `Se ejecutó ensayo pull test en ${codigos}, total ${total}.`,
+        resaltar: [codigos, total],
+      })
+    }
   })
 
-  porBloque('3')
+  porBloque('3', 'com')
 
-  const conHora = entradas.filter((e) => e.hi).sort((a, b) => a.clave - b.clave)
+  const conHora = entradas.filter((e) => e.hi).sort((a, b) => a.clave_orden - b.clave_orden)
   return [...conHora, ...entradas.filter((e) => !e.hi)]
 }
 
@@ -261,7 +324,7 @@ export function textoWhatsapp(reporte, catalogos) {
         subActual = p.sub
         t += `_${p.sub}_\n`
       }
-      t += `• ${p.nombre}${p.manual ? ' (nueva)' : ''}: *${p.met} ${p.um}*\n`
+      t += `• ${p.nombre}: *${p.met} ${p.um}*\n`
     })
   } else {
     t += 'Sin metrados registrados.\n'
@@ -304,8 +367,15 @@ export function textoWhatsapp(reporte, catalogos) {
       const total = Math.round(g.items.reduce((s, c) => s + (Number(c.cantidad) || 0), 0) * 100) / 100
       t += `*Pernos — ${g.label}: ${g.items.length} un. (${total} ${g.items[0].unidad || 'ML'})*\n`
       g.items.forEach((c) => {
-        t += `  ${c.codigo || '—'} — ${c.cantidad ? `${c.cantidad} ${c.unidad || 'ML'}` : '—'}\n`
+        const ubic = c.ubicacion?.trim() ? ` — ${c.ubicacion.trim()}` : ''
+        t += `  ${c.codigo || '—'} — ${c.cantidad ? `${c.cantidad} ${c.unidad || 'ML'}` : '—'}${ubic}\n`
       })
+      // Solo sale si de verdad se reportó Inyección ese día (g.items.length
+      // ya filtró eso arriba) y si el supervisor llenó el dato — no tiene
+      // sentido mostrar "0 bolsas" cuando simplemente no se registró nada.
+      if (g.label === 'Inyección' && reporte.inyBolsasCemento) {
+        t += `  🧱 Bolsas de cemento usadas: ${reporte.inyBolsasCemento}\n`
+      }
     })
 
     const mallas = elementos.filter((c) => c.elemento === 'Malla')
@@ -313,7 +383,8 @@ export function textoWhatsapp(reporte, catalogos) {
       t += `*Mallas: ${Math.round(mallas.reduce((s, c) => s + (Number(c.cantidad) || 0), 0) * 100) / 100} M²*\n`
       mallas.forEach((c) => {
         const dim = c.ancho && c.largo ? `${c.ancho}×${c.largo} m` : c.cantidad ? `${c.cantidad} M²` : '—'
-        t += `  ${c.codigo || '—'} — ${dim}\n`
+        const tipo = c.tipo?.trim() ? ` — ${c.tipo.trim()}` : ''
+        t += `  ${c.codigo || '—'}${tipo} — ${dim}\n`
       })
     }
 

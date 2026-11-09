@@ -90,7 +90,7 @@ const cantidadMaquinaria = (reporte, tipo) =>
 // ---------------------------------------------------------------------------
 // Hoja RDC — una sola fila, horizontal
 // ---------------------------------------------------------------------------
-function filaRdc(reporte, catalogos) {
+function filaRdc(reporte, catalogos, { copiaPersonal = false } = {}) {
   const encabezados = []
   const valores = []
   const agregar = (encabezado, valor) => {
@@ -112,8 +112,9 @@ function filaRdc(reporte, catalogos) {
 
   HITOS.forEach((h) => agregar(h, horaHito(reporte, h)))
 
-  agregar('Salida refrigerio', reporte.refrigerioSalida ?? '')
-  agregar('Retorno refrigerio', reporte.refrigerioRetorno ?? '')
+  // Siempre HH:MM (un reporte traído de la base puede traer HH:MM:SS).
+  agregar('Salida refrigerio', String(reporte.refrigerioSalida ?? '').slice(0, 5))
+  agregar('Retorno refrigerio', String(reporte.refrigerioRetorno ?? '').slice(0, 5))
 
   EQUIPOS_PERFORACION.forEach((n) => agregar(n, cantidadMaquinaria(reporte, n)))
   EQUIPOS_SOPORTE.forEach((n) => agregar(n, cantidadMaquinaria(reporte, n)))
@@ -128,6 +129,7 @@ function filaRdc(reporte, catalogos) {
   agregar('Observaciones', reporte.observaciones ?? '')
   agregar('Requerimientos', reporte.requerimientos ?? '')
   agregar('Restricciones', reporte.restricciones ?? '')
+  // Power Automate no lee esta columna — se quitó de ambas versiones del Excel.
   agregar('Redline - Supervisor Hegatrux', nombreDe(catalogos, 'redlineSupervisores', reporte.redlineSupervisorId))
   agregar('Redline - Descripción', reporte.redlineDescripcion ?? '')
 
@@ -191,7 +193,7 @@ function filasMetrados(reporte, catalogos) {
 // ---------------------------------------------------------------------------
 // Hoja RECURSOS
 // ---------------------------------------------------------------------------
-function filasRecursos(reporte, catalogos) {
+function filasRecursos(reporte, catalogos, { copiaPersonal = false } = {}) {
   const encabezados = ['Item', 'Descripción', 'Cantidad', 'Horas']
   const filas = []
   const efectivo = tiempoEfectivoMin(reporte)
@@ -219,6 +221,13 @@ function filasRecursos(reporte, catalogos) {
     (reporte.maquinaria ?? []).filter((m) => m.categoria === categoria).map((m) => ({ desc: m.tipo, cant: m.cantidad }))
   seccion('EQUIPOS', porCategoria('perforacion'))
   seccion('MAQUINARIA', porCategoria('soporte'))
+
+  // Solo en la copia personal: en la hoja RDC que viaja a SharePoint esto
+  // sigue siendo una columna (ver filaRdc) — acá es el reemplazo pedido
+  // puntualmente para la copia que se descarga desde la app.
+  if (copiaPersonal) {
+    seccion('INYECCIÓN', [{ desc: 'Bolsas de cemento', cant: reporte.inyBolsasCemento }])
+  }
 
   return { encabezados, filas }
 }
@@ -266,10 +275,17 @@ function filasControl(reporte, catalogos) {
   const capataz = nombreDe(catalogos, 'capataces', reporte.capatazId)
   const supervisor = nombreDe(catalogos, 'supervisores', reporte.supervisorId)
 
+  const normalizarCodigo = (v) => (v ?? '').trim().toUpperCase()
+
   const filas = (reporte.elementos ?? []).map((c) => {
     // La biblioteca de pernos es la única fuente de la columna Ángulo, y el
     // respaldo de Diámetro y Plano cuando el supervisor no los completó.
-    const lib = (catalogos.pernos ?? []).find((p) => p.frente_id === reporte.frenteId && p.codigo === c.codigo)
+    // Comparación normalizada (mayúsculas/espacios) — mismo criterio que ya
+    // usa el resto del RDC (PasoMetrados, fn_rdc_pernos_estado) para que un
+    // código tipeado como "p5" sí encuentre "P5" en el catálogo.
+    const lib = (catalogos.pernos ?? []).find(
+      (p) => p.frente_id === reporte.frenteId && normalizarCodigo(p.codigo) === normalizarCodigo(c.codigo)
+    )
     const area = c.ancho && c.largo ? Math.round(Number(c.ancho) * Number(c.largo) * 1000) / 1000 : ''
     return [
       f,
@@ -389,8 +405,8 @@ function filasWsp(reporte, catalogos) {
     const hora = horaHito(reporte, h)
     if (hora) lineas.push([`${h}: ${hora}`])
   })
-  if (reporte.refrigerioSalida) lineas.push([`Salida a refrigerio: ${reporte.refrigerioSalida}`])
-  if (reporte.refrigerioRetorno) lineas.push([`Retorno de refrigerio: ${reporte.refrigerioRetorno}`])
+  if (reporte.refrigerioSalida) lineas.push([`Salida a refrigerio: ${String(reporte.refrigerioSalida).slice(0, 5)}`])
+  if (reporte.refrigerioRetorno) lineas.push([`Retorno de refrigerio: ${String(reporte.refrigerioRetorno).slice(0, 5)}`])
   if (reporte.restriccionAcceso) {
     const rango = reporte.restriccionInicio && reporte.restriccionFin ? `${reporte.restriccionInicio} - ${reporte.restriccionFin}` : ''
     const desc = reporte.restriccionDescripcion ? ` (${reporte.restriccionDescripcion})` : ''
@@ -418,11 +434,11 @@ export function nombreArchivo(reporte, catalogos) {
   return `${frente}_${reporte.fecha}${reporte.esCorreccion ? '(C)' : ''}.xlsx`
 }
 
-export function construirWorkbook(reporte, catalogos, { telemetria = null } = {}) {
+export function construirWorkbook(reporte, catalogos, { telemetria = null, copiaPersonal = false } = {}) {
   const libro = XLSX.utils.book_new()
 
   // --- RDC ---
-  const { encabezados, valores } = filaRdc(reporte, catalogos)
+  const { encabezados, valores } = filaRdc(reporte, catalogos, { copiaPersonal })
   const hojaRdc = XLSX.utils.aoa_to_sheet([encabezados, valores])
   hojaRdc['!cols'] = encabezados.map((h, i) => ({
     wch: Math.min(Math.max(h.length, String(valores[i] ?? '').length, 8), 40),
@@ -438,7 +454,7 @@ export function construirWorkbook(reporte, catalogos, { telemetria = null } = {}
   XLSX.utils.book_append_sheet(libro, hojaMet, 'METRADOS')
 
   // --- RECURSOS ---
-  const rec = filasRecursos(reporte, catalogos)
+  const rec = filasRecursos(reporte, catalogos, { copiaPersonal })
   const hojaRec = XLSX.utils.aoa_to_sheet([rec.encabezados, ...rec.filas])
   hojaRec['!cols'] = [8, 40, 12, 10].map((wch) => ({ wch }))
   pintarCabecera(hojaRec, rec.encabezados, VIOLETA)
@@ -536,8 +552,15 @@ function agregarTelemetria(libro, reporte, telemetria) {
 export const workbookABase64 = (libro) => XLSX.write(libro, { bookType: 'xlsx', type: 'base64', cellStyles: true })
 
 /** Descarga local del Excel, el "Descargar mi copia" que los supervisores ya
- * usan como respaldo antes de enviar sin señal. */
+ * usan como respaldo antes de enviar sin señal.
+ *
+ * `copiaPersonal: true` siempre, a propósito: es la única forma en que la
+ * app arma un workbook, así que es acá donde vive la diferencia pedida por
+ * el usuario (Bolsas de cemento como fila en RECURSOS, no columna en RDC) —
+ * nunca llega a construirWorkbook() sin este flag desde ningún otro lado,
+ * así que el Excel que viaja a SharePoint (rdcSync.js, que llama a
+ * construirWorkbook directo) no se ve afectado. */
 export function descargarWorkbook(reporte, catalogos, opciones) {
-  const libro = construirWorkbook(reporte, catalogos, opciones)
+  const libro = construirWorkbook(reporte, catalogos, { ...opciones, copiaPersonal: true })
   XLSX.writeFile(libro, nombreArchivo(reporte, catalogos), { cellStyles: true })
 }

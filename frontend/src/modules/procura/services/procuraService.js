@@ -1,7 +1,7 @@
 import { supabase } from '../../../services/supabaseClient'
 
 const SELECT_METRADO =
-  '*, materiales(id, codigo, descripcion, unidad), frentes(id, codigo, nombre), usuarios(id, nombre)'
+  '*, nombres_edp(id, nombre), frentes(id, codigo, nombre), usuarios(id, nombre)'
 
 /** Una fila vigente por cada combinación frente+material, de todos los frentes. */
 export async function listarMetradosVigentes() {
@@ -30,10 +30,15 @@ export async function listarHistorialFrente(frenteId) {
   return data
 }
 
+// La zona solo viaja cuando tiene valor ('' = sin zona = el valor por defecto de
+// la base), así un metrado sin zonas se guarda exactamente como siempre.
+const limpiarZona = (p) =>
+  Object.fromEntries(Object.entries(p).filter(([k, v]) => !((k === 'zona' && !v) || (k === 'orden' && (v === null || v === undefined)))))
+
 export async function crearVersionMetrado(payload) {
   const { data, error } = await supabase
     .from('metrados_procura')
-    .insert(payload)
+    .insert(limpiarZona(payload))
     .select(SELECT_METRADO)
     .single()
   if (error) throw error
@@ -43,7 +48,7 @@ export async function crearVersionMetrado(payload) {
 /** Carga masiva: cada fila crea una nueva versión (trg_metrados_versionar se encarga del resto). */
 export async function crearVersionesMetradoEnLote(payloads) {
   if (!payloads.length) return []
-  const { data, error } = await supabase.from('metrados_procura').insert(payloads).select(SELECT_METRADO)
+  const { data, error } = await supabase.from('metrados_procura').insert(payloads.map(limpiarZona)).select(SELECT_METRADO)
   if (error) throw error
   return data
 }
@@ -54,31 +59,37 @@ export async function listarComparacion(frenteId) {
   return data
 }
 
-export async function listarFrentesActivos() {
+/** Todos los frentes, sin importar su estado — cargar un metrado Procura no
+ * debería depender de si el frente está activo ahora mismo: un frente
+ * paralizado o incluso cerrado puede necesitar su metrado corregido, y uno
+ * planificado/próximo puede necesitar el suyo cargado de antemano, antes de
+ * arrancar. El filtro por estado, si hace falta, se aplica en la pantalla. */
+export async function listarFrentes() {
   const { data, error } = await supabase
     .from('frentes')
     .select('id, codigo, nombre, area, sector, estado, contrato_id, contratos(id, codigo, nombre)')
-    .eq('estado', 'activo')
     .order('codigo')
   if (error) throw error
   return data
 }
 
-/** Frentes con consumo/reserva de un material que todavía no tiene metrado vigente (fn_evaluar_alertas). */
+/** Frentes con consumo/reserva de un grupo EDP que todavía no tiene metrado vigente (fn_evaluar_alertas). */
 export async function listarAlertasNoPrevisto() {
   const { data, error } = await supabase
     .from('alertas')
-    .select('frente_id, material_id')
+    .select('frente_id, descripcion_edp_id')
     .eq('tipo', 'material_no_previsto')
     .eq('estado', 'activa')
   if (error) throw error
   return data
 }
 
+/** Trae el catálogo con su grupo EDP — de acá el store deriva la lista de
+ * Nombres EDP (un grupo puede cubrir varios materiales/longitudes). */
 export async function listarMaterialesActivos() {
   const { data, error } = await supabase
     .from('materiales')
-    .select('id, codigo, descripcion, unidad')
+    .select('id, codigo, descripcion, unidad, unidad_edp, descripcion_edp_id, observaciones, nombres_edp(id, nombre)')
     .eq('estado', 'activo')
     .order('codigo')
   if (error) throw error

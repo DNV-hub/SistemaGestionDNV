@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, useAttrs } from 'vue'
+import ModalFormulario from '../../../components/ModalFormulario.vue'
 import { listarLotesDisponibles } from '../services/valesService'
 
 const props = defineProps({
@@ -12,22 +13,32 @@ const attrs = useAttrs()
 
 const saldoPendiente = computed(() => props.reserva.cantidad - props.reserva.cantidad_entregada)
 const necesitaLote = computed(() => (props.linea.materiales?.tipo_conversion ?? 'ninguna') !== 'ninguna')
+const unidad = computed(() => props.linea.materiales?.unidad ?? '')
+const unidadEdp = computed(() => props.linea.materiales?.unidad_edp || (props.linea.materiales?.tipo_conversion === 'area' ? 'm2' : 'ml'))
 
-const cantidad = ref(saldoPendiente.value)
 const documento_referencia = ref('')
 const guardando = ref(false)
 const error = ref('')
 
+// Caso SIN lote: una sola cantidad, igual que siempre.
+const cantidadSinLote = ref(saldoPendiente.value)
+
+// Caso CON lote: una fila {ingreso_id, cantidad} por cada lote elegido —
+// permite repartir una entrega entre varios lotes en una sola operación,
+// sin tener que repetir todo el flujo del modal para el resto.
+const asignaciones = ref([{ ingreso_id: '', cantidad: '' }])
 const lotes = ref([])
 const cargandoLotes = ref(false)
-const ingresoId = ref('')
 
 onMounted(async () => {
   if (!necesitaLote.value) return
   cargandoLotes.value = true
   try {
     lotes.value = await listarLotesDisponibles(props.linea.material_id, props.reserva.almacen_id)
-    if (lotes.value.length === 1) ingresoId.value = lotes.value[0].id
+    if (lotes.value.length === 1) {
+      asignaciones.value[0].ingreso_id = lotes.value[0].id
+      asignaciones.value[0].cantidad = Math.min(saldoPendiente.value, lotes.value[0].cantidad_restante)
+    }
   } catch (e) {
     console.error(e)
     error.value = 'No se pudieron cargar los lotes disponibles.'
@@ -36,43 +47,42 @@ onMounted(async () => {
   }
 })
 
-const loteSeleccionado = computed(() => lotes.value.find((l) => l.id === ingresoId.value))
-const unidadEdp = computed(() => props.linea.materiales?.unidad_edp || (props.linea.materiales?.tipo_conversion === 'area' ? 'm2' : 'ml'))
-const cantidadEdpPreview = computed(() =>
-  loteSeleccionado.value ? Number(cantidad.value || 0) * loteSeleccionado.value.factor_conversion : null
-)
+function agregarFila() {
+  asignaciones.value.push({ ingreso_id: '', cantidad: '' })
+}
+function quitarFila(idx) {
+  asignaciones.value.splice(idx, 1)
+}
+function loteDe(ingresoId) {
+  return lotes.value.find((l) => l.id === ingresoId)
+}
+
+// Un mismo lote no se puede elegir en dos filas (una fila = un lote): cada
+// select solo ofrece los lotes que ninguna OTRA fila ya tomó.
+function opcionesPara(idx) {
+  const elegidosEnOtras = new Set(asignaciones.value.filter((f, i) => i !== idx && f.ingreso_id).map((f) => f.ingreso_id))
+  return lotes.value.filter((l) => !elegidosEnOtras.has(l.id))
+}
 
 function etiquetaLote(l) {
   const medida = l.ancho ? `${l.ancho}×${l.largo} m` : `${l.largo} m`
-  return `${l.fecha} — ${medida} — quedan ${l.cantidad_restante} ${props.linea.materiales?.unidad}${l.documento_referencia ? ` (${l.documento_referencia})` : ''}`
+  return `${l.fecha} — ${medida} — quedan ${l.cantidad_restante} ${unidad.value}${l.documento_referencia ? ` (${l.documento_referencia})` : ''}`
 }
 
-async function onSubmit() {
-  error.value = ''
-  const valor = Number(cantidad.value)
-  if (!valor || valor <= 0) {
-    error.value = 'La cantidad debe ser mayor a cero.'
-    return
-  }
-  if (valor > saldoPendiente.value) {
-    error.value = `No puede superar el saldo pendiente (${saldoPendiente.value} ${props.linea.materiales?.unidad}).`
-    return
-  }
-  if (necesitaLote.value && !ingresoId.value) {
-    error.value = 'Elegí de qué lote (ingreso) sale esta entrega.'
-    return
-  }
-  if (loteSeleccionado.value && valor > loteSeleccionado.value.cantidad_restante) {
-    error.value = `Ese lote solo tiene ${loteSeleccionado.value.cantidad_restante} ${props.linea.materiales?.unidad} — elegí otro lote o partí la entrega.`
-    return
-  }
+const totalAsignado = computed(() => asignaciones.value.reduce((acc, f) => acc + (Number(f.cantidad) || 0), 0))
 
+function edpDeFila(f) {
+  const lote = loteDe(f.ingreso_id)
+  return lote && f.cantidad ? Number(f.cantidad) * lote.factor_conversion : 0
+}
+const totalEdpPreview = computed(() => (necesitaLote.value ? asignaciones.value.reduce((acc, f) => acc + edpDeFila(f), 0) : null))
+
+async function guardar(asignacionesFinal) {
   guardando.value = true
   try {
     await attrs.onGuardar({
-      cantidad: valor,
       documento_referencia: documento_referencia.value.trim() || null,
-      ingreso_id: necesitaLote.value ? ingresoId.value : null,
+      asignaciones: asignacionesFinal,
     })
   } catch (e) {
     console.error(e)
@@ -81,158 +91,161 @@ async function onSubmit() {
     guardando.value = false
   }
 }
+
+async function onSubmit() {
+  error.value = ''
+
+  if (!necesitaLote.value) {
+    // "No se entrega" no se registra acá: es la acción "No entregar" de la
+    // línea, que pide motivo y cierra la línea.
+    const valor = Number(cantidadSinLote.value)
+    if (!valor || valor <= 0) {
+      error.value = 'La cantidad debe ser mayor a cero.'
+      return
+    }
+    if (valor > saldoPendiente.value) {
+      error.value = `No puede superar el saldo pendiente (${saldoPendiente.value} ${unidad.value}).`
+      return
+    }
+    await guardar([{ cantidad: valor, ingreso_id: null }])
+    return
+  }
+
+  const filas = asignaciones.value.filter((f) => f.ingreso_id && Number(f.cantidad) > 0)
+  if (!filas.length) {
+    error.value = 'Agrega al menos un lote con una cantidad mayor a cero.'
+    return
+  }
+  for (const f of filas) {
+    const lote = loteDe(f.ingreso_id)
+    if (lote && Number(f.cantidad) > lote.cantidad_restante) {
+      error.value = `Ese lote solo tiene ${lote.cantidad_restante} ${unidad.value} — elegí otro lote o repartí distinto.`
+      return
+    }
+  }
+  if (totalAsignado.value > saldoPendiente.value) {
+    error.value = `El total repartido (${totalAsignado.value} ${unidad.value}) supera el saldo pendiente (${saldoPendiente.value} ${unidad.value}).`
+    return
+  }
+
+  await guardar(filas.map((f) => ({ cantidad: Number(f.cantidad), ingreso_id: f.ingreso_id })))
+}
 </script>
 
 <template>
-  <div class="overlay" @click.self="$emit('cerrar')">
-    <form class="modal" @submit.prevent="onSubmit">
-      <h2>Registrar entrega</h2>
-      <p class="resumen">
-        {{ linea.materiales?.codigo }} — {{ linea.materiales?.descripcion }}<br />
-        Almacén: {{ reserva.almacenes?.codigo }} — {{ reserva.almacenes?.nombre }}<br />
-        Saldo pendiente: <strong>{{ saldoPendiente }} {{ linea.materiales?.unidad }}</strong>
-      </p>
+  <ModalFormulario
+    titulo="Registrar entrega"
+    :subtitulo="linea.materiales?.descripcion ?? ''"
+    ancho="780px"
+    texto-guardar="Registrar entrega"
+    :guardando="guardando"
+    :error="error"
+    @cerrar="$emit('cerrar')"
+    @enviar="onSubmit"
+  >
+    <p class="mf-info">
+      Almacén: <strong>{{ reserva.almacenes?.codigo }} — {{ reserva.almacenes?.nombre }}</strong> · Saldo pendiente:
+      <strong>{{ saldoPendiente }} {{ unidad }}</strong>
+    </p>
 
-      <label>
-        Cantidad a entregar
-        <div class="cantidad-con-unidad">
-          <input v-model="cantidad" type="number" step="0.001" min="0.001" :max="saldoPendiente" required />
-          <span class="unidad-badge">{{ linea.materiales?.unidad }}</span>
+    <template v-if="!necesitaLote">
+      <div class="mf-campo">
+        <span class="mf-rotulo">Cantidad a entregar</span>
+        <div class="mf-con-unidad">
+          <input v-model="cantidadSinLote" type="number" step="0.001" min="0.001" :max="saldoPendiente" required />
+          <span class="mf-unidad">{{ unidad }}</span>
         </div>
-      </label>
-
-      <template v-if="necesitaLote">
-        <p v-if="cargandoLotes" class="ayuda">Cargando lotes…</p>
-        <label v-else>
-          De qué lote sale
-          <select v-model="ingresoId" required>
-            <option value="" disabled>Selecciona un lote…</option>
-            <option v-for="l in lotes" :key="l.id" :value="l.id">{{ etiquetaLote(l) }}</option>
-          </select>
-          <span v-if="!lotes.length" class="ayuda">No hay lotes con saldo para este material en este almacén.</span>
-        </label>
-        <p v-if="cantidadEdpPreview" class="factor-preview">= {{ cantidadEdpPreview.toFixed(2) }} {{ unidadEdp }} para el EDP</p>
-      </template>
-
-      <label>
-        Documento de referencia (opcional)
-        <input v-model="documento_referencia" type="text" placeholder="Guía de salida…" />
-      </label>
-
-      <p v-if="error" class="error">{{ error }}</p>
-
-      <div class="acciones">
-        <button type="button" class="secundario" @click="$emit('cerrar')">Cancelar</button>
-        <button type="submit" :disabled="guardando">
-          {{ guardando ? 'Guardando…' : 'Registrar entrega' }}
-        </button>
       </div>
-    </form>
-  </div>
+    </template>
+
+    <template v-else>
+      <p v-if="cargandoLotes" class="mf-ayuda">Cargando lotes…</p>
+      <div v-else class="lotes">
+        <span class="mf-rotulo">De qué lote(s) sale</span>
+        <div v-for="(fila, idx) in asignaciones" :key="idx" class="lote-fila">
+          <select v-model="fila.ingreso_id">
+            <option value="" disabled>Selecciona un lote…</option>
+            <option v-for="l in opcionesPara(idx)" :key="l.id" :value="l.id">{{ etiquetaLote(l) }}</option>
+          </select>
+          <input v-model="fila.cantidad" type="number" step="0.001" min="0.001" placeholder="Cantidad" />
+          <span class="mf-unidad">{{ unidad }}</span>
+          <button type="button" class="quitar" :disabled="asignaciones.length === 1" title="Quitar lote" aria-label="Quitar lote" @click="quitarFila(idx)">×</button>
+        </div>
+        <button type="button" class="agregar" :disabled="!lotes.length || asignaciones.length >= lotes.length" @click="agregarFila">
+          + Agregar otro lote
+        </button>
+        <span v-if="!lotes.length" class="mf-ayuda">No hay lotes con saldo para este material en este almacén.</span>
+      </div>
+      <p class="mf-info">
+        Total repartido: <strong>{{ totalAsignado }} {{ unidad }}</strong> de {{ saldoPendiente }} {{ unidad }}
+        <template v-if="totalEdpPreview">· equivale a {{ totalEdpPreview.toFixed(2) }} {{ unidadEdp }} para el EDP</template>
+      </p>
+    </template>
+
+    <div class="mf-campo">
+      <span class="mf-rotulo">Documento de referencia <em>(opcional)</em></span>
+      <input v-model="documento_referencia" type="text" placeholder="Guía de salida…" />
+    </div>
+  </ModalFormulario>
 </template>
 
 <style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(17, 24, 39, 0.45);
+.lotes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.lote-fila {
   display: grid;
-  place-items: center;
-  z-index: 40;
+  grid-template-columns: minmax(0, 1fr) 140px auto 32px;
+  gap: 0.6rem;
+  align-items: center;
 }
-.modal {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  width: 380px;
-  max-width: calc(100vw - 2rem);
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-h2 {
-  margin: 0;
-  font-size: 1.05rem;
-}
-.resumen {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--color-text);
-  background: var(--color-surface-2);
-  padding: 0.5rem 0.65rem;
-  border-radius: var(--radius-control);
-  line-height: 1.5;
-}
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
-}
-input,
-select {
-  padding: 0.5rem;
+.lote-fila select,
+.lote-fila input {
+  padding: 0.6rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   font: inherit;
+  width: 100%;
+  min-width: 0;
 }
-.ayuda {
-  font-size: 0.78rem;
-  font-weight: 400;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-.factor-preview {
-  margin: -0.35rem 0 0;
-  font-size: 0.78rem;
-  color: var(--color-text-muted);
-}
-.cantidad-con-unidad {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.cantidad-con-unidad input {
-  flex: 1;
-}
-.unidad-badge {
-  padding: 0.3rem 0.6rem;
-  background: var(--color-surface-2);
-  border-radius: var(--radius-control);
-  font-size: 0.8rem;
-  color: var(--color-text);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.acciones {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-button {
-  padding: 0.55rem 1rem;
+.quitar {
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.quitar:hover:not(:disabled) {
+  color: var(--color-danger);
+}
+.quitar:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.agregar {
+  align-self: flex-start;
+  padding: 0.5rem 0.9rem;
+  background: none;
+  border: 1px dashed var(--color-border);
   border-radius: var(--radius-control);
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
+  color: var(--color-primary);
   font-weight: 600;
   cursor: pointer;
 }
-button:disabled {
-  opacity: 0.6;
+.agregar:disabled {
+  opacity: 0.5;
   cursor: default;
 }
-.secundario {
-  background: none;
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-}
-.error {
-  color: var(--color-danger);
-  font-size: 0.85rem;
-  margin: 0;
+@media (max-width: 720px) {
+  .lote-fila {
+    grid-template-columns: minmax(0, 1fr) 100px auto 32px;
+  }
 }
 </style>

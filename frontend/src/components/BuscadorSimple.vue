@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 // Mismo comportamiento que BuscadorMaterial (escribe y filtra, elige de una
 // lista desplegable) pero genérico: sirve para cualquier lista de opciones
@@ -15,6 +15,12 @@ const emit = defineEmits(['update:modelValue'])
 
 const query = ref('')
 const abierto = ref(false)
+// Índice resaltado dentro de `filtradas` — con flechas se mueve, con mouse
+// se sigue (mouseenter), y Enter/Tab confirman lo que esté resaltado. Antes
+// este buscador solo se podía usar con mouse: Tab saltaba al siguiente
+// campo sin elegir nada, y Enter no hacía nada.
+const resaltado = ref(-1)
+const opcionEls = ref([])
 
 const seleccionada = computed(() => props.opciones.find((o) => o.value === props.modelValue) ?? null)
 
@@ -34,7 +40,13 @@ const filtradas = computed(() => {
 
 function onInput() {
   abierto.value = true
+  resaltado.value = 0
   if (props.modelValue) emit('update:modelValue', '')
+}
+
+function onFocus() {
+  abierto.value = true
+  resaltado.value = filtradas.value.length ? 0 : -1
 }
 
 function elegir(o) {
@@ -43,6 +55,24 @@ function elegir(o) {
 }
 
 function onBlur() {
+  abierto.value = false
+  query.value = seleccionada.value ? seleccionada.value.etiqueta : ''
+}
+
+function moverResaltado(delta) {
+  if (!abierto.value || !filtradas.value.length) return
+  const total = filtradas.value.length
+  resaltado.value = (resaltado.value + delta + total) % total
+  nextTick(() => opcionEls.value[resaltado.value]?.scrollIntoView({ block: 'nearest' }))
+}
+
+function elegirResaltado() {
+  if (!abierto.value) return
+  const o = filtradas.value[resaltado.value] ?? filtradas.value[0]
+  if (o) elegir(o)
+}
+
+function onEscape() {
   abierto.value = false
   query.value = seleccionada.value ? seleccionada.value.etiqueta : ''
 }
@@ -56,11 +86,24 @@ function onBlur() {
       :placeholder="placeholder"
       autocomplete="off"
       @input="onInput"
-      @focus="abierto = true"
+      @focus="onFocus"
       @blur="onBlur"
+      @keydown.down.prevent="moverResaltado(1)"
+      @keydown.up.prevent="moverResaltado(-1)"
+      @keydown.enter.prevent="elegirResaltado"
+      @keydown.tab="elegirResaltado"
+      @keydown.esc="onEscape"
     />
+    <svg class="chevron" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" /></svg>
     <ul v-if="abierto" class="opciones">
-      <li v-for="o in filtradas" :key="o.value" @mousedown.prevent="elegir(o)">
+      <li
+        v-for="(o, i) in filtradas"
+        :key="o.value"
+        :ref="(el) => (opcionEls[i] = el)"
+        :class="{ resaltado: i === resaltado }"
+        @mousedown.prevent="elegir(o)"
+        @mouseenter="resaltado = i"
+      >
         <span>{{ o.etiqueta }}</span>
         <span v-if="o.sub" class="sub">{{ o.sub }}</span>
       </li>
@@ -76,12 +119,29 @@ function onBlur() {
 input {
   width: 100%;
   box-sizing: border-box;
-  padding: 0.5rem;
+  padding: 0.5rem 1.8rem 0.5rem 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+}
+/* A propósito, aunque el campo ya tenga algo escrito: sin esto se veía
+   igual que un dato fijo (ej. un frente precargado) en vez de un buscador
+   que se puede tocar y cambiar. */
+.chevron {
+  position: absolute;
+  right: 0.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 .opciones {
   position: absolute;
@@ -107,7 +167,8 @@ input {
   gap: 0.4rem;
   justify-content: space-between;
 }
-.opciones li:hover {
+.opciones li:hover,
+.opciones li.resaltado {
   background: var(--color-surface-2);
 }
 .opciones li.vacio {

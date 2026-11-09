@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRdcStore } from '../store/rdc'
 import { useAuthStore } from '../../../store/auth'
@@ -45,10 +45,6 @@ const fmtFecha = (iso) => (iso ? iso.split('-').reverse().join('/') : '—')
 const nombre = (clave, id) => nombreDe(rdc.catalogos, clave, id) || '—'
 
 const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-const MESES_LARGOS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'setiembre', 'octubre', 'noviembre', 'diciembre',
-]
 /** "10 set." — fecha corta para el título de cada tarjeta del historial. */
 function fechaCorta(iso) {
   if (!iso) return '—'
@@ -86,10 +82,28 @@ function esBorradorPropio(item) {
   return item.raw.creado_por === auth.perfil?.id || item.raw.supervisor_id === propioSupervisorId.value
 }
 
-/** Historial local y remoto combinados en una sola lista cronológica
- * (más reciente primero), agrupada por mes — como pide el mockup. Cada
- * fila se normaliza a la misma forma para que la tarjeta no tenga que
- * distinguir de dónde vino. */
+/** Grupos de frente colapsados por defecto (piden verse recién al tocar el
+ * frente, para no scrollear entre reportes viejos de otros frentes) — salvo
+ * el más reciente, que se abre solo (ver el watch de más abajo). Se
+ * recuerda por nombre de frente, no por índice, para que no se cierre solo
+ * uno distinto si el orden de los grupos cambia. */
+const gruposAbiertos = ref(new Set())
+function alternarGrupo(etiqueta) {
+  const copia = new Set(gruposAbiertos.value)
+  if (copia.has(etiqueta)) copia.delete(etiqueta)
+  else copia.add(etiqueta)
+  gruposAbiertos.value = copia
+}
+function grupoAbierto(etiqueta) {
+  return gruposAbiertos.value.has(etiqueta)
+}
+
+/** Historial local y remoto combinados, agrupado por FRENTE y dentro de
+ * cada frente por fecha, el más reciente primero. Los GRUPOS (frentes) van
+ * en orden cronológico según su reporte más reciente — no alfabético — para
+ * que el supervisor vea, de arriba hacia abajo, por qué frentes fue pasando
+ * en el tiempo y cuál es el más reciente de todos. Cada fila se normaliza a
+ * la misma forma para que la tarjeta no tenga que distinguir de dónde vino. */
 const historialAgrupado = computed(() => {
   const locales = rdc.reportes.map((r) => ({
     id: r.id,
@@ -119,22 +133,38 @@ const historialAgrupado = computed(() => {
     raw: r,
   }))
 
-  const todos = [...locales, ...remotos].sort((a, b) => b.fecha.localeCompare(a.fecha))
+  const todos = [...locales, ...remotos]
 
   const grupos = new Map()
   for (const item of todos) {
-    const [y, m] = item.fecha.split('-')
-    const clave = `${y}-${m}`
-    if (!grupos.has(clave)) grupos.set(clave, { etiqueta: `${MESES_LARGOS[Number(m) - 1].toUpperCase()} ${y}`, items: [] })
+    const clave = item.frenteNombre || '—'
+    if (!grupos.has(clave)) grupos.set(clave, { etiqueta: clave, items: [] })
     grupos.get(clave).items.push(item)
   }
-  return [...grupos.values()]
+  for (const grupo of grupos.values()) {
+    grupo.items.sort((a, b) => b.fecha.localeCompare(a.fecha))
+  }
+  // Cada grupo ya quedó ordenado por fecha (más reciente primero), así que
+  // items[0].fecha es la fecha más reciente de ESE frente — se usa para
+  // ordenar los grupos entre sí.
+  return [...grupos.values()].sort((a, b) => b.items[0].fecha.localeCompare(a.items[0].fecha))
 })
 
-async function nuevo() {
-  const reporte = await rdc.nuevo()
-  router.push({ name: 'rdc-editar', params: { id: reporte.id } })
-}
+// El primer grupo (el más reciente) arranca abierto solo, para que el
+// supervisor vea de una sus últimos reportes y en qué estado quedaron, sin
+// tener que tocar nada — antes todos arrancaban cerrados. Solo pasa la
+// PRIMERA vez que llegan datos en esta visita a la pantalla (si el
+// supervisor lo cierra a mano después, no se le vuelve a abrir solo).
+let yaAbrioElMasReciente = false
+watch(
+  historialAgrupado,
+  (grupos) => {
+    if (yaAbrioElMasReciente || !grupos.length) return
+    yaAbrioElMasReciente = true
+    gruposAbiertos.value = new Set([grupos[0].etiqueta])
+  },
+  { immediate: true }
+)
 
 function abrir(r) {
   if (r.estado === ESTADO.BORRADOR) router.push({ name: 'rdc-editar', params: { id: r.id } })
@@ -183,14 +213,14 @@ async function borrar(r) {
 <template>
   <div class="rdc-app">
     <header class="appbar">
-      <h1>Reporte diario</h1>
+      <button type="button" class="icon-btn" aria-label="Volver" @click="router.push({ name: 'rdc' })">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4L6 10l6.5 6"/></svg>
+      </button>
+      <h1>Historial de reportes</h1>
       <div class="conn">
         <span class="conn-dot" :class="{ off: !enLinea }"></span>
         <span>{{ enLinea ? 'En línea' : 'Sin conexión' }}</span>
       </div>
-      <button type="button" class="icon-btn" aria-label="Filtrar">
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h15L12 11v5.5L8 14.5V11L2.5 4.5z"/></svg>
-      </button>
     </header>
 
     <RdcTabs />
@@ -201,70 +231,51 @@ async function borrar(r) {
         <span>Trayendo el borrador desde el otro dispositivo…</span>
       </div>
 
-      <div v-if="rdc.sinCatalogos" class="alert alert-red">
-        <i class="ti ti-alert-triangle" />
-        <span>Todavía no se descargaron los catálogos. Conéctate una vez a internet para poder llenar reportes sin señal después.</span>
-      </div>
-
-      <div v-if="rdc.hayPendientes" class="alert alert-amber">
-        <i class="ti ti-cloud-off" />
-        <span style="flex: 1">
-          Hay reportes esperando salir.
-          {{ enLinea ? 'Se están enviando.' : 'Se enviarán solos en cuanto haya señal — puedes cerrar la aplicación.' }}
-          <br v-if="enLinea" />
-          <button v-if="enLinea" class="secondary-btn" style="margin-top: 6px; padding: 6px 10px; font-size: 12px" :disabled="rdc.sincronizando" @click="rdc.sincronizarAhora()">
-            <i class="ti ti-refresh" /> {{ rdc.sincronizando ? 'Enviando…' : 'Reintentar ahora' }}
-          </button>
-        </span>
-      </div>
-
-      <button v-if="auth.tienePermiso('rdc.crear')" type="button" class="new-report" @click="nuevo">
-        <svg width="19" height="19" viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9.5 4v11M4 9.5h11"/></svg>
-        Nuevo reporte
-      </button>
-
       <p v-if="rdc.cargando" class="empty-msg">Cargando…</p>
 
       <template v-else>
         <template v-for="grupo in historialAgrupado" :key="grupo.etiqueta">
-          <div class="grp">
+          <button type="button" class="grp" :class="{ abierto: grupoAbierto(grupo.etiqueta) }" @click="alternarGrupo(grupo.etiqueta)">
+            <svg class="grp-chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5L7 8.5L10 5.5"/></svg>
             <span class="grp-label">{{ grupo.etiqueta }}</span>
+            <span class="grp-count">{{ grupo.items.length }}</span>
             <span class="grp-rule"></span>
-          </div>
+          </button>
 
-          <div v-for="item in grupo.items" :key="item.id" class="tarjeta" @click="abrirItem(item)">
-            <div class="card-main">
-              <div class="card-top">
-                <span class="card-date">{{ fechaCorta(item.fecha) }}</span>
-                <span class="badge" :class="item.estado.clave" :title="item.detalleEnvio">
-                  <svg v-if="item.estado.clave === 'pendiente'" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.2a2.4 2.4 0 011.2-4.5A3.4 3.4 0 019.6 4.6a2 2 0 01.1 3.9"/><path d="M1 1l10 10"/></svg>
-                  {{ item.estado.texto }}
-                </span>
+          <template v-if="grupoAbierto(grupo.etiqueta)">
+            <div v-for="item in grupo.items" :key="item.id" class="tarjeta" @click="abrirItem(item)">
+              <div class="card-main">
+                <div class="card-top">
+                  <span class="card-date">{{ fechaCorta(item.fecha) }}</span>
+                  <span class="badge" :class="item.estado.clave" :title="item.detalleEnvio">
+                    <svg v-if="item.estado.clave === 'pendiente'" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8.2a2.4 2.4 0 011.2-4.5A3.4 3.4 0 019.6 4.6a2 2 0 01.1 3.9"/><path d="M1 1l10 10"/></svg>
+                    {{ item.estado.texto }}
+                  </span>
+                </div>
+                <div class="card-meta">
+                  <template v-if="item.esLocal">
+                    <span v-if="item.personas">{{ item.personas }} personas</span>
+                    <span v-if="item.personas && item.partidas !== null" class="dot-sep"></span>
+                    <span v-if="item.partidas !== null">{{ item.partidas }} partidas</span>
+                  </template>
+                  <span v-else>{{ item.supervisorNombre }}</span>
+                </div>
+                <div v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR && item.raw.errorSupabase" class="card-error">
+                  {{ explicarErrorSync(item.raw.errorSupabase) }}
+                </div>
               </div>
-              <div class="card-frente">{{ item.frenteNombre }}</div>
-              <div class="card-meta">
-                <template v-if="item.esLocal">
-                  <span v-if="item.personas">{{ item.personas }} personas</span>
-                  <span v-if="item.personas && item.partidas !== null" class="dot-sep"></span>
-                  <span v-if="item.partidas !== null">{{ item.partidas }} partidas</span>
-                </template>
-                <span v-else>{{ item.supervisorNombre }}</span>
-              </div>
-              <div v-if="item.esLocal && item.raw.estado === ESTADO.BORRADOR && item.raw.errorSupabase" class="card-error">
-                {{ explicarErrorSync(item.raw.errorSupabase) }}
-              </div>
+              <button
+                v-if="item.raw.estado === ESTADO.BORRADOR && esBorradorPropio(item)"
+                type="button"
+                class="card-borrar"
+                aria-label="Borrar este borrador"
+                @click.stop="borrar(item.raw)"
+              >
+                <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h10M6.5 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m1.5 0-.6 8.7a1.3 1.3 0 01-1.3 1.2H6.9a1.3 1.3 0 01-1.3-1.2L5 5"/></svg>
+              </button>
+              <svg v-else class="chev" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L12 9l-5.5 5.5"/></svg>
             </div>
-            <button
-              v-if="item.raw.estado === ESTADO.BORRADOR && esBorradorPropio(item)"
-              type="button"
-              class="card-borrar"
-              aria-label="Borrar este borrador"
-              @click.stop="borrar(item.raw)"
-            >
-              <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h10M6.5 5V3.5a1 1 0 011-1h2a1 1 0 011 1V5m1.5 0-.6 8.7a1.3 1.3 0 01-1.3 1.2H6.9a1.3 1.3 0 01-1.3-1.2L5 5"/></svg>
-            </button>
-            <svg v-else class="chev" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 3.5L12 9l-5.5 5.5"/></svg>
-          </div>
+          </template>
         </template>
 
         <p v-if="!historialAgrupado.length" class="empty-msg">
@@ -300,6 +311,21 @@ async function borrar(r) {
   --ok: #059669;
   --ok-bg: #ecfdf5;
   --gray-bg: #f2f4f7;
+}
+/* Modo oscuro: mismo criterio que rdc-tema.css (ver ahí el comentario
+   largo) — redefine estas mismas variables con los tokens del resto del
+   Sistema, nunca toca las reglas que ya las usan. */
+:root[data-theme='dark'] .rdc-app {
+  --bg: var(--color-bg);
+  --card: var(--color-surface);
+  --border-lista: var(--color-border);
+  --text-2: var(--color-text-muted);
+  --text-3: #6b7280;
+  --amber-soft: var(--color-primary-soft);
+  --amber-ink: var(--color-primary);
+  --ok: var(--color-success);
+  --ok-bg: var(--color-success-soft);
+  --gray-bg: var(--color-surface-2);
 }
 
 .appbar {
@@ -385,6 +411,21 @@ async function borrar(r) {
   align-items: center;
   gap: 7px;
   margin-bottom: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  text-align: left;
+}
+.grp-chev {
+  color: var(--text-3);
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.grp.abierto .grp-chev {
+  transform: rotate(0deg);
 }
 .grp-label {
   font-size: 11px;
@@ -392,6 +433,15 @@ async function borrar(r) {
   letter-spacing: 0.07em;
   color: var(--text-3);
   white-space: nowrap;
+}
+.grp-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  background: var(--gray-bg);
+  border-radius: 20px;
+  padding: 1px 7px;
+  flex-shrink: 0;
 }
 .grp-rule {
   flex: 1;
@@ -453,16 +503,6 @@ async function borrar(r) {
   background: var(--red-bg);
   color: var(--red-text);
 }
-.card-frente {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  line-height: 1.3;
-  margin-bottom: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .card-meta {
   font-size: 12px;
   color: var(--text-3);
@@ -473,7 +513,7 @@ async function borrar(r) {
 .card-error {
   margin-top: 4px;
   font-size: 11.5px;
-  color: #dc2626;
+  color: var(--color-danger);
   line-height: 1.35;
 }
 .dot-sep {
@@ -494,8 +534,8 @@ async function borrar(r) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #dc2626;
-  background: #fef2f2;
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
   border: none;
   border-radius: 50%;
   cursor: pointer;

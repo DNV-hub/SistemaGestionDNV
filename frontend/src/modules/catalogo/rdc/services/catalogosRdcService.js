@@ -33,6 +33,34 @@ export async function eliminarFilaCatalogo(tabla, id) {
   if (error) throw error
 }
 
+/** Inserta las filas nuevas y ACTUALIZA las que ya existen (misma clave
+ * única, p. ej. 'frente_id,codigo'): sirve para importar sin que un código
+ * repetido tumbe toda la carga. */
+export async function guardarFilasCatalogoEnLote(tabla, payloads, onConflict) {
+  if (!payloads.length) return []
+  const { data, error } = await supabase.from(tabla).upsert(payloads, { onConflict }).select()
+  if (error) throw error
+  return data
+}
+
+/** Borra varias filas por id (reemplazar una biblioteca completa). En tandas
+ * de 100 para no armar una URL gigante. */
+export async function eliminarFilasCatalogoPorIds(tabla, ids) {
+  for (let i = 0; i < ids.length; i += 100) {
+    const { error } = await supabase.from(tabla).delete().in('id', ids.slice(i, i + 100))
+    if (error) throw error
+  }
+}
+
+/** Insert masivo (importar Excel/CSV) — una sola llamada en vez de una por
+ * fila, mismo patrón que crearVersionesMetradoEnLote (Procura). */
+export async function crearFilasCatalogoEnLote(tabla, payloads) {
+  if (!payloads.length) return []
+  const { data, error } = await supabase.from(tabla).insert(payloads).select()
+  if (error) throw error
+  return data
+}
+
 /** Cuentas que se pueden vincular a un supervisor del catálogo RDC. Pasa por
  * la función rdc_usuarios_vinculables() (RPC) y no por un select directo a
  * `usuarios`: esa tabla exige 'usuarios.ver' para leer filas ajenas, permiso
@@ -48,4 +76,12 @@ export async function listarUsuariosVinculables() {
   const { data, error } = await supabase.rpc('rdc_usuarios_vinculables')
   if (error) throw error
   return data
+}
+
+/** Solo el conteo de filas de una tabla (para los contadores de la lista
+ * maestra del Catálogo) — sin traer las filas. */
+export async function contarCatalogo(tabla) {
+  const { count, error } = await supabase.from(tabla).select('*', { count: 'exact', head: true })
+  if (error) throw error
+  return count ?? 0
 }

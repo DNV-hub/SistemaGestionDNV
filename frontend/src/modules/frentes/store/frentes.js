@@ -4,13 +4,25 @@ import {
   crearFrente,
   actualizarFrente,
   eliminarFrente,
+  listarSectores,
+  crearSector,
+  listarFrentesConMetradoProcura,
 } from '../services/frentesService'
 import { listarContratos } from '../../../services/contratosService'
+import { listarPernos } from '../../avance/services/avanceService'
+import { listarAlertas } from '../../alertas/services/alertasService'
 
 export const useFrentesStore = defineStore('frentes', {
   state: () => ({
     frentes: [],
     contratos: [],
+    sectores: [],
+    // Map frente_id -> cantidad, Set de frente_id. Viven aparte de
+    // `frentes` (no se mezclan en cada fila) porque son datos derivados de
+    // otras tablas, no columnas propias del frente.
+    pernosPendientes: new Map(),
+    alertasPorFrente: new Map(),
+    frentesConProcura: new Set(),
     cargando: false,
     error: '',
   }),
@@ -20,15 +32,45 @@ export const useFrentesStore = defineStore('frentes', {
       this.cargando = true
       this.error = ''
       try {
-        const [frentes, contratos] = await Promise.all([listarFrentes(), listarContratos()])
+        const [frentes, contratos, sectores, frentesConProcura, pernos, alertas] = await Promise.all([
+          listarFrentes(),
+          listarContratos(),
+          listarSectores(),
+          listarFrentesConMetradoProcura(),
+          // null: todos los frentes con control de pernos activo, de una.
+          listarPernos(null),
+          listarAlertas({ estado: 'activa' }),
+        ])
         this.frentes = frentes
         this.contratos = contratos
+        this.sectores = sectores
+        this.frentesConProcura = frentesConProcura
+
+        const pernosPorFrente = new Map()
+        for (const p of pernos) {
+          if (p.estado !== 'perforado') continue
+          pernosPorFrente.set(p.frente_id, (pernosPorFrente.get(p.frente_id) ?? 0) + 1)
+        }
+        this.pernosPendientes = pernosPorFrente
+
+        const alertasPorFrente = new Map()
+        for (const a of alertas) {
+          if (!a.frente_id) continue
+          alertasPorFrente.set(a.frente_id, (alertasPorFrente.get(a.frente_id) ?? 0) + 1)
+        }
+        this.alertasPorFrente = alertasPorFrente
       } catch (e) {
         this.error = 'No se pudo cargar los frentes.'
         console.error(e)
       } finally {
         this.cargando = false
       }
+    },
+
+    async crearSector(nombre) {
+      const sector = await crearSector(nombre)
+      this.sectores = [...this.sectores, sector].sort((a, b) => a.nombre.localeCompare(b.nombre))
+      return sector
     },
 
     async crear(payload) {

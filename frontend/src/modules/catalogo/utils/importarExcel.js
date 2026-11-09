@@ -1,10 +1,10 @@
-import * as XLSX from 'xlsx'
+// xlsx pesa ~485 KB: se descarga SOLO cuando alguien exporta o importa un
+// Excel, no cada vez que se abre una pantalla que tiene ese botón.
 import { normalizarNumero } from '../../../utils/normalizarNumero'
 
 // Alias de encabezados aceptados (normalizados: mayúsculas, sin tildes, un
 // solo espacio) hacia los campos internos que usa el importador.
 const ALIAS_CAMPOS = {
-  CODIGO: 'codigo',
   'DESCRIPCION ALMACEN': 'descripcion',
   DESCRIPCION: 'descripcion',
   'DESCRIPCION EDP': 'descripcionEdpNombre',
@@ -44,8 +44,9 @@ export function normalizarClave(texto) {
   return normalizarEncabezado(texto)
 }
 
-/** Lee un archivo .xlsx/.xls/.csv y devuelve filas crudas como objetos { codigo, descripcion, unidad, descripcionEdpNombre, unidadEdp }. */
+/** Lee un archivo .xlsx/.xls/.csv y devuelve filas crudas como objetos { descripcion, unidad, descripcionEdpNombre, unidadEdp }. */
 export async function leerArchivoExcel(file) {
+  const XLSX = await import('xlsx')
   const buffer = await file.arrayBuffer()
   const libro = XLSX.read(buffer, { type: 'array' })
   const hoja = libro.Sheets[libro.SheetNames[0]]
@@ -63,19 +64,25 @@ export async function leerArchivoExcel(file) {
 }
 
 /**
- * Procesa filas crudas: valida obligatorios, resuelve/crea sufijos para
- * códigos repetidos dentro del archivo, detecta choques con códigos ya
- * existentes en el catálogo y resuelve el nombre EDP y la categoría contra
- * lo ya cargado (o marca cuáles hay que crear) — mismo criterio para ambos.
+ * Procesa filas crudas: valida obligatorios, detecta choques con materiales
+ * ya existentes en el catálogo y resuelve el nombre EDP y la categoría
+ * contra lo ya cargado (o marca cuáles hay que crear) — mismo criterio para
+ * ambos.
  *
- * Los códigos que YA existen no se saltean del todo: si traen algo en la
+ * La identidad de un material es su DESCRIPCIÓN, nunca el código (memoria
+ * catalogo-codigo-no-es-identidad: el código es solo una etiqueta de
+ * referencia, opcional, que ni siquiera agrupa nada para el EDP — eso lo
+ * hace el nombre EDP). Por eso el "ya existe"/"se crea" de cada fila se
+ * decide por descripción, igual que ya hace el importador de ingresos
+ * (almacen/utils/importarIngresos.js).
+ *
+ * Las filas que YA existen no se saltean del todo: si traen algo en la
  * columna CONVERSION, se arma `aActualizar` con esos cambios (así el mismo
  * archivo sirve para exportar el catálogo, corregir esa columna en Excel, y
  * reimportar) — el resto de los campos de una fila existente no se toca.
  */
 export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresEdpExistentes, categoriasExistentes = [] }) {
-  const codigosExistentesSet = new Set(materialesExistentes.map((m) => m.codigo.toLowerCase()))
-  const idPorCodigo = new Map(materialesExistentes.map((m) => [m.codigo.toLowerCase(), m.id]))
+  const materialesPorDescripcion = new Map(materialesExistentes.map((m) => [m.descripcion.toUpperCase(), m]))
   const nombresEdpPorNombre = new Map(
     nombresEdpExistentes.map((n) => [normalizarClave(n.nombre), n])
   )
@@ -87,36 +94,36 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
   const validas = []
 
   filasCrudas.forEach((fila) => {
-    if (!fila.codigo && !fila.descripcion && !fila.unidad) return // fila vacía
-    if (!fila.codigo || !fila.descripcion || !fila.unidad) {
-      errores.push({ fila: fila._fila, motivo: 'Falta código, descripción o unidad.' })
+    if (!fila.descripcion && !fila.unidad) return // fila vacía
+    if (!fila.descripcion || !fila.unidad) {
+      errores.push({ fila: fila._fila, motivo: 'Falta descripción o unidad.' })
       return
     }
     validas.push(fila)
   })
 
-  // Sufijo -1, -2, ... para códigos repetidos DENTRO del archivo, en el
-  // orden en que aparecen (decisión del usuario para no perder filas).
-  const conteoPorCodigo = new Map()
-  validas.forEach((f) => {
-    const clave = f.codigo.toLowerCase()
-    conteoPorCodigo.set(clave, (conteoPorCodigo.get(clave) ?? 0) + 1)
-  })
-
-  const contadorAsignado = new Map()
+  // Dos filas del mismo archivo con la MISMA descripción (y que no exista
+  // todavía en catálogo) crearían dos materiales idénticos — se deja pasar
+  // la primera, la(s) siguiente(s) se marcan como error en vez de crearse
+  // dos veces.
+  const descripcionesVistasEnArchivo = new Set()
   const nombresEdpNuevos = new Map() // clave normalizada -> nombre original
   const categoriasNuevas = new Map() // clave normalizada -> nombre original
 
-  const filasProcesadas = validas.map((f) => {
-    const claveCodigo = f.codigo.toLowerCase()
-    let codigoFinal = f.codigo
-    if (conteoPorCodigo.get(claveCodigo) > 1) {
-      const n = (contadorAsignado.get(claveCodigo) ?? 0) + 1
-      contadorAsignado.set(claveCodigo, n)
-      codigoFinal = `${f.codigo}-${n}`
-    }
+  const filasProcesadas = []
 
-    const yaExiste = codigosExistentesSet.has(codigoFinal.toLowerCase())
+  validas.forEach((f) => {
+    const claveDescripcion = f.descripcion.toUpperCase()
+    const existente = materialesPorDescripcion.get(claveDescripcion)
+    const yaExiste = !!existente
+
+    if (!yaExiste) {
+      if (descripcionesVistasEnArchivo.has(claveDescripcion)) {
+        errores.push({ fila: f._fila, motivo: `Descripción repetida en el archivo (ya la trae otra fila de este mismo archivo).` })
+        return
+      }
+      descripcionesVistasEnArchivo.add(claveDescripcion)
+    }
 
     let descripcionEdpId = null
     let descripcionEdpNueva = null
@@ -149,11 +156,8 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
     const stockMinimo = f.stockMinimo ? normalizarNumero(f.stockMinimo) : null
     const tipoConversion = normalizarConversion(f.conversion)
 
-    return {
+    filasProcesadas.push({
       fila: f._fila,
-      codigoOriginal: f.codigo,
-      codigo: codigoFinal,
-      renombrado: codigoFinal !== f.codigo,
       descripcion: f.descripcion,
       unidad: f.unidad,
       unidad_edp: f.unidadEdp || null,
@@ -166,15 +170,16 @@ export function procesarFilas(filasCrudas, { materialesExistentes = [], nombresE
       stock_minimo_pct: Number.isFinite(stockMinimo) ? stockMinimo : null,
       tipoConversion, // null: celda vacía. undefined: valor inválido. 'ninguna'/'area'/'longitud': válido.
       yaExiste,
-    }
+      idExistente: existente?.id ?? null,
+    })
   })
 
-  // Filas de códigos que ya existen con una columna CONVERSION válida: se
-  // arma la actualización acá, no se tocan al crear (aImportar las excluye
-  // igual que antes).
+  // Filas de materiales que ya existen (por descripción) con una columna
+  // CONVERSION válida: se arma la actualización acá, no se tocan al crear
+  // (aImportar las excluye igual que antes).
   const aActualizar = filasProcesadas
     .filter((f) => f.yaExiste && f.tipoConversion)
-    .map((f) => ({ id: idPorCodigo.get(f.codigo.toLowerCase()), codigo: f.codigo, tipo_conversion: f.tipoConversion }))
+    .map((f) => ({ id: f.idExistente, tipo_conversion: f.tipoConversion }))
 
   const erroresConversion = filasProcesadas
     .filter((f) => f.tipoConversion === undefined)

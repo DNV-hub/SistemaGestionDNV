@@ -79,7 +79,7 @@ export const useFotosStore = defineStore('fotos', {
       const auth = useAuthStore()
       const rdc = useRdcStore()
 
-      if (!this.seleccion.diarias.length) throw new Error('Las fotos diarias son obligatorias — selecciona al menos una.')
+      if (!this.totalSeleccionadas) throw new Error('Selecciona al menos una foto para enviar.')
       if (!this.frenteId) throw new Error('Selecciona el frente.')
       if (!this.fecha) throw new Error('Selecciona la fecha.')
 

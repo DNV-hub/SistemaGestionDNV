@@ -1,6 +1,10 @@
 <script setup>
-import { ref, watch, useAttrs } from 'vue'
+import { useCerrarConEscape } from '../../../composables/useCerrarConEscape'
+import { onMounted, ref, watch, useAttrs } from 'vue'
 import { leerArchivoIngresos, procesarFilasIngreso } from '../utils/importarIngresos'
+import EstructuraCopiable from '../../../components/EstructuraCopiable.vue'
+import { cargarGuiasEdp, sugerirNombresEdp } from '../../catalogo/composables/useGuiasEdp'
+import { listarNombresEdp } from '../../catalogo/services/catalogoService'
 
 const props = defineProps({
   almacenes: { type: Array, default: () => [] },
@@ -23,12 +27,27 @@ const importando = ref(false)
 const error = ref('')
 const hecho = ref(false)
 
+// Nombres EDP existentes y descripciones por guía: un material NUEVO necesita
+// nombre EDP; si el archivo no lo trae, se sugiere uno de los que ya existen.
+const nombresEdp = ref([])
+onMounted(async () => {
+  try {
+    const [lista] = await Promise.all([listarNombresEdp(), cargarGuiasEdp()])
+    nombresEdp.value = lista
+    reprocesar()
+  } catch (e) {
+    console.error('No se pudieron cargar los nombres EDP', e)
+  }
+})
+
 function reprocesar() {
   if (!filasCrudas.value) return
   resultado.value = procesarFilasIngreso(filasCrudas.value, {
     materialesActivos: props.materiales,
     contratosDisponibles: props.contratos,
     contratoIdPorDefecto: contratoId.value,
+    nombresEdp: nombresEdp.value,
+    sugerirEdp: (texto) => sugerirNombresEdp(texto, 1)[0] ?? null,
   })
 }
 
@@ -72,6 +91,13 @@ async function confirmarImportacion() {
         if (fila.materialPendienteClave) fila.material_id = idPorNombre.get(fila.materialPendienteClave)
       }
     }
+    // Materiales que YA existían sin conversión configurada, pero esta fila
+    // trae una: se actualiza el catálogo antes de registrar los ingresos,
+    // para que el trigger que calcula factor_conversion ya vea el tipo
+    // correcto al insertarlos.
+    if (resultado.value.materialesAActualizarConversion.length) {
+      await attrs.onActualizarConversion(resultado.value.materialesAActualizarConversion)
+    }
     await attrs.onImportar({
       almacen_id: almacenId.value,
       filas: resultado.value.aImportar,
@@ -84,64 +110,87 @@ async function confirmarImportacion() {
     importando.value = false
   }
 }
+
+useCerrarConEscape()
 </script>
 
 <template>
   <div class="overlay" @click.self="$emit('cerrar')">
-    <div class="modal">
-      <h2>Importar ingreso masivo</h2>
-      <p class="ayuda">
-        Para cargar de una vez el stock actual desde Excel (¿no sabes qué columnas van? "Descargar plantilla" te da
-        un archivo con todos los materiales activos ya puestos). Columnas esperadas: <strong>CODIGO</strong>,
-        <strong>DESCRIPCION ALMACEN</strong>, <strong>UNIDAD ALMACEN</strong> y <strong>CANTIDAD</strong>. Cada fila
-        se identifica por su descripción, no por el código — dos filas con el mismo código pero nombres distintos
-        (ej. "Cable 15mm rojo" y "Cable 15mm verde", ambos código CA.15) son materiales distintos, cada uno con su
-        propio stock. Si el nombre no existe todavía en el catálogo, se crea automáticamente. Documento, proveedor
-        y observación son opcionales. Si el material lleva conversión (agrega la columna <strong>CONVERSION</strong>
-        con "area" o "longitud"), también hacen falta <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO
-        si es de tipo longitud). <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de
-        los dos contratos, agrega esa columna con el nombre o código del contrato de cada fila; si no la traes,
-        todas las filas usan el contrato por defecto que elijas abajo.
-      </p>
-
-      <div class="fila-selects">
-        <label>
-          Almacén
-          <select v-model="almacenId" required>
-            <option v-for="a in almacenes" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
-          </select>
-        </label>
-        <label>
-          Contrato por defecto
-          <select v-model="contratoId" required>
-            <option v-for="c in contratos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
-          </select>
-        </label>
+    <div class="modal" :class="{ 'con-resultado': resultado && !hecho }">
+      <div class="cabecera-modal">
+        <h2>Importar ingreso masivo</h2>
       </div>
 
-      <label class="archivo">
-        <input type="file" accept=".xlsx,.xls,.csv" @change="onArchivoSeleccionado" />
-      </label>
-
-      <p v-if="leyendo">Leyendo {{ nombreArchivo }}…</p>
-      <p v-if="error" class="error">{{ error }}</p>
-
-      <template v-if="hecho">
-        <p class="aviso">
-          Se registraron {{ resultado.aImportar.length }} ingresos.
-          <span v-if="resultado.materialesACrear.length">
-            Se dieron de alta {{ resultado.materialesACrear.length }} materiales nuevos.
-          </span>
+      <div class="panel-izq">
+        <p class="ayuda">
+          Para cargar de una vez el stock actual desde Excel (copia la estructura de abajo y pégala en la celda A1).
+          Columnas esperadas:
+          <strong>DESCRIPCION ALMACEN</strong>, <strong>UNIDAD ALMACEN</strong> y <strong>CANTIDAD</strong> (obligatorias).
+          Cada fila se identifica por su descripción — dos filas con nombres distintos (ej. "Cable 15mm rojo" y "Cable
+          15mm verde") son materiales distintos, cada uno con su propio stock. Si el nombre no existe todavía en el
+          catálogo, se crea automáticamente. Documento, proveedor y observación son opcionales. Si el material lleva conversión
+          (agrega la columna <strong>CONVERSION</strong> con "area" o "longitud"), también hacen falta
+          <strong>ANCHO</strong> y <strong>LARGO</strong> (o solo LARGO si es de tipo longitud).
+          <strong>NOMBRE EDP</strong> es obligatorio para un material nuevo (el grupo con el que Procura lo cuenta): si no lo
+          pones, el sistema sugiere uno de los que ya existen según las guías, y si no encuentra ninguno parecido esa fila
+          se omite hasta que lo agregues.
+          <strong>CONTRATO</strong> también es opcional: si tu archivo mezcla materiales de los dos contratos, agrega
+          esa columna con el nombre o código del contrato de cada fila; si no la traes, todas las filas usan el
+          contrato por defecto que elijas abajo.
         </p>
-        <button type="button" @click="$emit('cerrar')">Cerrar</button>
-      </template>
 
-      <template v-else-if="resultado">
+        <EstructuraCopiable
+          :encabezados="['DESCRIPCION ALMACEN', 'UNIDAD ALMACEN', 'CANTIDAD', 'NOMBRE EDP', 'CONVERSION', 'ANCHO', 'LARGO', 'CONTRATO', 'DOCUMENTO', 'PROVEEDOR', 'OBSERVACION']"
+          nota="Pégalos en la celda A1. NOMBRE EDP es obligatorio para materiales nuevos: si lo dejas vacío, el sistema sugiere uno según las guías."
+        />
+
+        <div class="fila-selects">
+          <label>
+            Almacén
+            <select v-model="almacenId" required>
+              <option v-for="a in almacenes" :key="a.id" :value="a.id">{{ a.codigo }} — {{ a.nombre }}</option>
+            </select>
+          </label>
+          <label>
+            Contrato por defecto
+            <select v-model="contratoId" required>
+              <option v-for="c in contratos" :key="c.id" :value="c.id">{{ c.nombre }}</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="archivo">
+          <input type="file" accept=".xlsx,.xls,.csv" @change="onArchivoSeleccionado" />
+        </label>
+
+        <p v-if="leyendo">Leyendo {{ nombreArchivo }}…</p>
+        <p v-if="error" class="error">{{ error }}</p>
+
+        <template v-if="hecho">
+          <p class="aviso">
+            Se registraron {{ resultado.aImportar.length }} ingresos.
+            <span v-if="resultado.materialesACrear.length">
+              Se dieron de alta {{ resultado.materialesACrear.length }} materiales nuevos.
+            </span>
+            <span v-if="resultado.materialesAActualizarConversion.length">
+              Se completó la conversión de {{ resultado.materialesAActualizarConversion.length }} materiales que ya existían.
+            </span>
+          </p>
+          <button type="button" @click="$emit('cerrar')">Cerrar</button>
+        </template>
+
+        <button v-else-if="!resultado" type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
+      </div>
+
+      <div v-if="resultado && !hecho" class="panel-der">
         <div class="resumen">
           <div><strong>{{ resultado.total }}</strong> filas leídas</div>
           <div class="ok"><strong>{{ resultado.aImportar.length }}</strong> se importarán</div>
           <div v-if="resultado.materialesACrear.length" class="ok">
             <strong>{{ resultado.materialesACrear.length }}</strong> materiales nuevos se darán de alta
+          </div>
+          <div v-if="resultado.materialesAActualizarConversion.length" class="ok">
+            <strong>{{ resultado.materialesAActualizarConversion.length }}</strong> materiales existentes completan su conversión (ANCHO/LARGO)
           </div>
           <div v-if="resultado.conError.length" class="advertencia">
             <strong>{{ resultado.conError.length }}</strong> omitidas por error
@@ -151,15 +200,15 @@ async function confirmarImportacion() {
         <details v-if="resultado.materialesACrear.length" class="detalle-nuevos">
           <summary>Ver los {{ resultado.materialesACrear.length }} materiales nuevos que se van a crear</summary>
           <p class="ayuda">
-            <strong>{{ resultado.materialesACrear.map((m) => `${m.codigo} — ${m.descripcion}`).join(', ') }}</strong>
+            <strong>{{ resultado.materialesACrear.map((m) => m.descripcion).join(', ') }}</strong>
           </p>
         </details>
 
         <div class="tabla-wrap">
           <div class="fila-cabecera">
             <span>Fila</span>
-            <span>Código</span>
             <span>Descripción</span>
+            <span>Nombre EDP</span>
             <span>Cantidad</span>
             <span>Ancho</span>
             <span>Largo</span>
@@ -173,8 +222,10 @@ async function confirmarImportacion() {
             :class="{ conflicto: f.estado === 'error' }"
           >
             <span>{{ f.fila }}</span>
-            <span>{{ f.codigo }}</span>
             <span>{{ f.descripcion ?? '—' }}</span>
+            <span :title="f.edp_sugerido ? 'Sugerido según las guías' : ''">
+              {{ f.nombre_edp ?? '—' }}<em v-if="f.edp_sugerido" class="sugerido"> (sugerido)</em>
+            </span>
             <span>{{ f.cantidad ?? '—' }} {{ f.unidad ?? '' }}</span>
             <span>{{ f.ancho ?? '—' }}</span>
             <span>{{ f.largo ?? '—' }}</span>
@@ -194,9 +245,7 @@ async function confirmarImportacion() {
             {{ importando ? 'Importando…' : `Importar ${resultado.aImportar.length} ingresos` }}
           </button>
         </div>
-      </template>
-
-      <button v-else type="button" class="secundario" @click="$emit('cerrar')">Cerrar</button>
+      </div>
     </div>
   </div>
 </template>
@@ -223,9 +272,29 @@ async function confirmarImportacion() {
   border-radius: var(--radius-card);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
+.modal.con-resultado {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  width: min(90vw, 1300px);
+  gap: 0;
+  overflow: hidden;
+}
+.modal.con-resultado > .cabecera-modal {
+  flex: 0 0 100%;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.25rem;
+}
 h2 {
   margin: 0;
   font-size: 1.05rem;
+}
+.cabecera-modal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .ayuda {
   margin: 0;
@@ -244,6 +313,28 @@ h2 {
 .detalle-nuevos .ayuda {
   margin-top: 0.4rem;
   max-height: 120px;
+  overflow-y: auto;
+}
+.panel-izq {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.modal.con-resultado .panel-izq {
+  flex: 0 0 380px;
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
+  padding-right: 1.25rem;
+  border-right: 1px solid var(--color-border);
+}
+.panel-der {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-left: 1.25rem;
+  max-height: calc(100vh - 9rem);
   overflow-y: auto;
 }
 .fila-selects {
@@ -284,9 +375,9 @@ h2 {
   color: var(--color-warning);
 }
 .tabla-wrap {
+  flex: 1;
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 400px;
   min-width: 0;
   transform: translateZ(0);
   border: 1px solid var(--color-border);
@@ -296,7 +387,7 @@ h2 {
 .fila-datos {
   display: grid;
   grid-template-columns:
-    minmax(0, 0.5fr) minmax(0, 0.8fr) minmax(0, 2fr) minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.6fr)
+    minmax(0, 0.5fr) minmax(0, 2fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 0.6fr) minmax(0, 0.6fr)
     minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
   padding: 0.4rem 0.6rem;
@@ -309,6 +400,11 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.sugerido {
+  font-style: normal;
+  color: var(--color-warning);
+  font-size: 0.72rem;
 }
 .fila-cabecera {
   background: var(--color-surface-2);
