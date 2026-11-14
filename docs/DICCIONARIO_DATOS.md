@@ -481,6 +481,13 @@ en el celular.
 **Relaciones**: `reporte_id → rdc_reportes.id`.
 **Notas**: o hay `desde`+`hasta`, o hay `total_horas`/`total_minutos` > 0 (CHECK `rdc_reporte_standby_duracion`) — no puede quedar sin ninguna forma de duración.
 
+#### `rdc_fotos_envios`
+**Propósito**: un envío de imágenes desde la pantalla Fotos del RDC (una categoría por envío). Reemplaza al flujo de Power Automate (nov-2026): la app sube los archivos al bucket privado `rdc-fotos` y registra aquí el envío; el agente local de Planeamiento (`C:\dev\rdc-agente`) los copia a la carpeta de OneDrive/Teams. La vista de "sketches anteriores" también lee de aquí.
+**Tipo**: movimiento.
+**Columnas**: `id uuid!` *(= id que genera el celular en IndexedDB; los reintentos hacen upsert sobre el mismo id)*, `fecha date!`, `frente_id uuid`, `frente_nombre text!`, `rol text`, `nombre text`, `categoria text!` *(Fotos RDC / Redlines / Sketch)*, `etiqueta text` *(Fotos diarias, Redline, Sketch — Perforación/Inyección/Malla)*, `archivos jsonb!='[]'` *([{path, nombreArchivo}])*, `creado_por uuid=auth.uid()`, `creado_en_dispositivo timestamptz`, `created_at!`.
+**Relaciones**: `frente_id → frentes.id`, `creado_por → auth.users.id`.
+**Notas**: `archivos[].path` es la ruta dentro de `rdc-fotos` (`<fecha>/<frente_id>/<envio_id>/NN.jpg`, solo caracteres seguros); `nombreArchivo` es el nombre legible que se usa al copiar a OneDrive (`Sketch_<frente>_<fecha>_PERF_1.jpg`, `Redline_<frente>_<fecha>.jpg`, `<rol>_<nombre>_N.jpg`). RLS: insert/update con `rdc.crear` o `rdc.editar_todos`; select con `rdc.ver_todos` o `rdc.crear`. Bucket `rdc-fotos`: privado, 10 MB, solo imágenes, mismas reglas.
+
 ### 6.3 Confirmación de metrados (Fase 4)
 
 #### `rdc_metrados_confirmacion`

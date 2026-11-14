@@ -2,20 +2,18 @@ import { textoCrudo } from '../../../utils/mensajeError'
 import { ENVIO, ESTADO } from './rdcDb'
 import { pendientes, adoptar, marcarSyncBorrador, marcarSyncFinalizado, obtener, idsBorradoresLocales, quitarBorradoresLocales } from './rdcRepository'
 import { subirReporte, marcarEnvioSharepoint, obtenerActualizadoEnRemoto, obtenerReporteCompleto, idsArchivadosEnRemoto } from './rdcService'
-import { construirWorkbook, workbookABase64, nombreArchivo } from './rdcExcel'
+import { nombreArchivo } from './rdcExcel'
 
 // Servicio de sincronización: recorre la cola de reportes cerrados y los envía
 // a sus DOS destinos, que son independientes entre sí.
 //
 //   Supabase   -> los datos del reporte, para el Sistema.
-//   SharePoint -> el Excel, vía el webhook de Power Automate, que es el
-//                 entregable que la obra ya usa hoy.
+//   Excel      -> desde nov-2026 lo genera el agente de Planeamiento a
+//                 partir de Supabase (antes: webhook de Power Automate).
 //
 // Se rastrean por separado porque uno puede fallar y el otro no, y reintentar
 // el que ya salió bien sería duplicar trabajo (y, del lado de SharePoint,
 // pisar un archivo que ya estaba bien).
-
-const URL_POWER_AUTOMATE = import.meta.env.VITE_POWER_AUTOMATE_RDC_URL
 
 // Espera creciente entre reintentos, en minutos, según cuántos van. Sin esto,
 // un error permanente (un reporte que el servidor rechaza) haría que la app
@@ -139,41 +137,18 @@ export async function sincronizar({ catalogos } = {}) {
         }
       }
 
-      // --- Destino 2: SharePoint, vía Power Automate ---
-      if (actual.estadoSharepoint !== ENVIO.ENVIADO) {
-        const intentos = (actual.sharepointIntentos ?? 0) + 1
-        try {
-          const archivo = nombreArchivo(actual, catalogos)
-          const contenidoArchivo = workbookABase64(construirWorkbook(actual, catalogos))
-
-          const respuesta = await fetch(URL_POWER_AUTOMATE, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            // Exactamente la misma forma que manda el RDC actual. El flujo de
-            // Power Automate depende de estos cuatro campos.
-            body: JSON.stringify({
-              nombreArchivo: archivo,
-              contenidoArchivo,
-              frente: nombreFrente(actual, catalogos),
-              fecha: actual.fecha,
-            }),
-          })
-
-          // El flujo responde 202 (aceptado) cuando lo tomó bien; cualquier
-          // otra cosa es un fallo, igual que en el RDC actual.
-          if (respuesta.status !== 202) throw new Error(`el flujo respondió HTTP ${respuesta.status}`)
-
-          actual.estadoSharepoint = ENVIO.ENVIADO
-          actual.sharepointNombreArchivo = archivo
-          actual.sharepointEnviadoAt = new Date().toISOString()
-          actual.sharepointError = null
-          actual.sharepointIntentos = intentos
-        } catch (e) {
-          actual.estadoSharepoint = ENVIO.ERROR
-          actual.sharepointError = textoCrudo(e)
-          actual.sharepointIntentos = intentos
-          huboFallo = true
-        }
+      // --- Destino 2: el Excel en OneDrive/Teams ---
+      // Desde nov-2026 ya no lo manda el celular a Power Automate (el flujo
+      // dejó de existir). Lo arma el agente de Planeamiento desde Supabase,
+      // con esta misma lógica de rdcExcel.js. Por eso el celular solo da el
+      // Excel por "entregado" cuando los datos ya están en Supabase: a partir
+      // de ahí, que el archivo llegue a la carpeta es trabajo del agente.
+      if (actual.estadoSharepoint !== ENVIO.ENVIADO && actual.estadoSupabase === ENVIO.ENVIADO) {
+        actual.estadoSharepoint = ENVIO.ENVIADO
+        actual.sharepointNombreArchivo = nombreArchivo(actual, catalogos)
+        actual.sharepointEnviadoAt = new Date().toISOString()
+        actual.sharepointError = null
+        actual.sharepointIntentos = (actual.sharepointIntentos ?? 0) + 1
 
         // Si el reporte ya está en Supabase, se le cuenta cómo le fue al otro
         // destino, para que el estado se pueda consultar desde cualquier
@@ -215,10 +190,6 @@ export async function sincronizar({ catalogos } = {}) {
   }
 
   return resumen
-}
-
-function nombreFrente(reporte, catalogos) {
-  return catalogos?.frentes?.find((f) => f.id === reporte.frenteId)?.nombre ?? ''
 }
 
 /** Arranca la sincronización en segundo plano: al recuperar señal, al volver a
