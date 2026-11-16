@@ -4,6 +4,7 @@ import { ENVIO, ESTADO } from '../services/rdcDb'
 import * as repo from '../services/rdcRepository'
 import { descargarCatalogos, eliminarReporteRemoto, listarReportes, obtenerReporteCompleto } from '../services/rdcService'
 import { iniciarSincronizacionAutomatica, sincronizar } from '../services/rdcSync'
+import { iniciarSincronizacionAutomatica as iniciarColaFotos } from '../../fotos/services/fotosSync'
 import { PERSONAL_INDIRECTO_SALA_ELECTRICA, hoyLocal } from '../services/rdcRepository'
 import { SECTOR_SALA_ELECTRICA } from '../services/rdcConstantes'
 
@@ -168,6 +169,9 @@ export const useRdcStore = defineStore('rdc', {
     arrancarSincronizacion() {
       if (detenerSincronizacion) return
       detenerSincronizacion = iniciarSincronizacionAutomatica(() => this.catalogos, { intervaloMinutos: 2 })
+      // Las fotos pendientes también salen solas aunque el supervisor no
+      // entre a la pantalla de Fotos (antes solo arrancaban ahí).
+      iniciarColaFotos()
     },
 
     /** Lo llama el botón "Cambiar" del Dashboard. Queda recordado en este

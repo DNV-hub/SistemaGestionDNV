@@ -26,19 +26,39 @@ function rutaArchivo(envio, indice) {
   return `${envio.fecha}/${carpetaFrente}/${envio.id}/${String(indice + 1).padStart(2, '0')}.jpg`
 }
 
-/** Sube las fotos de UN envío (una categoría) y registra el envío. */
+// Con señal débil una subida puede quedarse colgada para siempre (ni termina
+// ni falla). Se corta a los 90 s por foto para que la cola siga reintentando.
+const TIEMPO_MAX_MS = 90_000
+function conTiempoMaximo(promesa, ms, que) {
+  let t
+  const corte = new Promise((_, rechazar) => {
+    t = setTimeout(() => rechazar(new Error(`Sin respuesta al subir ${que} (señal débil). Se reintentará solo.`)), ms)
+  })
+  return Promise.race([promesa, corte]).finally(() => clearTimeout(t))
+}
+
+/** Sube las fotos de UN envío (una categoría) y registra el envío.
+ * Retoma donde quedó: las fotos ya subidas en un intento anterior
+ * (`envio.subidos`) no se vuelven a mandar. */
 export async function enviarFotos(envio) {
   const archivos = []
+  const subidos = new Set(envio.subidos ?? [])
   for (const [i, foto] of (envio.fotos ?? []).entries()) {
     const path = rutaArchivo(envio, i)
-    const { error } = await supabase.storage
-      .from(ESPACIO)
-      .upload(path, base64ABlob(foto.contenidoArchivo), { contentType: 'image/jpeg', upsert: true })
-    if (error) throw error
+    if (!subidos.has(path)) {
+      const { error } = await conTiempoMaximo(
+        supabase.storage.from(ESPACIO).upload(path, base64ABlob(foto.contenidoArchivo), { contentType: 'image/jpeg', upsert: true }),
+        TIEMPO_MAX_MS,
+        `la foto ${i + 1}`,
+      )
+      if (error) throw error
+      subidos.add(path)
+      envio.subidos = [...subidos]
+    }
     archivos.push({ path, nombreArchivo: foto.nombreArchivo })
   }
 
-  const { error } = await supabase.from('rdc_fotos_envios').upsert(
+  const { error } = await conTiempoMaximo(supabase.from('rdc_fotos_envios').upsert(
     {
       id: envio.id,
       fecha: envio.fecha,
@@ -52,6 +72,6 @@ export async function enviarFotos(envio) {
       creado_en_dispositivo: envio.creadoEn ?? null,
     },
     { onConflict: 'id' },
-  )
+  ), TIEMPO_MAX_MS, 'el registro del envío')
   if (error) throw error
 }

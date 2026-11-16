@@ -121,7 +121,8 @@ export const useFotosStore = defineStore('fotos', {
     },
 
     async sincronizarAhora() {
-      const resumen = await sincronizar()
+      // Botón "Reintentar": sin esperar el turno de la cola.
+      const resumen = await sincronizar({ forzar: true })
       this.envios = await repo.listar()
       return resumen
     },
