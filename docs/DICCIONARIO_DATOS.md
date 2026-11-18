@@ -509,6 +509,33 @@ en el celular.
 - `cantidad_original`/`cantidad_corregida`: `cantidad_original` se fija la PRIMERA vez que se corrige (`coalesce(cantidad_original, cantidad)`) y no se vuelve a pisar en correcciones posteriores — conserva el valor que el supervisor realmente reportó, no la corrección anterior.
 - `motivo` es obligatorio si `estado IN ('corregido','ignorado')` (CHECK).
 
+### 6.4 Control de obra · PRUEBA (18/11/2026)
+
+Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna tabla, vista ni permiso existente. Migración `20261118150000_ctl_prueba_conciliacion_sectores.sql`.
+
+#### `ctl_sectores`
+**Propósito**: sectores de cada frente (Pasivo 1, Pasivo 2, Activo 1, Zona 02, Encapsulado…) para filtrar sketch, procura y conciliación.
+**Tipo**: catálogo.
+**Columnas**: `id uuid!`, `frente_id uuid!`, `codigo text!` *(P1, P2, A1, Z02, Z03, P, ENC, BD)*, `nombre text!`, `tipo text!` *(pasivo/activo/encapsulado/barrera/general)*, `orden int!=0`, `created_at!`. Único `(frente_id, codigo)`.
+**Relaciones**: `frente_id → frentes.id`.
+**Notas**: RLS select con `procura.ver`, `procura.ver_comparacion` o `frentes.ver`; escritura con `procura.crear_version`.
+
+#### `ctl_material_sector`
+**Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al activo, accesorios Ø25 a los pasivos).
+**Tipo**: configuración.
+**Columnas**: `id uuid!`, `frente_id uuid!`, `material_id uuid!`, `sector_codigo text!`, `criterio text`, `created_at!`. Único `(frente_id, material_id, sector_codigo)`.
+**Relaciones**: `frente_id → frentes.id`, `material_id → materiales.id`.
+**Notas**: un material puede estar en varios sectores. Sin fila = "General / facilidades" (`GEN`).
+
+#### Vista `ctl_conciliacion_material`
+Una fila por frente × material: `salida`, `transf_entrada`, `transf_salida`, `devuelto_recibido` (devoluciones `Recibida`), `devolucion_por_recibir` (`Solicitada`), `devolucion_rechazada`, `neto_en_frente` = salida + transf. entrada − transf. salida − devuelto recibido, `declarado_facilidades` y `sin_destino_declarado` (según `vales.actividad` clasificada con `ctl_destino`), `estado_devolucion`, `devoluciones_detalle`, `sectores text[]`. Mismo filtro de seguridad que `procura_vs_consumo` (permiso de procura; supervisor solo su frente).
+
+#### Vista `ctl_vales_destino`
+Por frente: `vales`, `sin_destino`, `facilidades`.
+
+#### Función `ctl_destino(text)`
+Clasifica la actividad de un vale en `sostenimiento`, `facilidades` (línea de vida, tirolina, barrera provisional, patín, accesos, acondicionamiento) o `sin_destino`.
+
 ---
 
 ## Funciones RPC relevantes (capa de negocio)

@@ -5,6 +5,7 @@ import { useAuthStore } from '../../../../store/auth'
 import BuscadorNombreEdp from '../../../procura/components/BuscadorNombreEdp.vue'
 import ImportarMetradoModal from '../../../procura/components/ImportarMetradoModal.vue'
 import EditarMetradoModal from '../../../procura/components/EditarMetradoModal.vue'
+import ConciliacionAlmacen from '../../../procura/components/ConciliacionAlmacen.vue'
 import BotonIcono from '../../../../components/BotonIcono.vue'
 import { descargarExcel } from '../../../../utils/exportarExcel'
 
@@ -377,6 +378,9 @@ function exportarExcel() {
           </button>
         </div>
       </section>
+
+      <!-- PRUEBA 18/11/2026: conciliación con Almacén por sector (solo lectura). -->
+      <ConciliacionAlmacen v-if="puedeVerComparacion || auth.tienePermiso('procura.ver')" :frente-id="frenteId" :nombre-frente="frente.nombre" />
 
       <details v-if="hayZonas" class="pl-det" open>
         <summary>Consolidado del frente (todas las zonas)</summary>

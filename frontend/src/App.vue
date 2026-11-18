@@ -21,6 +21,8 @@ const route = useRoute()
 // todo (no es una simulación) — lo único que queda de rastro es esta marca
 // en sessionStorage, que es lo que activa el cartel para volver.
 const viendoComoOtraCuenta = ref(suplantandoAOtraCuenta())
+// Build del enlace de prueba (VITE_MODO_PRUEBA=1): muestra un aviso fijo.
+const modoPrueba = import.meta.env.VITE_MODO_PRUEBA === '1'
 const volviendo = ref(false)
 
 async function volver() {
@@ -432,6 +434,7 @@ function notificarProximamente(nombre) {
 </script>
 
 <template>
+  <div v-if="modoPrueba" class="aviso-prueba" role="status">Ambiente de prueba · usa los datos reales: no registres RDC, vales ni devoluciones desde aquí</div>
   <div v-if="hayActualizacionSW" class="toast-actualizacion">
     <span>Hay una versión nueva de la aplicación.</span>
     <button type="button" @click="aplicarActualizacionSW">Actualizar</button>
@@ -1503,4 +1506,5 @@ function notificarProximamente(nombre) {
     color: var(--color-danger);
   }
 }
+.aviso-prueba { position: fixed; right: 12px; bottom: 12px; z-index: 9999; max-width: 340px; padding: 10px 14px; border-radius: 12px; background: #f5a800; color: #111; font-size: 13px; font-weight: 700; line-height: 1.35; box-shadow: 0 8px 24px rgba(0,0,0,.35); pointer-events: none; }
 </style>
