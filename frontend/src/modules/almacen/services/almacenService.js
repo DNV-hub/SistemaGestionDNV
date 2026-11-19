@@ -146,6 +146,11 @@ export async function listarStockMinimos() {
   return data
 }
 
+// ajustes tiene dos FK hacia usuarios (usuario_id y aprobado_por): sin indicar cuál,
+// PostgREST responde 300 y toda la pantalla de Almacén cae a "Sin conexión".
+const SELECT_AJUSTE =
+  '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), contratos(id, codigo, nombre), usuarios!ajustes_usuario_id_fkey(id, nombre)'
+
 const SELECT_MOVIMIENTO =
   '*, almacenes(id, codigo, nombre), materiales(id, codigo, descripcion, unidad), contratos(id, codigo, nombre), usuarios(id, nombre)'
 
@@ -194,7 +199,7 @@ export async function crearIngresosMasivo(filas) {
 export async function listarAjustes() {
   const { data, error } = await supabase
     .from('ajustes')
-    .select(SELECT_MOVIMIENTO)
+    .select(SELECT_AJUSTE)
     .order('created_at', { ascending: false })
     .limit(1000)
   if (error) throw error
@@ -202,7 +207,7 @@ export async function listarAjustes() {
 }
 
 export async function crearAjuste(payload) {
-  const { data, error } = await supabase.from('ajustes').insert(payload).select(SELECT_MOVIMIENTO).single()
+  const { data, error } = await supabase.from('ajustes').insert(payload).select(SELECT_AJUSTE).single()
   if (error) throw error
   return data
 }
@@ -212,7 +217,7 @@ export async function crearAjuste(payload) {
 export async function resolverAjuste(ajusteId, aprobar, motivo = null) {
   const { error } = await supabase.rpc('fn_resolver_ajuste', { p_ajuste_id: ajusteId, p_aprobar: aprobar, p_motivo: motivo })
   if (error) throw error
-  const { data, error: e2 } = await supabase.from('ajustes').select(SELECT_MOVIMIENTO).eq('id', ajusteId).single()
+  const { data, error: e2 } = await supabase.from('ajustes').select(SELECT_AJUSTE).eq('id', ajusteId).single()
   if (e2) throw e2
   return data
 }
