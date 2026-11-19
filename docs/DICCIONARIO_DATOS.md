@@ -532,6 +532,16 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Propósito**: avance por código desde `rdc_reporte_elementos` (perforación, inyección, pull test, malla por tipo), sin depender de `frentes.rdc_control_pernos`. Migración `20261119020000_ctl_avance_elementos.sql`.
 **Notas**: security definer, `search_path=''`; exige `frentes.ver` o `rdc.ver_resumen_campo`. Solo lectura.
 
+#### `ctl_plano_sketch` y `ctl_plano_elemento`
+**Propósito**: plano del sketch de avance (imagen en `frentes-archivos`, tamaño y viewBox) y su geometría: pernos (x, y), paños de malla (`geo` = lista de polígonos), marcas (p. ej. perno retirado). Migración `20261119030000_ctl_plano_sketch_y_cronograma.sql`.
+**Columnas `ctl_plano_elemento`**: `tipo` *(perno/pano/marca)*, `codigo`, `codigo_rdc` *(cómo lo reporta el RDC, p. ej. Z6/P1-P1 o M1)*, `sector_codigo`, `x`, `y`, `geo jsonb`, `descripcion`, `malla_tipo`, `area_m2`, `estado_plano` *(vigente/retirado)*, `orden`. Único `(frente_id, tipo, codigo)`.
+**Notas**: el estado de cada elemento sale de `ctl_avance_elementos` por `codigo_rdc` (+ `malla_tipo` para paños). RLS como el resto de `ctl_`.
+
+#### `ctl_cronograma_partida` y `ctl_avance_partida`
+**Propósito**: línea base por partida EDT (metrado, HH, inicio, fin) y avance aprobado por día, para el Gantt Rev00 vs ejecutado, los metrados aprobados y las HH ganadas.
+**Columnas**: `ctl_cronograma_partida(frente_id, linea_base, edt, nombre, unidad, metrado, hh, inicio, fin)`; `ctl_avance_partida(frente_id, edt, fecha, cantidad, fuente)`.
+**Notas**: peso de la partida = `hh / Σ hh`. RLS como el resto de `ctl_`.
+
 #### `ctl_material_sector`
 **Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
 **Tipo**: configuración.

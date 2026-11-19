@@ -119,3 +119,55 @@ export async function cargarAvanceElementos(frenteId) {
   if (error) throw error
   return data ?? []
 }
+
+/** Plano del sketch (imagen + geometría de pernos y paños). */
+export async function cargarSketch(frenteId) {
+  const [s, el] = await Promise.all([
+    supabase.from('ctl_plano_sketch').select('*').eq('frente_id', frenteId).maybeSingle(),
+    supabase.from('ctl_plano_elemento').select('*').eq('frente_id', frenteId).order('orden'),
+  ])
+  if (s.error) throw s.error
+  if (el.error) throw el.error
+  if (!s.data) return null
+  let url = null
+  if (s.data.imagen_ruta) {
+    const { data } = await supabase.storage.from('frentes-archivos').createSignedUrl(s.data.imagen_ruta, 3600)
+    url = data?.signedUrl ?? null
+  }
+  return { ...s.data, url, elementos: el.data ?? [] }
+}
+
+/** Línea base por partida y avance aprobado por día. */
+export async function cargarCronograma(frenteId) {
+  const [p, a] = await Promise.all([
+    supabase.from('ctl_cronograma_partida').select('*').eq('frente_id', frenteId).order('edt'),
+    supabase.from('ctl_avance_partida').select('edt, fecha, cantidad').eq('frente_id', frenteId),
+  ])
+  if (p.error) throw p.error
+  if (a.error) throw a.error
+  return { partidas: p.data ?? [], avance: a.data ?? [] }
+}
+
+/** RDC de un rango: Stand By por día, personal y redline. */
+export async function cargarRdcRango(frenteId, desde, hasta) {
+  const { data, error } = await supabase
+    .from('rdc_reportes')
+    .select('fecha, redline, redline_descripcion, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, total_horas, total_minutos), rdc_reporte_personal(cantidad)')
+    .eq('frente_id', frenteId)
+    .is('eliminado_at', null)
+    .gte('fecha', desde)
+    .lte('fecha', hasta)
+    .order('fecha')
+  if (error) throw error
+  return data ?? []
+}
+
+export function minutosStandBy(s) {
+  let min = (Number(s.total_horas) || 0) * 60 + (Number(s.total_minutos) || 0)
+  if (!min && s.desde && s.hasta) {
+    const [h1, m1] = s.desde.split(':').map(Number)
+    const [h2, m2] = s.hasta.split(':').map(Number)
+    min = Math.max(0, h2 * 60 + m2 - (h1 * 60 + m1))
+  }
+  return min
+}
