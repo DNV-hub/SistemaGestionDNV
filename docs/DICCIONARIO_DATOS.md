@@ -520,6 +520,14 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Relaciones**: `frente_id → frentes.id`.
 **Notas**: RLS select con `procura.ver`, `procura.ver_comparacion` o `frentes.ver`; escritura con `procura.crear_version`. **Regla:** un sector solo se crea cuando existe su plano (o una directriz escrita) en la bandeja; si no, no se crea y se pregunta a Planeamiento. Por eso ZCM06 tiene solo P1 y P2 (sin plano activo al 18/11; corrección en `20261118230000_ctl_zcm06_sin_activo.sql`). ZCM07 sí tiene A1 (plano CE1090).
 
+#### `ctl_curva_s` y `ctl_curva_param`
+**Propósito**: curva S del frente (programado de la línea base vs ejecutado, % ponderado por HH) y su banda de tolerancia. Migración `20261119010000_ctl_curva_s.sql`.
+**Tipo**: serie diaria / parámetros.
+**Columnas `ctl_curva_s`**: `id uuid!`, `frente_id uuid!`, `fecha date!`, `programado_pct numeric!`, `ejecutado_pct numeric` *(null = sin dato)*, `linea_base text!='Rev00'`, `created_at!`. Único `(frente_id, linea_base, fecha)`.
+**Columnas `ctl_curva_param`**: `frente_id uuid! PK`, `tol_inf=-3`, `tol_sup=6`, `alerta_desde=4`, `fecha_dato date`, `dia_inicio_semana int=4` *(jueves)*, `fuente text`.
+**Relaciones**: `frente_id → frentes.id`.
+**Notas**: RLS select con `frentes.ver` o `procura.ver`; escritura con `procura.crear_version`. La desviación se compara a la fecha de dato de cada semana (jueves a miércoles).
+
 #### `ctl_material_sector`
 **Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
 **Tipo**: configuración.

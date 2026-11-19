@@ -6,6 +6,7 @@ import BuscadorNombreEdp from '../../../procura/components/BuscadorNombreEdp.vue
 import ImportarMetradoModal from '../../../procura/components/ImportarMetradoModal.vue'
 import EditarMetradoModal from '../../../procura/components/EditarMetradoModal.vue'
 import ConciliacionAlmacen from '../../../procura/components/ConciliacionAlmacen.vue'
+import MetradoPorSector from '../../../procura/components/MetradoPorSector.vue'
 import BotonIcono from '../../../../components/BotonIcono.vue'
 import { descargarExcel } from '../../../../utils/exportarExcel'
 
@@ -378,6 +379,9 @@ function exportarExcel() {
           </button>
         </div>
       </section>
+
+      <!-- PRUEBA: metrado del plano por sector con redlines (v5). -->
+      <MetradoPorSector v-if="puedeVerComparacion || auth.tienePermiso('procura.ver')" :frente-id="frenteId" :nombre-frente="frente.nombre" />
 
       <!-- PRUEBA 18/11/2026: conciliación con Almacén por sector (solo lectura). -->
       <ConciliacionAlmacen v-if="puedeVerComparacion || auth.tienePermiso('procura.ver')" :frente-id="frenteId" :nombre-frente="frente.nombre" />
