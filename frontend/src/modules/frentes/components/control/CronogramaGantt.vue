@@ -10,6 +10,8 @@ const props = defineProps({
   avance: { type: Array, default: () => [] },
   dia: { type: String, required: true },
   nombreFrente: { type: String, default: '' },
+  sector: { type: String, default: 'all' },
+  porAprobar: { type: Array, default: () => [] },
 })
 
 const iso = (d) => d.toISOString().slice(0, 10)
@@ -46,8 +48,19 @@ const filas = computed(() => props.partidas.map((p) => {
   let acum = 0
   for (const [f, c] of av) if (f <= props.dia) acum += c
   const atrasada = (p.fin < props.dia && acum < Number(p.metrado) * 0.999) || (p.inicio <= props.dia && acum === 0)
-  return { ...p, av, acum, atrasada, peso: BAC.value ? (Number(p.hh) / BAC.value) * 100 : 0 }
+  const pa = props.porAprobar.filter((x) => x.edt === p.edt).map((x) => x.fecha)
+  return { ...p, av, pa, acum, atrasada, peso: BAC.value ? (Number(p.hh) / BAC.value) * 100 : 0 }
 }))
+const enSector = (f) => props.sector === 'all' || !f.sector_codigo || f.sector_codigo.split(',').includes(props.sector)
+const grupos = computed(() => {
+  const m = []
+  for (const f of filas.value) {
+    const g = f.grupo || 'Partidas'
+    if (!m.length || m[m.length - 1].nombre !== g) m.push({ nombre: g, edt: f.edt.split('.')[0], filas: [] })
+    m[m.length - 1].filas.push(f)
+  }
+  return m.map((g) => ({ ...g, peso: g.filas.reduce((a, f) => a + f.peso, 0) }))
+})
 const n = computed(() => dias.value.length)
 const pos = (d) => (dias.value.indexOf(d) / n.value) * 100
 const ancho = 100 / Math.max(1, 1)
@@ -87,6 +100,7 @@ void ancho
         <span><i class="sh"></i>Sombra plomo: programado Rev00 (línea base)</span>
         <span><i class="am"></i>Marca ámbar: día con avance aprobado</span>
         <span><i class="ln"></i>Línea amarilla: día seleccionado / fecha de dato</span>
+        <span><i class="pa-l"></i>Reportado, por aprobar en la bandeja</span>
         <span><b class="rojo">Partida</b> En rojo: partida atrasada</span>
       </div>
       <div class="tabla">
@@ -99,18 +113,29 @@ void ancho
             <div class="nums"><span v-for="d in dias" :key="d" :style="{ width: 100 / n + '%' }">{{ +d.slice(8, 10) }}</span></div>
           </div>
         </div>
-        <div v-for="f in filas" :key="f.edt" class="fila">
-          <span class="edt">{{ f.edt }}</span>
-          <span class="nom" :class="{ rojo: f.atrasada }" :title="f.nombre">{{ f.nombre }}</span>
-          <span class="r peso">{{ f.peso.toFixed(1) }}%</span>
-          <div class="eje barra">
-            <i class="prog" :style="{ left: pos(f.inicio) + '%', width: ((dias.indexOf(f.fin) - dias.indexOf(f.inicio) + 1) / n) * 100 + '%' }"></i>
-            <template v-for="[d] in f.av" :key="d">
-              <i v-if="d <= dia && dias.includes(d)" class="ej" :style="{ left: pos(d) + '%', width: 100 / n + '%' }"></i>
-            </template>
-            <i class="hoy" :style="{ left: (pos(dia) + 50 / n) + '%' }"></i>
+        <template v-for="g in grupos" :key="g.nombre">
+          <div class="fila grp">
+            <span class="edt g">{{ g.edt }}</span>
+            <span class="nom g" :title="g.nombre">{{ g.nombre }}</span>
+            <span class="r peso g">{{ g.peso.toFixed(1) }}%</span>
+            <div class="eje barra"><i class="hoy" :style="{ left: (pos(dia) + 50 / n) + '%' }"></i></div>
           </div>
-        </div>
+          <div v-for="f in g.filas" :key="f.edt" class="fila" :class="{ apagada: !enSector(f) }">
+            <span class="edt">{{ f.edt }}</span>
+            <span class="nom" :class="{ rojo: f.atrasada }" :title="f.nombre">{{ f.nombre }}</span>
+            <span class="r peso">{{ f.peso.toFixed(1) }}%</span>
+            <div class="eje barra">
+              <i class="prog" :style="{ left: pos(f.inicio) + '%', width: ((dias.indexOf(f.fin) - dias.indexOf(f.inicio) + 1) / n) * 100 + '%' }"></i>
+              <template v-for="[d] in f.av" :key="d">
+                <i v-if="d <= dia && dias.includes(d)" class="ej" :style="{ left: pos(d) + '%', width: 100 / n + '%' }"></i>
+              </template>
+              <template v-for="d in f.pa" :key="'p' + d">
+                <i v-if="d <= dia && dias.includes(d)" class="pa" :style="{ left: pos(d) + '%', width: 100 / n + '%' }" title="Reportado en RDC, por aprobar en la bandeja"></i>
+              </template>
+              <i class="hoy" :style="{ left: (pos(dia) + 50 / n) + '%' }"></i>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
   </section>
@@ -138,6 +163,9 @@ h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .sems span.act { color: #f5a800; }
 .nums { display: flex; }
 .nums span { font-size: 10px; text-align: center; font-weight: 500; }
+.grp { background: var(--p-chip); min-height: 30px !important; }
+.g { font-weight: 800; font-size: 12px; color: var(--p-text) !important; text-transform: uppercase; letter-spacing: 0.2px; border-left: 0 !important; }
+.apagada { opacity: 0.3; }
 .fila { min-height: 35px; border-bottom: 1px solid var(--p-line); font-size: 13px; }
 .edt { color: var(--p-muted); border-left: 2px solid #f5a800; padding-left: 4px; }
 .nom { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -145,5 +173,7 @@ h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .barra { position: relative; height: 22px; }
 .prog { position: absolute; top: 3px; height: 16px; background: #3a3f47; border: 1px solid #6b7280; border-radius: 4px; box-sizing: border-box; }
 .ej { position: absolute; top: 6px; height: 11px; background: #f59e0b; border-radius: 2px; box-sizing: border-box; border: 1px solid rgba(0,0,0,0.25); }
+.pa { position: absolute; top: 6px; height: 11px; border: 1.5px dashed #f59e0b; border-radius: 2px; box-sizing: border-box; }
+.pa-l { width: 10px; height: 10px; border: 1.5px dashed #f59e0b; display: inline-block; box-sizing: border-box; }
 .hoy { position: absolute; top: -6px; bottom: -6px; width: 2px; background: #f5a800; }
 </style>

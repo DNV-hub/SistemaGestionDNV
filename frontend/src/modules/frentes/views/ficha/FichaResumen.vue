@@ -12,6 +12,7 @@ import { listarAlertas } from '../../../alertas/services/alertasService'
 import {
   cargarSectores, cargarCurva, cargarFotos, cargarAvanceElementos, cargarSketch, cargarCronograma,
   cargarRdcRango, minutosStandBy, semanaDe, fechaCorta, num, horasTexto,
+  curvaEjecutada, guardarAjusteCurva, anularAjusteCurva,
 } from '../../services/controlObraService'
 import SketchAvance from '../../components/control/SketchAvance.vue'
 import CronogramaGantt from '../../components/control/CronogramaGantt.vue'
@@ -28,7 +29,7 @@ const alertas = ref([])
 const sectores = ref([])
 const sector = ref('all')
 const curva = ref({ param: null, puntos: [] })
-const crono = ref({ partidas: [], avance: [] })
+const crono = ref({ partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, ajustes: [] })
 const sketch = ref(null)
 const elementos = ref([])
 const semana = ref('')
@@ -49,7 +50,7 @@ onMounted(async () => {
     seguro(listarAlertas({ estado: 'activa', frenteId: id }), []),
     seguro(cargarSectores(id), []),
     seguro(cargarCurva(id), { param: null, puntos: [] }),
-    seguro(cargarCronograma(id), { partidas: [], avance: [] }),
+    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, ajustes: [] }),
     seguro(cargarSketch(id), null),
     seguro(cargarAvanceElementos(id), []),
   ])
@@ -59,8 +60,20 @@ onMounted(async () => {
   cargando.value = false
 })
 
+// ---------- curva: programado Rev00 + ejecutado APROBADO (bandeja) ----------
+const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.ajustes))
+const puntos = computed(() => curvaEj.value.puntos)
+const puedeEditar = computed(() => auth.tienePermiso('procura.crear_version'))
+async function ajustar(a) {
+  try { await guardarAjusteCurva(props.frente.id, a.fecha, a.valor, a.motivo); crono.value = await cargarCronograma(props.frente.id) } catch (e) { console.error(e); alertaMsg.value = 'No se pudo guardar el ajuste.' }
+}
+async function anular(id) {
+  try { await anularAjusteCurva(id); crono.value = await cargarCronograma(props.frente.id) } catch (e) { console.error(e) }
+}
+const alertaMsg = ref('')
+
 // ---------- reproductor por día ----------
-const fechaDato = computed(() => curva.value.param?.fecha_dato || reportes.value[0]?.fecha || hoyIso)
+const fechaDato = computed(() => curvaEj.value.ultima || curva.value.param?.fecha_dato || reportes.value[0]?.fecha || hoyIso)
 const inicioObra = computed(() => props.frente.fecha_inicio || curva.value.puntos[0]?.fecha || reportes.value[reportes.value.length - 1]?.fecha || fechaDato.value)
 const ultimoRdc = computed(() => reportes.value[0]?.fecha || fechaDato.value)
 const diasPlayer = computed(() => {
@@ -102,7 +115,7 @@ watch(semanaSel, async (s) => {
 })
 
 // ---------- indicadores ----------
-const puntoDato = computed(() => curva.value.puntos.find((p) => p.fecha === fechaDato.value && p.ejecutado_pct != null) || [...curva.value.puntos].reverse().find((p) => p.ejecutado_pct != null))
+const puntoDato = computed(() => puntos.value.find((p) => p.fecha === fechaDato.value && p.ejecutado_pct != null) || [...puntos.value].reverse().find((p) => p.ejecutado_pct != null))
 const kv = computed(() => (puntoDato.value?.ejecutado_pct != null ? Number(puntoDato.value.ejecutado_pct) : null))
 const kp = computed(() => (puntoDato.value ? Number(puntoDato.value.programado_pct) : null))
 const kdv = computed(() => (kv.value != null && kp.value != null ? kv.value - kp.value : null))
@@ -116,7 +129,7 @@ const col = (dv) => {
 // Término pronosticado por Earned Schedule: ES = fecha en que el programado
 // alcanza el ejecutado de la fecha de dato; atraso = fecha de dato − ES.
 const termino = computed(() => {
-  const ps = curva.value.puntos
+  const ps = puntos.value
   if (!ps.length || kv.value == null) return null
   const finRev = ps.find((p) => Number(p.programado_pct) >= 100)?.fecha ?? ps[ps.length - 1].fecha
   const es = ps.find((p) => Number(p.programado_pct) >= kv.value)?.fecha ?? finRev
@@ -140,11 +153,26 @@ const pendientes = computed(() => {
 const metrados = computed(() => {
   const acc = new Map()
   for (const a of crono.value.avance) if (a.fecha <= dia.value) acc.set(a.edt, (acc.get(a.edt) || 0) + Number(a.cantidad))
-  return crono.value.partidas.map((p) => {
+  const pend = new Map()
+  for (const a of crono.value.porAprobar) if (a.fecha <= dia.value) pend.set(a.edt, (pend.get(a.edt) || 0) + Number(a.cantidad))
+  const filas = crono.value.partidas.map((p) => {
     const q = acc.get(p.edt) || 0
-    return { ...p, q, pct: Number(p.metrado) ? Math.min(100, (q / Number(p.metrado)) * 100) : 0, exceso: q > Number(p.metrado) * 1.0001 }
+    return { ...p, q, pend: pend.get(p.edt) || 0, pct: Number(p.metrado) ? Math.min(100, (q / Number(p.metrado)) * 100) : 0, exceso: q > Number(p.metrado) * 1.0001 }
+  })
+  const g = []
+  for (const f of filas) {
+    const nom = f.grupo || 'Partidas'
+    if (!g.length || g[g.length - 1].nombre !== nom) g.push({ nombre: nom, edt: f.edt.split('.')[0], filas: [] })
+    g[g.length - 1].filas.push(f)
+  }
+  return g.map((x) => {
+    const hh = x.filas.reduce((a, f) => a + Number(f.hh || 0), 0)
+    const gan = x.filas.reduce((a, f) => a + (Number(f.metrado) ? (Math.min(f.q, Number(f.metrado)) / Number(f.metrado)) * Number(f.hh) : 0), 0)
+    return { ...x, pct: hh ? (gan / hh) * 100 : 0 }
   })
 })
+const enSector = (f) => sector.value === 'all' || !f.sector_codigo || f.sector_codigo.split(',').includes(sector.value)
+const totalPendAprobar = computed(() => crono.value.porAprobar.length + (crono.value.bandejaPendientes || 0))
 
 // ---------- restricciones y Stand By ----------
 const CAUSA = (c) => {
@@ -181,7 +209,7 @@ const rend = computed(() => {
   const cons = pd * 9
   const barras = []
   for (let d = s.desde; d <= s.hasta; d = addD(d, 1)) {
-    const p = curva.value.puntos.find((x) => x.fecha === d), prev = curva.value.puntos.find((x) => x.fecha === addD(d, -1))
+    const p = puntos.value.find((x) => x.fecha === d), prev = puntos.value.find((x) => x.fecha === addD(d, -1))
     if (p?.ejecutado_pct != null) barras.push({ d, v: Number(p.ejecutado_pct) - (prev?.ejecutado_pct != null ? Number(prev.ejecutado_pct) : 0) })
   }
   const mx = Math.max(1, ...barras.map((b) => b.v))
@@ -227,11 +255,15 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
           <p class="v" :style="pendientes.total ? 'color: #fbbf24' : ''">{{ pernosPlano.length ? pendientes.total : '—' }}</p>
           <p class="s">{{ pendientes.porIny }} por inyectar · {{ pendientes.porPerf }} por perforar</p>
         </div>
+        <div class="kpi">
+          <p class="l">Alertas abiertas</p>
+          <p class="v" :style="alertas.length ? 'color: #f87171' : ''">{{ alertas.length }}</p>
+          <p class="s">{{ alertas.length ? 'Procura excedida · ver Procura' : 'Sin alertas' }}</p>
+        </div>
       </div>
-      <div v-if="alertas.length" class="kpi full">
-        <p class="l">Alertas abiertas</p>
-        <p class="v" style="color: #f87171">{{ alertas.length }}</p>
-        <p class="s">Procura excedida · ver Procura</p>
+      <div v-if="totalPendAprobar" class="pend">
+        <b>⚠ Avance por aprobar:</b> {{ crono.porAprobar.length }} metrado(s) reportado(s) en el RDC después del {{ fechaCorta(fechaDato) }} y {{ crono.bandejaPendientes }} ítem(s) por confirmar en la bandeja. La curva S, el Gantt y los metrados solo cuentan lo que apruebas.
+        <router-link v-if="auth.tienePermiso('rdc.confirmar_metrados')" to="/confirmacion">Ir a la bandeja</router-link>
       </div>
 
       <div class="player">
@@ -245,11 +277,13 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
       <div class="cols">
         <div class="col izq">
           <SketchAvance v-model:sector="sector" :sketch="sketch" :avance="elementos" :dia="dia" :sectores="sectores" />
-          <CronogramaGantt :partidas="crono.partidas" :avance="crono.avance" :dia="dia" :nombre-frente="frente.nombre" />
+          <CronogramaGantt :partidas="crono.partidas" :avance="crono.avance" :por-aprobar="crono.porAprobar" :sector="sector" :dia="dia" :nombre-frente="frente.nombre" />
           <CurvaSSemanal
             v-model:semana="semana"
-            :puntos="curva.puntos" :param="curva.param" :dia="dia"
+            :puntos="puntos" :param="curva.param" :dia="dia"
             :partidas="crono.partidas" :avance="crono.avance" :nombre-frente="frente.nombre"
+            :ajustes="crono.ajustes" :puede-editar="puedeEditar" fuente-ejecutado="aprobado en bandeja / Control diario"
+            @ajustar="ajustar" @anular="anular"
             @ver-semanal="router.push({ name: 'ficha-frente', params: { id: frente.id, tab: 'semanal' } })"
           />
         </div>
@@ -261,12 +295,15 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
             <p v-if="!metrados.length" class="mu">Sin línea base por partida.</p>
             <div v-else class="met">
               <div class="th"><span>EDT</span><span>Partida</span><span class="r">Aprobado</span><span class="r">%</span></div>
-              <div v-for="m in metrados" :key="m.edt" class="tr" :title="`${num(m.q)} de ${num(m.metrado)} ${m.unidad}`">
-                <span class="mu">{{ m.edt }}</span>
-                <span class="nom">{{ m.nombre }}<small>{{ num(m.metrado) }} {{ m.unidad }}</small></span>
-                <span class="r">{{ m.q ? num(m.q) : '—' }}</span>
-                <span class="r"><span class="mini"><i :style="{ width: m.pct + '%', background: m.exceso ? '#f87171' : m.pct >= 99.9 ? '#4ade80' : '#f59e0b' }"></i></span>{{ m.pct.toFixed(0) }}</span>
-              </div>
+              <template v-for="g in metrados" :key="g.nombre">
+                <div class="tr grp"><span>{{ g.edt }}</span><span :title="g.nombre">{{ g.nombre }}</span><span></span><span class="r">{{ g.pct.toFixed(0) }}</span></div>
+                <div v-for="m in g.filas" :key="m.edt" class="tr" :class="{ apagada: !enSector(m) }" :title="`${num(m.q)} de ${num(m.metrado)} ${m.unidad}`">
+                  <span class="mu">{{ m.edt }}</span>
+                  <span class="nom">{{ m.nombre }}<small>{{ num(m.metrado) }} {{ m.unidad }}<template v-if="m.sector_codigo"> · {{ m.sector_codigo.replace(',', ' · ') }}</template><template v-if="m.pend"> · <b class="amb">+{{ num(m.pend) }} por aprobar</b></template></small></span>
+                  <span class="r">{{ m.q ? num(m.q) : '—' }}</span>
+                  <span class="r"><span class="mini"><i :style="{ width: m.pct + '%', background: m.exceso ? '#f87171' : m.pct >= 99.9 ? '#4ade80' : '#f59e0b' }"></i></span>{{ m.pct.toFixed(0) }}</span>
+                </div>
+              </template>
             </div>
           </section>
 
@@ -338,8 +375,8 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 
 <style scoped>
 .v5 { gap: 16px; }
-.kpis { display: flex; flex-wrap: wrap; gap: 12px; }
-.kpi { flex: 1 1 190px; box-sizing: border-box; background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+.kpi { box-sizing: border-box; background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
 .kpi.full { flex-basis: 100%; }
 .kpi .l { margin: 0; color: var(--p-muted); font-size: 13px; }
 .kpi .v { margin: 6px 0 4px; font-size: 27px; font-weight: 700; }
@@ -350,15 +387,21 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 .fecha { font-size: 20px; color: #f5a800; }
 .mu { color: var(--p-muted); }
 .sm { font-size: 12px; }
-.cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(330px, 1fr); gap: 16px; align-items: stretch; }
+@media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.izq { flex: 8 1 680px; }
-.der { flex: 4 1 360px; }
+.der > .card:last-child { flex: 1 1 auto; }
+.izq > :last-child { flex: 1 1 auto; }
 .card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
 .card h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .sub { margin: 4px 0 12px; color: var(--p-muted); font-size: 12.5px; }
 .met .th, .met .tr { display: grid; grid-template-columns: 38px 1fr 72px 64px; gap: 6px; align-items: center; padding: 8px 2px; border-bottom: 1px solid var(--p-line); font-size: 13px; }
 .met .th { font-size: 11px; font-weight: 700; color: var(--p-muted); text-transform: uppercase; }
+.met .grp { background: var(--p-chip); font-weight: 800; font-size: 11.5px; text-transform: uppercase; border-radius: 6px; }
+.met .grp span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apagada { opacity: 0.3; }
+.pend { padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(245, 168, 0, 0.45); background: rgba(245, 168, 0, 0.08); font-size: 13px; line-height: 1.5; }
+.pend a { color: #f5a800; font-weight: 800; margin-left: 6px; }
 .met .nom small { display: block; font-size: 11px; color: var(--p-muted); }
 .r { text-align: right; }
 .mini { display: inline-block; width: 28px; height: 5px; border-radius: 9px; background: var(--p-line); margin-right: 4px; vertical-align: middle; overflow: hidden; }

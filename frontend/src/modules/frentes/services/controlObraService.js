@@ -137,15 +137,69 @@ export async function cargarSketch(frenteId) {
   return { ...s.data, url, elementos: el.data ?? [] }
 }
 
-/** Línea base por partida y avance aprobado por día. */
+/** Línea base por partida y avance APROBADO por día (carga inicial del
+ * Control diario + lo confirmado en la bandeja). También trae lo que falta
+ * aprobar y los ajustes manuales de la curva (opcionales). */
 export async function cargarCronograma(frenteId) {
-  const [p, a] = await Promise.all([
+  const [p, a, pend, band, aj] = await Promise.all([
     supabase.from('ctl_cronograma_partida').select('*').eq('frente_id', frenteId).order('edt'),
-    supabase.from('ctl_avance_partida').select('edt, fecha, cantidad').eq('frente_id', frenteId),
+    supabase.rpc('ctl_avance_aprobado', { p_frente_id: frenteId }),
+    supabase.from('ctl_avance_partida').select('edt, fecha, cantidad, fuente').eq('frente_id', frenteId).eq('estado', 'por_aprobar'),
+    supabase.from('rdc_metrados_confirmacion').select('id', { count: 'exact', head: true }).eq('frente_id', frenteId).eq('estado', 'por_confirmar'),
+    supabase.from('ctl_curva_ajuste').select('*').eq('frente_id', frenteId).eq('activo', true).order('fecha'),
   ])
   if (p.error) throw p.error
   if (a.error) throw a.error
-  return { partidas: p.data ?? [], avance: a.data ?? [] }
+  return {
+    partidas: p.data ?? [],
+    avance: (a.data ?? []).map((x) => ({ ...x, cantidad: Number(x.cantidad) })),
+    porAprobar: pend.data ?? [],
+    bandejaPendientes: band.count ?? 0,
+    ajustes: aj.data ?? [],
+  }
+}
+
+export async function guardarAjusteCurva(frenteId, fecha, ejecutadoPct, motivo) {
+  const { error } = await supabase.from('ctl_curva_ajuste').insert({ frente_id: frenteId, fecha, ejecutado_pct: ejecutadoPct, motivo })
+  if (error) throw error
+}
+export async function anularAjusteCurva(id) {
+  const { error } = await supabase.from('ctl_curva_ajuste').update({ activo: false }).eq('id', id)
+  if (error) throw error
+}
+
+/** Curva ejecutada ponderada por HH desde el avance aprobado:
+ * Σ min(acum, metrado)/metrado × HH / Σ HH. Un ajuste manual activo en una
+ * fecha reemplaza el valor calculado de esa fecha. */
+export function curvaEjecutada(puntos, partidas, avance, ajustes = []) {
+  const BAC = partidas.reduce((a, p) => a + Number(p.hh || 0), 0)
+  const ultima = avance.reduce((m, a) => (a.fecha > m ? a.fecha : m), '')
+  const aj = new Map(ajustes.map((x) => [x.fecha, Number(x.ejecutado_pct)]))
+  const acum = new Map()
+  const porDia = new Map()
+  for (const a of avance) {
+    if (!porDia.has(a.fecha)) porDia.set(a.fecha, [])
+    porDia.get(a.fecha).push(a)
+  }
+  const fechas = [...new Set([...puntos.map((p) => p.fecha), ...avance.map((a) => a.fecha)])].sort()
+  const P = new Map(partidas.map((p) => [p.edt, p]))
+  const calc = new Map()
+  for (const f of fechas) {
+    for (const a of porDia.get(f) ?? []) acum.set(a.edt, (acum.get(a.edt) || 0) + a.cantidad)
+    let s = 0
+    for (const [edt, q] of acum) {
+      const p = P.get(edt)
+      if (p && Number(p.metrado)) s += (Math.min(q, Number(p.metrado)) / Number(p.metrado)) * Number(p.hh)
+    }
+    calc.set(f, BAC ? (s / BAC) * 100 : 0)
+  }
+  return {
+    ultima,
+    puntos: puntos.map((p) => {
+      const v = p.fecha <= ultima ? (aj.has(p.fecha) ? aj.get(p.fecha) : Math.round((calc.get(p.fecha) ?? 0) * 100) / 100) : null
+      return { ...p, ejecutado_pct: v, ajustado: aj.has(p.fecha) }
+    }),
+  }
 }
 
 /** RDC de un rango: Stand By por día, personal y redline. */

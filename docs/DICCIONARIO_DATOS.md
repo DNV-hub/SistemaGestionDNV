@@ -542,6 +542,10 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Columnas**: `ctl_cronograma_partida(frente_id, linea_base, edt, nombre, unidad, metrado, hh, inicio, fin)`; `ctl_avance_partida(frente_id, edt, fecha, cantidad, fuente)`.
 **Notas**: peso de la partida = `hh / Σ hh`. RLS como el resto de `ctl_`.
 
+#### `ctl_avance_aprobado(p_frente_id)` (función) y `ctl_curva_ajuste`
+**Propósito**: la curva S, el Gantt y los metrados solo cuentan lo **aprobado**: carga inicial del Control diario (`ctl_avance_partida.estado='aprobado'`) + lo confirmado/corregido en la bandeja (`rdc_metrados_confirmacion` → `rdc_partidas_edt.codigo_edt`). `ctl_avance_partida.estado='por_aprobar'` = reportado en RDC, aún sin aprobar (se muestra punteado, no suma). `ctl_curva_ajuste(frente_id, fecha, ejecutado_pct, motivo, creado_por, activo)` = ajuste manual **opcional** de la curva, con registro. Migración `20261119040000_ctl_avance_aprobado_y_ajustes.sql`.
+**Notas**: `ctl_cronograma_partida` suma `grupo` (título EDT de nivel 1 del Control diario), `sector_codigo` y `met_previsto` (metrado del cronograma).
+
 #### `ctl_material_sector`
 **Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
 **Tipo**: configuración.

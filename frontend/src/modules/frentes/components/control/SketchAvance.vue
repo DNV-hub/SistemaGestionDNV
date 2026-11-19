@@ -13,13 +13,14 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:sector'])
 
-const capas = ref({ per: true, iny: true, mal: true, cab: true, pt: true })
+const capas = ref({ per: true, iny: true, mal: true, cab: true, pt: true, cod: true })
 const CAPAS = [
   { k: 'per', t: 'Perforación', c: '#f59e0b' },
   { k: 'iny', t: 'Inyección', c: '#2563eb' },
   { k: 'mal', t: 'Malla', c: '#06b6d4' },
   { k: 'cab', t: 'Cable', c: '#22c55e' },
   { k: 'pt', t: 'Pull test', c: '#e11d48' },
+  { k: 'cod', t: 'Códigos', c: '#0f172a' },
 ]
 const svgRef = ref(null)
 
@@ -169,6 +170,7 @@ async function exportarPdf() {
         <circle :cx="a.x" :cy="a.y" r="21" fill="none" stroke="#facc15" stroke-width="6" :stroke-opacity="a.hoy ? 1 : 0" />
         <circle :cx="a.x" :cy="a.y" r="16" fill="none" stroke="#e11d48" stroke-width="5" :stroke-opacity="a.pt ? 1 : 0" />
         <circle :cx="a.x" :cy="a.y" r="10.5" :fill="a.fill" :stroke="a.stroke" stroke-width="3"><title>{{ a.tip }}</title></circle>
+        <text v-if="capas.cod" :x="a.x" :y="a.y - 17" text-anchor="middle" font-size="15" font-weight="800" :fill="a.I ? '#1e3a8a' : a.P ? '#92400e' : '#475569'" stroke="#ffffff" stroke-width="4" paint-order="stroke">{{ a.codigo }}</text>
       </g>
       <g v-for="m in marcas" :key="m.id" :opacity="marcaReportada(m) ? 1 : 0.6">
         <path :d="`M${m.x - 13},${m.y - 13} L${+m.x + 13},${+m.y + 13} M${+m.x + 13},${m.y - 13} L${m.x - 13},${+m.y + 13}`" stroke="#dc2626" stroke-width="6" />

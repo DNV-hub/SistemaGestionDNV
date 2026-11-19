@@ -2,7 +2,7 @@
 // Curva S (v5): cortes semanales de jueves a miércoles con su recuadro,
 // desviación a la fecha de dato, banda −3/+6 (alerta desde +4), tabla de
 // partidas con avance de la semana y proyección.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { semanaDe, fechaCorta, num } from '../../services/controlObraService'
 import { descargarExcel } from '../../../../utils/exportarExcel'
 
@@ -14,8 +14,23 @@ const props = defineProps({
   partidas: { type: Array, default: () => [] },
   avance: { type: Array, default: () => [] },
   nombreFrente: { type: String, default: '' },
+  ajustes: { type: Array, default: () => [] },
+  puedeEditar: { type: Boolean, default: false },
+  fuenteEjecutado: { type: String, default: '' },
 })
-const emit = defineEmits(['update:semana', 'ver-semanal'])
+const emit = defineEmits(['update:semana', 'ver-semanal', 'ajustar', 'anular'])
+const editando = ref(false)
+const fAj = ref({ fecha: '', valor: null, motivo: '' })
+function abrirEditor() {
+  const ult = [...props.puntos].reverse().find((p) => p.ejecutado_pct != null)
+  fAj.value = { fecha: ult?.fecha || props.puntos[0]?.fecha || '', valor: ult ? Number(ult.ejecutado_pct) : null, motivo: '' }
+  editando.value = true
+}
+function guardarAjuste() {
+  if (!fAj.value.fecha || fAj.value.valor == null || fAj.value.motivo.trim().length < 5) return
+  emit('ajustar', { ...fAj.value })
+  editando.value = false
+}
 
 const W = 640, H = 330, L = 44, R = 14, T = 92, B = 44
 const tolInf = computed(() => Number(props.param?.tol_inf ?? -3))
@@ -124,7 +139,23 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
         <h2>Curva S · avance ponderado por HH</h2>
         <p>Cortes semanales de jueves a miércoles · {{ semanas.map((s) => s.clave).join(' · ') }}</p>
       </div>
-      <button type="button" class="gh" :disabled="!puntos.length" @click="exportar">Exportar datos a Excel</button>
+      <div class="acc">
+        <button v-if="puedeEditar" type="button" class="gh" :disabled="!puntos.length" @click="editando ? (editando = false) : abrirEditor()">{{ editando ? 'Cerrar edición' : 'Editar curva (opcional)' }}</button>
+        <button type="button" class="gh" :disabled="!puntos.length" @click="exportar">Exportar datos a Excel</button>
+      </div>
+    </div>
+    <div v-if="editando" class="editor">
+      <p class="mu sm">Ajuste manual opcional: reemplaza el ejecutado calculado de una fecha. Primero se ajustan ratios y HH; los metrados solo como último recurso. Todo ajuste queda registrado con su motivo.</p>
+      <div class="frm">
+        <label>Fecha<input v-model="fAj.fecha" type="date" /></label>
+        <label>Ejecutado %<input v-model.number="fAj.valor" type="number" step="0.1" min="0" max="100" /></label>
+        <label class="mot">Motivo<input v-model="fAj.motivo" type="text" placeholder="Ej.: prorrateo de HH de cosido por redline RL01" /></label>
+        <button type="button" class="pr" :disabled="!fAj.fecha || fAj.valor == null || fAj.motivo.trim().length < 5" @click="guardarAjuste">Guardar ajuste</button>
+      </div>
+    </div>
+    <div v-if="ajustes.length" class="ajs">
+      <span class="mu sm">Ajustes activos:</span>
+      <span v-for="a in ajustes" :key="a.id" class="aj">{{ fechaCorta(a.fecha) }} → {{ Number(a.ejecutado_pct).toFixed(1) }} % · {{ a.motivo }}<button v-if="puedeEditar" type="button" title="Anular ajuste" @click="emit('anular', a.id)">×</button></span>
     </div>
     <p v-if="!puntos.length" class="vacio">Este frente todavía no tiene línea base cargada.</p>
     <template v-else>
@@ -197,7 +228,7 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
         <b :style="{ color: proyeccion.est.c }">{{ proyeccion.dvFin > 0 ? '+' : '' }}{{ proyeccion.dvFin.toFixed(1) }} %, {{ proyeccion.est.t.toLowerCase() }}</b>.
         Primero se ajustan ratios y HH; los metrados solo como último recurso.
       </p>
-      <p v-if="ultimoDato" class="mu sm2">Último ejecutado aprobado: {{ fechaCorta(ultimoDato) }}</p>
+      <p v-if="ultimoDato" class="mu sm2">Último ejecutado aprobado: {{ fechaCorta(ultimoDato) }}{{ fuenteEjecutado ? ' · ' + fuenteEjecutado : '' }}</p>
     </template>
   </section>
 </template>
@@ -209,6 +240,18 @@ h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .top p { margin: 4px 0 0; color: var(--p-muted); font-size: 12.5px; }
 .gh { min-height: 40px; padding: 0 14px; border-radius: 10px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; background: transparent; color: var(--p-text); border: 1px solid var(--p-line); }
 .vacio { color: var(--p-muted); }
+.acc { display: flex; gap: 8px; flex-wrap: wrap; }
+.editor { border: 1px solid rgba(245, 168, 0, 0.45); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.frm { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.frm label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--p-muted); }
+.frm input { min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--p-line); background: var(--p-bg); color: var(--p-text); font: inherit; }
+.frm .mot { flex: 1 1 260px; }
+.pr { min-height: 38px; padding: 0 14px; border-radius: 10px; border: 0; background: #f5a800; color: #0d0f10; font: inherit; font-weight: 800; cursor: pointer; }
+.pr:disabled { opacity: 0.5; cursor: default; }
+.ajs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.aj { font-size: 12px; padding: 3px 8px; border-radius: 8px; background: rgba(245, 168, 0, 0.12); color: #fbbf24; }
+.aj button { margin-left: 6px; border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 800; }
+.sm { font-size: 12px; }
 .ley { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--p-muted); margin-bottom: 4px; }
 .ley span { display: inline-flex; align-items: center; gap: 6px; }
 .l { width: 18px; height: 3px; display: inline-block; }
