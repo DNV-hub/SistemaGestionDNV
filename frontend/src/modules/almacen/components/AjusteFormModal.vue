@@ -35,6 +35,7 @@ const form = reactive({
   cantidad: props.prellenado?.cantidad ?? '',
   cantidad_real: '',
   motivo: props.prellenado?.motivo ?? '',
+  documento_referencia: props.prellenado?.documento_referencia ?? '',
 })
 const ancho = ref('')
 const largo = ref('')
@@ -61,6 +62,10 @@ const filaStock = computed(() =>
 // Sin fila en `stock` = nunca hubo un movimiento ahí: el registrado es 0, no "no se sabe".
 const cantidadRegistrada = computed(() => Number(filaStock.value?.cantidad_fisica ?? 0))
 
+const cantidadAjuste = computed(() =>
+  modo.value === 'real' ? Math.abs(diferencia.value ?? 0) : Number(form.cantidad || 0),
+)
+
 const diferencia = computed(() => {
   if (form.cantidad_real === '') return null
   return Math.round((Number(form.cantidad_real) - cantidadRegistrada.value) * 1000) / 1000
@@ -70,6 +75,12 @@ async function onSubmit() {
   error.value = ''
   if (!form.almacen_id || !form.contrato_id || !form.material_id || !form.motivo.trim()) {
     error.value = 'Almacén, contrato, material y motivo son obligatorios.'
+    return
+  }
+  // Mismas reglas que valida la base (migración 20261119100000): un ajuste
+  // sin explicación ni respaldo es justo lo que dejó 903 placas fantasma.
+  if (form.motivo.trim().length < 10) {
+    error.value = 'Explica el motivo del ajuste (mínimo 10 caracteres).'
     return
   }
 
@@ -95,6 +106,11 @@ async function onSubmit() {
     cantidad = Number(form.cantidad)
   }
 
+  if (tipo === 'positivo' && form.documento_referencia.trim().length < 4) {
+    error.value = 'Un ajuste positivo necesita su respaldo: número de guía o de acta de conteo.'
+    return
+  }
+
   if (tipo === 'positivo' && tipoConversion.value !== 'ninguna') {
     if (!largo.value || (tipoConversion.value === 'area' && !ancho.value)) {
       error.value = tipoConversion.value === 'area' ? 'Indica el ancho y el largo del lote que genera este ajuste.' : 'Indica el largo del lote que genera este ajuste.'
@@ -111,6 +127,7 @@ async function onSubmit() {
       tipo,
       cantidad,
       motivo: form.motivo.trim(),
+      documento_referencia: form.documento_referencia.trim() || null,
       ancho: tipo === 'positivo' && tipoConversion.value === 'area' ? Number(ancho.value) : null,
       largo: tipo === 'positivo' && tipoConversion.value !== 'ninguna' ? Number(largo.value) : null,
     })
@@ -227,6 +244,16 @@ async function onSubmit() {
           <input v-model="largo" type="number" step="0.01" min="0.01" />
         </div>
       </template>
+
+      <div class="mf-campo mf-span">
+        <span class="mf-rotulo">Documento de respaldo (guía o acta){{ tipoEfectivo === 'positivo' ? ' — obligatorio' : '' }}</span>
+        <input v-model="form.documento_referencia" type="text" placeholder="Ej. T001-0003184 o ACTA-CONTEO-DM2-001" />
+      </div>
+
+      <p v-if="cantidadAjuste > 50" class="mf-nota mf-span">
+        Este ajuste es mayor a 50 {{ materialSeleccionado?.unidad ?? 'unidades' }}: quedará <strong>pendiente</strong> y no
+        moverá el stock hasta que lo apruebe un responsable distinto a quien lo registra.
+      </p>
 
       <div class="mf-campo mf-span">
         <span class="mf-rotulo">Motivo</span>

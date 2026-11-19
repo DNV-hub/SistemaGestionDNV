@@ -97,8 +97,12 @@ async function onSubmit() {
     error.value = 'Indica la cantidad correcta (puede ser 0 si el ingreso no debió registrarse).'
     return
   }
-  if (cantidadCambio.value && !norm(form.motivo)) {
-    error.value = 'Escribe el motivo de la corrección de cantidad.'
+  if (cantidadCambio.value && norm(form.motivo).length < 10) {
+    error.value = 'Escribe el motivo de la corrección de cantidad (mínimo 10 caracteres).'
+    return
+  }
+  if (cantidadCambio.value && tipoAjuste.value === 'positivo' && norm(form.documento_referencia).length < 4) {
+    error.value = 'Para subir la cantidad, el ingreso debe tener su número de guía o acta.'
     return
   }
   if (necesitaMedida.value && (!largo.value || (tipoConversion.value === 'area' && !ancho.value))) {
@@ -126,6 +130,7 @@ async function onSubmit() {
         tipo: tipoAjuste.value,
         cantidad: Math.abs(diferencia.value),
         motivo: norm(form.motivo),
+        documento_referencia: norm(form.documento_referencia) || null,
         ancho: necesitaMedida.value && tipoConversion.value === 'area' ? Number(ancho.value) : null,
         largo: necesitaMedida.value ? Number(largo.value) : null,
       })

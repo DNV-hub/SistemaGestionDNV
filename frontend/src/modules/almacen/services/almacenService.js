@@ -207,6 +207,16 @@ export async function crearAjuste(payload) {
   return data
 }
 
+/** Aprueba o rechaza un ajuste Pendiente (los de más de 50 und). Lo valida la
+ * base: permiso stock.aprobar_ajuste y que no lo resuelva quien lo registró. */
+export async function resolverAjuste(ajusteId, aprobar, motivo = null) {
+  const { error } = await supabase.rpc('fn_resolver_ajuste', { p_ajuste_id: ajusteId, p_aprobar: aprobar, p_motivo: motivo })
+  if (error) throw error
+  const { data, error: e2 } = await supabase.from('ajustes').select(SELECT_MOVIMIENTO).eq('id', ajusteId).single()
+  if (e2) throw e2
+  return data
+}
+
 // usuarios(id, nombre) es quien REGISTRÓ la salida (el almacenero que hizo
 // la entrega física) — no el supervisor que la pidió. Ese viene aparte, vía
 // vale_detalle -> vales.supervisor_id, igual que ya lo arma Kardex

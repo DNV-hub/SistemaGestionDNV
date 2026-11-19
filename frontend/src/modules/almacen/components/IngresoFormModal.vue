@@ -98,6 +98,10 @@ async function onSubmit() {
     error.value = 'Almacén y contrato son obligatorios.'
     return
   }
+  if (form.documento_referencia.trim().length < 4) {
+    error.value = 'Indica el número de guía (o acta) del ingreso: sin documento no se registra stock.'
+    return
+  }
   for (const linea of lineas.value) {
     if (!linea.materialId && !linea.materialNuevo) {
       error.value = 'Falta elegir el material en alguna línea.'

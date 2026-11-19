@@ -259,7 +259,7 @@ quedar desactualizado si alguien migra sin seguir la regla de `CLAUDE.md`.
 **Tipo**: movimiento.
 **Columnas**: `id uuid!`, `fecha date!=CURRENT_DATE`, `material_id uuid!`, `almacen_id uuid!`, `cantidad numeric!`, `documento_referencia text`, `proveedor text`, `usuario_id uuid!`, `observacion text`, `created_at!`, `contrato_id uuid!`, `ancho numeric`, `largo numeric`, `factor_conversion numeric`, `cantidad_restante numeric`.
 **Relaciones**: `material_id → materiales.id`, `almacen_id → almacenes.id`, `contrato_id → contratos.id`, `usuario_id → usuarios.id`.
-**Notas**: `ancho`/`largo`/`factor_conversion`/`cantidad_restante` solo aplican si el material tiene `tipo_conversion` ≠ `ninguna` (ej. un rollo de malla que se mide en m² pero se consume por tramo) — trigger `fn_trg_ingreso_recalcular_factor` arma el factor.
+**Notas**: `ancho`/`largo`/`factor_conversion`/`cantidad_restante` solo aplican si el material tiene `tipo_conversion` ≠ `ninguna` (ej. un rollo de malla que se mide en m² pero se consume por tramo) — trigger `fn_trg_ingreso_recalcular_factor` arma el factor. Desde `20261119100000`, `fn_trg_ingreso_validar` (BEFORE INSERT) rechaza todo ingreso sin `documento_referencia` (mín. 4 caracteres); los ingresos que genera el propio sistema (devoluciones, reevaluaciones, ajustes con lote) ya traen uno. Solo el rol Almacen tiene `stock.registrar_ingreso`.
 
 ### `salidas`
 **Propósito**: despachos de material hacia un frente — el movimiento real que descuenta `cantidad_fisica`.
@@ -271,8 +271,9 @@ quedar desactualizado si alguien migra sin seguir la regla de `CLAUDE.md`.
 ### `ajustes`
 **Propósito**: correcciones manuales de inventario (positivo/negativo) fuera de ingreso/salida normal.
 **Tipo**: movimiento.
-**Columnas**: `id uuid!`, `fecha date!=CURRENT_DATE`, `material_id uuid!`, `almacen_id uuid!`, `tipo text!` *(positivo/negativo)*, `cantidad numeric!` *(siempre > 0, el signo lo da `tipo`)*, `motivo text!`, `usuario_id uuid!`, `created_at!`, `contrato_id uuid!`.
-**Relaciones**: `material_id → materiales.id`, `almacen_id → almacenes.id`, `usuario_id → usuarios.id`, `contrato_id → contratos.id`.
+**Columnas**: `id uuid!`, `fecha date!=CURRENT_DATE`, `material_id uuid!`, `almacen_id uuid!`, `tipo text!` *(positivo/negativo)*, `cantidad numeric!` *(siempre > 0, el signo lo da `tipo`)*, `motivo text!` *(mín. 10 caracteres)*, `usuario_id uuid!`, `created_at!`, `contrato_id uuid!`, `ancho numeric`, `largo numeric`, `documento_referencia text` *(guía o acta; obligatorio si `tipo = positivo`)*, `estado text!='Aprobado'` *(Pendiente/Aprobado/Rechazado, CHECK `chk_ajustes_estado`)*, `aprobado_por uuid`, `aprobado_at timestamptz`, `motivo_rechazo text`.
+**Relaciones**: `material_id → materiales.id`, `almacen_id → almacenes.id`, `usuario_id → usuarios.id`, `contrato_id → contratos.id`, `aprobado_por → usuarios.id`.
+**Notas** (migración `20261119100000_control_ingresos_ajustes`): `fn_trg_ajuste_validar` (BEFORE INSERT) exige motivo y documento, y deja en `Pendiente` todo ajuste de más de 50 und; un ajuste Pendiente no mueve stock hasta que `fn_resolver_ajuste(id, aprobar, motivo)` lo aprueba (permiso `stock.aprobar_ajuste`, nunca quien lo registró) — ahí `trg_ajustes_aprobacion` aplica el movimiento. Solo el rol Almacen tiene `stock.registrar_ajuste`.
 
 ### `kardex`
 **Propósito**: libro de movimientos reales de almacén (ingreso/salida/ajuste) — es el historial append-only, nunca se edita una fila ya escrita.

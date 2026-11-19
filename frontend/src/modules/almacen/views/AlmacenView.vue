@@ -616,9 +616,42 @@ async function actualizarConversionMasiva(actualizaciones) {
 
 async function registrarAjuste(payload) {
   aviso.value = ''
-  await almacen.registrarAjuste({ ...payload, usuario_id: auth.session.user.id })
-  aviso.value = 'Ajuste registrado.'
+  const ajuste = await almacen.registrarAjuste({ ...payload, usuario_id: auth.session.user.id })
+  aviso.value =
+    ajuste?.estado === 'Pendiente'
+      ? 'Ajuste registrado como PENDIENTE (más de 50 und): no mueve el stock hasta que lo apruebe otro responsable.'
+      : 'Ajuste registrado.'
   cerrarModalAjuste()
+}
+
+// Ajustes de más de 50 und quedan Pendientes (migración 20261119100000):
+// los aprueba alguien con stock.aprobar_ajuste que no sea quien lo registró.
+const puedeAprobarAjuste = computed(() => auth.tienePermiso('stock.aprobar_ajuste'))
+const ajustesPendientes = computed(() => almacen.ajustes.filter((a) => a.estado === 'Pendiente').length)
+const puedeResolver = (a) => a.estado === 'Pendiente' && puedeAprobarAjuste.value && a.usuario_id !== auth.session?.user?.id
+
+async function aprobarAjuste(a) {
+  aviso.value = ''
+  const signo = a.tipo === 'positivo' ? '+' : '−'
+  if (!confirm(`¿Aprobar el ajuste ${signo}${a.cantidad} ${a.materiales?.unidad ?? ''} de "${a.materiales?.descripcion}"? Esto mueve el stock.`)) return
+  try {
+    await almacen.resolverAjuste(a.id, true)
+    aviso.value = 'Ajuste aprobado: el stock ya se actualizó.'
+  } catch (e) {
+    aviso.value = `No se pudo aprobar: ${e?.message ?? e}`
+  }
+}
+
+async function rechazarAjuste(a) {
+  aviso.value = ''
+  const motivo = prompt(`¿Por qué se rechaza el ajuste de "${a.materiales?.descripcion}"?`)
+  if (!motivo || !motivo.trim()) return
+  try {
+    await almacen.resolverAjuste(a.id, false, motivo.trim())
+    aviso.value = 'Ajuste rechazado: el stock no cambió.'
+  } catch (e) {
+    aviso.value = `No se pudo rechazar: ${e?.message ?? e}`
+  }
 }
 
 function abrirAjuste() {
@@ -735,10 +768,21 @@ const listaMovil = computed(() => {
       return ajustesFiltrados.value.map((a) => ({
         key: a.id,
         titulo: a.materiales?.descripcion ?? '—',
-        detalle: `${fechaCorta(a.fecha)} · ${a.motivo} · ${a.usuarios?.nombre ?? '—'}`,
+        detalle: `${fechaCorta(a.fecha)} · ${a.motivo}${a.documento_referencia ? ' · Doc. ' + a.documento_referencia : ''} · ${a.usuarios?.nombre ?? '—'}`,
         derecha: `${a.tipo === 'positivo' ? '+' : '−'}${conUnidad(a.cantidad, a.materiales)}`,
-        pill: { texto: a.tipo, clase: a.tipo === 'positivo' ? 'ok' : 'amb' },
-        acciones: puedeRegistrarAjuste.value ? [{ texto: 'Corregir', ejecutar: () => abrirCorregirAjuste(a) }] : [],
+        pill:
+          a.estado && a.estado !== 'Aprobado'
+            ? { texto: a.estado, clase: a.estado === 'Pendiente' ? 'amb' : 'neu' }
+            : { texto: a.tipo, clase: a.tipo === 'positivo' ? 'ok' : 'amb' },
+        acciones: [
+          ...(puedeResolver(a)
+            ? [
+                { texto: 'Aprobar', ejecutar: () => aprobarAjuste(a) },
+                { texto: 'Rechazar', peligro: true, ejecutar: () => rechazarAjuste(a) },
+              ]
+            : []),
+          ...(puedeRegistrarAjuste.value && a.estado !== 'Pendiente' ? [{ texto: 'Corregir', ejecutar: () => abrirCorregirAjuste(a) }] : []),
+        ],
       }))
     case 'devoluciones':
       return devolucionesFiltradas.value.map((d) => ({
@@ -848,7 +892,7 @@ function abrirCorregirAjuste(a) {
       <button v-if="puedeVerSalidas" type="button" role="tab" class="tab" :class="{ on: tab === 'salidas' }" :aria-selected="tab === 'salidas'" @click="tab = 'salidas'">Salidas</button>
       <button v-if="puedeVerVales" type="button" role="tab" class="tab" :class="{ on: tab === 'vales' }" :aria-selected="tab === 'vales'" @click="tab = 'vales'">Vales</button>
       <button type="button" role="tab" class="tab" :class="{ on: tab === 'reservas' }" :aria-selected="tab === 'reservas'" @click="tab = 'reservas'">Reservas<span v-if="reservasVigentes" class="nb">{{ reservasVigentes }}</span></button>
-      <button type="button" role="tab" class="tab" :class="{ on: tab === 'ajustes' }" :aria-selected="tab === 'ajustes'" @click="tab = 'ajustes'">Ajustes</button>
+      <button type="button" role="tab" class="tab" :class="{ on: tab === 'ajustes' }" :aria-selected="tab === 'ajustes'" @click="tab = 'ajustes'">Ajustes<span v-if="ajustesPendientes" class="nb">{{ ajustesPendientes }}</span></button>
       <button v-if="puedeVerDevoluciones" type="button" role="tab" class="tab" :class="{ on: tab === 'devoluciones' }" :aria-selected="tab === 'devoluciones'" @click="tab = 'devoluciones'">
         Devoluciones<span v-if="devolucionesPendientes" class="nb">{{ devolucionesPendientes }}</span>
       </button>
@@ -1079,8 +1123,10 @@ function abrirCorregirAjuste(a) {
             <th>Tipo</th>
             <th class="num">Cantidad</th>
             <th>Motivo</th>
+            <th>Documento</th>
+            <th>Estado</th>
             <th>Registrado por</th>
-            <th v-if="puedeRegistrarAjuste"></th>
+            <th v-if="puedeRegistrarAjuste || puedeAprobarAjuste"></th>
           </tr>
         </thead>
         <tbody>
@@ -1097,13 +1143,26 @@ function abrirCorregirAjuste(a) {
               {{ formatearNumero(a.cantidad) }} <span class="unit">{{ a.materiales?.unidad }}</span>
             </td>
             <td data-label="Motivo"><div class="doc-ref motivo-ref" :title="a.motivo">{{ a.motivo }}</div></td>
+            <td data-label="Documento"><div class="doc-ref">{{ a.documento_referencia || '—' }}</div></td>
+            <td data-label="Estado">
+              <span class="badge" :class="(a.estado ?? 'Aprobado').toLowerCase()" :title="a.motivo_rechazo || ''">{{ a.estado ?? 'Aprobado' }}</span>
+            </td>
             <td data-label="Registrado por">{{ a.usuarios?.nombre ?? '—' }}</td>
-            <td v-if="puedeRegistrarAjuste" class="td-acciones">
-              <BotonIcono variante="corregir" titulo="Corregir con otro ajuste" @click="abrirCorregirAjuste(a)" />
+            <td v-if="puedeRegistrarAjuste || puedeAprobarAjuste" class="td-acciones">
+              <template v-if="puedeResolver(a)">
+                <button type="button" class="mini" title="Aprobar: aplica el ajuste al stock" @click="aprobarAjuste(a)">Aprobar</button>
+                <button type="button" class="mini peligro" title="Rechazar: el stock no cambia" @click="rechazarAjuste(a)">Rechazar</button>
+              </template>
+              <BotonIcono
+                v-else-if="puedeRegistrarAjuste && a.estado !== 'Pendiente'"
+                variante="corregir"
+                titulo="Corregir con otro ajuste"
+                @click="abrirCorregirAjuste(a)"
+              />
             </td>
           </tr>
           <tr v-if="!ajustesFiltrados.length">
-            <td colspan="8" class="vacio">
+            <td colspan="10" class="vacio">
               {{ almacen.ajustes.length ? 'Ningún ajuste coincide con la búsqueda.' : 'No hay ajustes registrados.' }}
             </td>
           </tr>
@@ -1781,7 +1840,9 @@ button.kpi:hover { background: var(--a-kpi-hover); }
 .sp, .badge { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 4px 10px; white-space: nowrap; display: inline-block; }
 .sp.ok, .badge.positivo, .badge.bueno, .badge.recibida, .badge.confirmada { background: var(--a-ok-bg); color: var(--a-ok-fg); }
 .sp.low, .badge.negativo, .badge.danado { background: var(--a-low-pill-bg); color: var(--a-low-pill-fg); }
-.sp.amb, .badge.solicitada { background: var(--a-amb-bg); color: var(--a-amb-fg); }
+.badge.aprobado { background: var(--a-ok-bg); color: var(--a-ok-fg); }
+.badge.rechazado { background: var(--a-neu-bg); color: var(--a-neu-fg); }
+.sp.amb, .badge.solicitada, .badge.pendiente { background: var(--a-amb-bg); color: var(--a-amb-fg); }
 .sp.info { background: var(--a-info-bg); color: var(--a-info-fg); }
 .sp.neu, .badge.rechazada { background: var(--a-neu-bg); color: var(--a-neu-fg); }
 .evaluacion { display: flex; flex-direction: column; gap: 2px; font-size: 12px; white-space: nowrap; }

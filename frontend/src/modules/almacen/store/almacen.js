@@ -10,6 +10,7 @@ import {
   crearIngresosMasivo,
   listarAjustes,
   crearAjuste,
+  resolverAjuste,
   listarSalidas,
   listarMaterialesActivos,
   editarDatosIngresos,
@@ -235,6 +236,13 @@ export const useAlmacenStore = defineStore('almacen', {
     async registrarAjuste(payload) {
       const ajuste = await crearAjuste(payload)
       this.ajustes.unshift(ajuste)
+      await this.refrescarStock()
+      return ajuste
+    },
+
+    async resolverAjuste(ajusteId, aprobar, motivo = null) {
+      const ajuste = await resolverAjuste(ajusteId, aprobar, motivo)
+      this.ajustes = this.ajustes.map((a) => (a.id === ajusteId ? ajuste : a))
       await this.refrescarStock()
       return ajuste
     },

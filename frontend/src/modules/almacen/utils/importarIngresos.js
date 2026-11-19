@@ -233,6 +233,17 @@ export function procesarFilasIngreso(
       contratoNombre = contrato.nombre
     }
 
+    // Sin guía no entra stock (migración 20261119100000): la carga inicial
+    // del 14/09 metió saldos sin documento que no existían en físico.
+    if (String(f.documento_referencia ?? '').trim().length < 4) {
+      filas.push({
+        fila: f._fila,
+        estado: 'error',
+        motivo: 'Falta el DOCUMENTO (número de guía o acta): sin documento no se registra stock.',
+      })
+      return
+    }
+
     filas.push({
       fila: f._fila,
       descripcion: f.descripcion,
