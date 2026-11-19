@@ -528,6 +528,10 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Relaciones**: `frente_id → frentes.id`.
 **Notas**: RLS select con `frentes.ver` o `procura.ver`; escritura con `procura.crear_version`. La desviación se compara a la fecha de dato de cada semana (jueves a miércoles).
 
+#### `ctl_avance_elementos(p_frente_id)` (función)
+**Propósito**: avance por código desde `rdc_reporte_elementos` (perforación, inyección, pull test, malla por tipo), sin depender de `frentes.rdc_control_pernos`. Migración `20261119020000_ctl_avance_elementos.sql`.
+**Notas**: security definer, `search_path=''`; exige `frentes.ver` o `rdc.ver_resumen_campo`. Solo lectura.
+
 #### `ctl_material_sector`
 **Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
 **Tipo**: configuración.

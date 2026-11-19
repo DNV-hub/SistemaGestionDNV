@@ -4,10 +4,10 @@
 // semana, reportes y alertas. Solo lectura.
 import { computed, onMounted, ref, watch } from 'vue'
 import { listarReportes } from '../../../rdc/services/rdcService'
-import { listarPernos, listarPernosBiblioteca, listarMalla } from '../../../avance/services/avanceService'
+import { listarPernosBiblioteca } from '../../../avance/services/avanceService'
 import { listarAlertas } from '../../../alertas/services/alertasService'
 import {
-  cargarSectores, cargarCurva, cargarStandBy, cargarFotos,
+  cargarSectores, cargarCurva, cargarStandBy, cargarFotos, cargarAvanceElementos,
   sectorDeCodigo, semanaDe, fechaCorta, num, horasTexto,
 } from '../../services/controlObraService'
 import CurvaSSemanal from '../../components/control/CurvaSSemanal.vue'
@@ -23,9 +23,8 @@ const sectores = ref([])
 const sector = ref('all')
 const curva = ref({ param: null, puntos: [] })
 const semana = ref('')
-const pernos = ref(null)
+const elementos = ref([])
 const biblioteca = ref([])
-const malla = ref([])
 const standby = ref([])
 const fotos = ref([])
 const cargandoSemana = ref(false)
@@ -36,17 +35,16 @@ const seguro = (p, def) => p.catch((e) => { console.warn(e); return def })
 onMounted(async () => {
   cargando.value = true
   const id = props.frente.id
-  const [r, a, s, c, p, b, m] = await Promise.all([
+  const [r, a, s, c, el, b] = await Promise.all([
     seguro(listarReportes({ frenteId: id }), []),
     seguro(listarAlertas({ estado: 'activa', frenteId: id }), []),
     seguro(cargarSectores(id), []),
     seguro(cargarCurva(id), { param: null, puntos: [] }),
-    props.frente.rdc_control_pernos ? seguro(listarPernos(id), null) : Promise.resolve(null),
+    seguro(cargarAvanceElementos(id), []),
     seguro(listarPernosBiblioteca(id), []),
-    seguro(listarMalla(id), []),
   ])
   reportes.value = r; alertas.value = a; sectores.value = s; curva.value = c
-  pernos.value = p; biblioteca.value = b; malla.value = m
+  elementos.value = el; biblioteca.value = b
   const fd = c.param?.fecha_dato || r[0]?.fecha || new Date().toISOString().slice(0, 10)
   semana.value = semanaDe(fd).clave
   cargando.value = false
@@ -79,15 +77,16 @@ const enSector = (cod) => sector.value === 'all' || cod === sector.value
 const avanceSectores = computed(() => {
   const filas = [...sectores.value.map((s) => ({ ...s })), { codigo: 'GEN', nombre: 'Sin sector' }]
   const nz = (c) => (c ?? '').trim().toUpperCase()
-  const est = new Map((pernos.value ?? []).map((p) => [p.codigo_norm || nz(p.codigo), p]))
+  const perf = new Set(elementos.value.filter((e) => e.elemento === 'Perno' && e.actividad === 'Perforación').map((e) => e.codigo_norm))
+  const iny = new Set(elementos.value.filter((e) => e.elemento === 'Perno' && e.actividad === 'Inyección').map((e) => e.codigo_norm))
   for (const f of filas) { f.plano = 0; f.perf = 0; f.iny = 0 }
   for (const b of biblioteca.value) {
     const sc = sectorDeCodigo(b.codigo, codigos.value)
     const f = filas.find((x) => x.codigo === sc)
     f.plano++
-    const e = est.get(nz(b.codigo))
-    if (e?.perforacion_fecha || e?.inyeccion_fecha) f.perf++
-    if (e?.inyeccion_fecha) f.iny++
+    const c = nz(b.codigo)
+    if (perf.has(c) || iny.has(c)) f.perf++
+    if (iny.has(c)) f.iny++
   }
   return filas.filter((f) => f.plano > 0)
 })
@@ -95,7 +94,18 @@ const totSel = computed(() => {
   const fs = avanceSectores.value.filter((f) => enSector(f.codigo))
   return fs.reduce((a, f) => ({ plano: a.plano + f.plano, perf: a.perf + f.perf, iny: a.iny + f.iny }), { plano: 0, perf: 0, iny: 0 })
 })
-const mallaTotal = computed(() => malla.value.reduce((a, m) => a + (Number(m.area_m2) || 0), 0))
+const mallaTotal = computed(() => elementos.value.filter((e) => e.elemento === 'Malla').reduce((a, m) => a + (Number(m.area_m2) || Number(m.cantidad) || 0), 0))
+
+const mallaPorTipo = computed(() => {
+  const m = new Map()
+  for (const e of elementos.value.filter((x) => x.elemento === 'Malla')) m.set(e.tipo || 'Malla', (m.get(e.tipo || 'Malla') || 0) + (Number(e.area_m2) || Number(e.cantidad) || 0))
+  return [...m.entries()].map(([t, a]) => `${t}: ${num(a)}`).join(' · ')
+})
+const fueraPlano = computed(() => {
+  if (!biblioteca.value.length) return []
+  const bib = new Set(biblioteca.value.map((b) => (b.codigo ?? '').trim().toUpperCase()))
+  return [...new Set(elementos.value.filter((e) => e.elemento === 'Perno' && e.codigo_norm && !bib.has(e.codigo_norm)).map((e) => e.codigo_norm))]
+})
 
 const ultimaCurva = computed(() => {
   const ps = curva.value.puntos.filter((p) => p.ejecutado_pct != null)
@@ -123,7 +133,7 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0)
 
 <template>
   <div class="pl-col">
-    <div class="pl-kpis">
+    <div class="kpis5">
       <div class="pl-kpi">
         <div class="l">Avance ejecutado</div>
         <div class="v">{{ ultimaCurva ? Number(ultimaCurva.ejecutado_pct).toFixed(1) + ' %' : '—' }}</div>
@@ -145,7 +155,7 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0)
       <div class="pl-kpi">
         <div class="l">Malla instalada</div>
         <div class="v">{{ mallaTotal ? num(mallaTotal) + ' m²' : '—' }}</div>
-        <div class="s">Según RDC aprobados</div>
+        <div class="s">{{ mallaPorTipo || 'Según RDC' }}</div>
       </div>
       <div class="pl-kpi">
         <div class="l">Stand By · {{ semana }}</div>
@@ -189,6 +199,7 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0)
               <span class="av"><span class="bar"><i :style="{ width: pct(f.iny, f.plano) + '%' }"></i></span>{{ pct(f.iny, f.plano) }} %</span>
             </div>
           </div>
+          <p v-if="fueraPlano.length" class="aviso">⚠ Códigos reportados en el RDC que no están en el plano: {{ fueraPlano.join(', ') }}. Revisar con el supervisor.</p>
         </section>
       </div>
 
@@ -251,7 +262,8 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0)
 </template>
 
 <style scoped>
-.pl-kpis { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.kpis5 { display: flex; flex-wrap: wrap; gap: 12px; }
+.kpis5 .pl-kpi { flex: 1 1 190px; border-radius: 18px; }
 .bar { display: inline-block; width: 100%; height: 7px; border-radius: 99px; background: var(--p-line); overflow: hidden; margin: 6px 0 2px; }
 .bar i { display: block; height: 100%; background: #f5a800; border-radius: 99px; }
 .sectores { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 14px; background: var(--p-card); }

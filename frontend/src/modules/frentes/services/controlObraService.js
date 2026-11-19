@@ -111,3 +111,11 @@ export const horasTexto = (min) => {
   const h = Math.floor(min / 60), m = Math.round(min % 60)
   return h ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`
 }
+
+/** Avance por código desde el RDC (perforación, inyección, pull test,
+ * malla), sin depender del interruptor "control de pernos" del frente. */
+export async function cargarAvanceElementos(frenteId) {
+  const { data, error } = await supabase.rpc('ctl_avance_elementos', { p_frente_id: frenteId })
+  if (error) throw error
+  return data ?? []
+}
