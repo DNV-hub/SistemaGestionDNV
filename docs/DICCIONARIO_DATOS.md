@@ -518,10 +518,10 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Tipo**: catálogo.
 **Columnas**: `id uuid!`, `frente_id uuid!`, `codigo text!` *(P1, P2, A1, Z02, Z03, P, ENC, BD)*, `nombre text!`, `tipo text!` *(pasivo/activo/encapsulado/barrera/general)*, `orden int!=0`, `created_at!`. Único `(frente_id, codigo)`.
 **Relaciones**: `frente_id → frentes.id`.
-**Notas**: RLS select con `procura.ver`, `procura.ver_comparacion` o `frentes.ver`; escritura con `procura.crear_version`.
+**Notas**: RLS select con `procura.ver`, `procura.ver_comparacion` o `frentes.ver`; escritura con `procura.crear_version`. **Regla:** un sector solo se crea cuando existe su plano (o una directriz escrita) en la bandeja; si no, no se crea y se pregunta a Planeamiento. Por eso ZCM06 tiene solo P1 y P2 (sin plano activo al 18/11; corrección en `20261118230000_ctl_zcm06_sin_activo.sql`). ZCM07 sí tiene A1 (plano CE1090).
 
 #### `ctl_material_sector`
-**Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al activo, accesorios Ø25 a los pasivos).
+**Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
 **Tipo**: configuración.
 **Columnas**: `id uuid!`, `frente_id uuid!`, `material_id uuid!`, `sector_codigo text!`, `criterio text`, `created_at!`. Único `(frente_id, material_id, sector_codigo)`.
 **Relaciones**: `frente_id → frentes.id`, `material_id → materiales.id`.
