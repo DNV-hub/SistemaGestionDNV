@@ -527,6 +527,17 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Relaciones**: `frente_id → frentes.id`, `material_id → materiales.id`.
 **Notas**: un material puede estar en varios sectores. Sin fila = "General / facilidades" (`GEN`).
 
+#### `ctl_metrado_plano`
+**Propósito**: metrado de diseño por sector según el plano constructivo (base fija, no se edita con los redlines).
+**Columnas**: `id uuid!`, `frente_id uuid!`, `sector_codigo text!`, `item_codigo text!` *(ej. ZCM06-P1-12)*, `descripcion text!`, `unidad text!`, `cantidad_constructivo numeric!`, `plano_origen text!`, `created_at!`. Único `(frente_id, item_codigo)`.
+
+#### `ctl_redline_cambio`
+**Propósito**: cada cambio puntual de un redline sobre un ítem del metrado (ícono RL en pantalla).
+**Columnas**: `id uuid!`, `frente_id uuid!`, `sector_codigo text!`, `item_codigo text!`, `redline text!`, `fecha date!`, `aprobado_bba boolean` *(null = por confirmar; true = entra al cálculo vigente)*, `cantidad_antes numeric`, `cantidad_despues numeric`, `elemento_codigo text` *(perno o paño puntual)*, `nota text`, `created_at!`.
+
+#### Vista `ctl_metrado_vigente` (security_invoker)
+Por ítem: constructivo, último redline aprobado, último redline pendiente con su nota, y `cantidad_vigente` = redline aprobado o, si no hay, constructivo.
+
 #### Vista `ctl_conciliacion_material`
 Una fila por frente × material: `salida`, `transf_entrada`, `transf_salida`, `devuelto_recibido` (devoluciones `Recibida`), `devolucion_por_recibir` (`Solicitada`), `devolucion_rechazada`, `neto_en_frente` = salida + transf. entrada − transf. salida − devuelto recibido, `declarado_facilidades` y `sin_destino_declarado` (según `vales.actividad` clasificada con `ctl_destino`), `estado_devolucion`, `devoluciones_detalle`, `sectores text[]`. Mismo filtro de seguridad que `procura_vs_consumo` (permiso de procura; supervisor solo su frente).
 

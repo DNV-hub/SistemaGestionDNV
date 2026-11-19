@@ -1,0 +1,6 @@
+-- PRUEBA control de obra · Fase 1 (18/11/2026). Aplicada en producción vía MCP. Solo objetos nuevos.
+-- ctl_metrado_plano: metrado de diseño por sector según el plano constructivo (base fija).
+-- ctl_redline_cambio: cada cambio puntual de un redline (antes/después, aprobado_bba: null = por confirmar, true = entra al vigente).
+-- ctl_metrado_vigente (security_invoker): constructivo reemplazado por el último redline aprobado; muestra el último pendiente.
+-- Carga inicial: ZCM06 (CE1087 constructivo 04/11 + RL01 12/11, aprobación de BBA por confirmar).
+-- Revertir: drop view ctl_metrado_vigente; drop table ctl_redline_cambio; drop table ctl_metrado_plano;
