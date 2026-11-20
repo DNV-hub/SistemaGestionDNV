@@ -38,6 +38,7 @@ const cargandoSemana = ref(false)
 const fotoIdx = ref(-1)
 const fotoGrande = computed(() => (fotoIdx.value >= 0 ? fotos.value[fotoIdx.value] ?? null : null))
 const ocupado = ref('')
+const progFotos = ref('')
 
 const seguro = (p, def) => p.catch((e) => { console.warn(e); return def })
 const iso = (d) => d.toISOString().slice(0, 10)
@@ -211,7 +212,7 @@ async function expStandBy() {
 async function bajarFotos() {
   if (!semanaSel.value || !fotos.value.length) return
   ocupado.value = 'fo'
-  try { await descargarFotosZip(fotos.value, props.frente.nombre, semanaSel.value.clave) } catch (e) { console.error(e) } finally { ocupado.value = '' }
+  try { await descargarFotosZip(fotos.value, props.frente.nombre, semanaSel.value.clave, (n, t) => { progFotos.value = `${n} de ${t}` }) } catch (e) { console.error(e) } finally { ocupado.value = '' }
 }
 async function bajarUna(f) {
   const r = await fetch(f.url)
@@ -381,7 +382,7 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
             <div class="hdr">
               <div><h2>Fotos del frente</h2>
               <p class="sub">Semana {{ semana }} · {{ fotos.length }} foto(s) · clic para ver en grande</p></div>
-              <div class="acts"><button type="button" class="btn" :disabled="ocupado === 'fo' || !fotos.length" @click="bajarFotos">{{ ocupado === 'fo' ? 'Preparando…' : 'Descargar fotos de la semana' }}</button></div>
+              <div class="acts"><button type="button" class="btn" :disabled="ocupado === 'fo' || !fotos.length" @click="bajarFotos">{{ ocupado === 'fo' ? `Preparando ${progFotos}…` : 'Descargar fotos de la semana' }}</button></div>
             </div>
             <p v-if="cargandoSemana" class="mu">Cargando…</p>
             <p v-else-if="!fotos.length" class="mu">Sin fotos enviadas en la semana.</p>

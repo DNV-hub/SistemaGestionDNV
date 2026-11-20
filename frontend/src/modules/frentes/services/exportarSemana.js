@@ -101,20 +101,28 @@ export async function exportarFuerzaLaboral(frenteId, nombre, semana) {
 }
 
 /** Descarga las fotos de la semana en un solo .zip. */
-export async function descargarFotosZip(fotos, nombre, semanaClave) {
+export async function descargarFotosZip(fotos, nombre, semanaClave, progreso = () => {}) {
   const XLSX = await import('xlsx')
   const CFB = XLSX.CFB || XLSX.default?.CFB
+  // Descarga en paralelo (6 a la vez) y arma el zip sin comprimir (las fotos ya vienen comprimidas).
+  const datos = new Array(fotos.length)
+  let hechas = 0, sig = 0
+  async function trabajador() {
+    while (sig < fotos.length) {
+      const i = sig++
+      try { datos[i] = new Uint8Array(await (await fetch(fotos[i].url)).arrayBuffer()) } catch (e) { console.warn('foto', e) }
+      progreso(++hechas, fotos.length)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(6, fotos.length) }, trabajador))
   const z = CFB.utils.cfb_new()
   let k = 0
-  for (const f of fotos) {
-    try {
-      const r = await fetch(f.url)
-      const b = new Uint8Array(await r.arrayBuffer())
-      k++
-      const ext = (f.path?.split('.').pop() || 'jpg').toLowerCase()
-      CFB.utils.cfb_add(z, `/${nombre}_${f.fecha}_${String(k).padStart(2, '0')}.${ext}`, b)
-    } catch (e) { console.warn('foto', e) }
-  }
+  fotos.forEach((f, i) => {
+    if (!datos[i]) return
+    k++
+    const ext = (f.path?.split('.').pop() || 'jpg').toLowerCase()
+    CFB.utils.cfb_add(z, `/${nombre}_${f.fecha}_${String(k).padStart(2, '0')}.${ext}`, datos[i])
+  })
   CFB.utils.cfb_del(z, '/\u0001Sh33tJ5')
   const out = CFB.write(z, { fileType: 'zip', type: 'array' })
   const a = document.createElement('a')
