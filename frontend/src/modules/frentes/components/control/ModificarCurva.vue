@@ -122,7 +122,7 @@ function restablecer() { editados.value = {}; guardado.value = '' }
     </div>
     <div class="gr">
       <div class="tw">
-        <table>
+        <table data-sin-filtro>
           <thead><tr><th>EDT</th><th>Partida</th><th class="r">Metrado</th><th class="r">Ratio HH/und</th><th class="r">HH</th><th class="r">Peso</th><th class="r">Avance</th></tr></thead>
           <tbody>
             <tr v-for="p in filas" :key="p.edt">
@@ -141,7 +141,7 @@ function restablecer() { editados.value = {}; guardado.value = '' }
       <div class="side">
         <div class="box">
           <p class="cap">Desviación por corte · actual → simulada</p>
-          <table>
+          <table data-sin-filtro>
             <thead><tr><th>Corte</th><th class="r">Prog.</th><th class="r">Ejec.</th><th class="r">Actual</th><th class="r">Simulada</th></tr></thead>
             <tbody>
               <tr v-for="c in cortes" :key="c.w">

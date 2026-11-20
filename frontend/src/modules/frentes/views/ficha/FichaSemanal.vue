@@ -52,8 +52,9 @@ onMounted(async () => {
     seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], revs: [] }),
   ])
   curva.value = c; crono.value = cr
-  const ult = semanas.value[semanas.value.length - 1]
-  sel.value = ult?.clave || ''
+  // Abre en la semana del último avance aprobado (la que se informa), no en la que recién empieza.
+  const dato = semanas.value.find((x) => x.clave === semanaDe(fechaDato.value).clave)
+  sel.value = (dato || semanas.value[semanas.value.length - 1])?.clave || ''
   cargando.value = false
 })
 

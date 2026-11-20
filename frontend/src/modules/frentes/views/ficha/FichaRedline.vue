@@ -152,7 +152,7 @@ const subir = () => accion('up', () => subirRedline(props.frente.id, nuevo.value
                   </button>
                 </li>
                 <li v-if="rl.origen && rl.imagen_campo"><div class="it"><span class="lh"><b>Foto de campo</b><span class="pill in">Origen del {{ rl.codigo }}</span></span><span class="l2">{{ rl.origen }}</span></div></li>
-                <li v-if="datos.planoBase"><div class="it"><span class="lh"><b>REV0</b><span class="pill mu">Base</span></span><span class="l2">Constructivo {{ datos.planoBase }}</span><span class="l3">Emitido para construcción</span></div></li>
+                <li v-if="datos.planoBase"><div class="it"><span class="lh"><b>REV0</b><span class="pill mu">Base</span></span><span class="l2">{{ datos.planoBase }}</span><span class="l3">Emitido para construcción</span></div></li>
               </ul>
             </section>
             <section class="card grow">
@@ -206,7 +206,7 @@ const subir = () => accion('up', () => subirRedline(props.frente.id, nuevo.value
           <section class="card">
             <h2>Impacto en metrados y procura</h2>
             <p class="subt">Constructivo REV0 → {{ rl.codigo }}<template v-if="secsRl"> · suma de {{ secsRl }}</template></p>
-            <table class="t">
+            <table class="t" data-sin-filtro>
               <thead><tr><th>Material / ítem</th><th class="r">Constructivo</th><th class="r">{{ rl.codigo }}</th><th class="r">Cambio</th></tr></thead>
               <tbody>
                 <tr v-for="x in impacto" :key="x.mat + x.u">

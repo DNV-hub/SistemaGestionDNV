@@ -83,7 +83,7 @@ create policy ctl_redline_cambio_update on public.ctl_redline_cambio for update 
 -- Planeamiento recién cuando lo apruebes en la pestaña Redline.
 insert into public.ctl_redline (frente_id, codigo, titulo, fecha, origen, estado, firma_bba, imagen_campo, imagen_plano, puntos_alineacion)
 values ('289cf1e7-9c87-4a47-8407-966cfe4aee6a', 'RL01', 'Plano CE1087 · Redline 01 · Pasivo 1 y Pasivo 2', '2026-11-12',
-        'Foto de campo del 09/11 firmada por BBA el 07/11', 'en_revision', false,
+        'Foto de campo del 09/11 firmada por BBA', 'en_revision', false,
         '289cf1e7-9c87-4a47-8407-966cfe4aee6a/redline-rl01-campo-0911.jpg',
         '289cf1e7-9c87-4a47-8407-966cfe4aee6a/redline-rl01-plano-ce1087.jpg',
         'P1-P10, P1-P13, P2-P1 y P2-P9')

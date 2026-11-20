@@ -386,8 +386,9 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
             <p v-if="cargandoSemana" class="mu">Cargando…</p>
             <p v-else-if="!fotos.length" class="mu">Sin fotos enviadas en la semana.</p>
             <div v-else class="fotos">
-              <button v-for="(f, i) in fotos" :key="i" type="button" class="foto" @click="fotoIdx = i">
+              <button v-for="(f, i) in fotos.slice(0, 9)" :key="i" type="button" class="foto" @click="fotoIdx = i">
                 <img :src="f.url" :alt="f.etiqueta" loading="lazy" />
+                <span v-if="i === 8 && fotos.length > 9" class="mas">+{{ fotos.length - 9 }} más</span>
                 <span class="cap"><b>{{ fmtDia(f.fecha) }}</b>{{ f.etiqueta }}</span>
               </button>
             </div>
@@ -454,7 +455,7 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 @media (max-width: 1100px) { .g2.cm, .g2.rf { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .col > .card:last-child { flex: 1 1 auto; }
-.fotos { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; }
+.fotos { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
 .card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
 .card h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .sub { margin: 4px 0 12px; color: var(--p-muted); font-size: 12.5px; }
@@ -489,8 +490,9 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 .txt { flex: 1; font-size: 12.5px; }
 .warn { font-size: 12.5px; color: #fbbf24; }
 .fotos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.foto { border: 0; padding: 0; background: var(--p-chip); cursor: pointer; border-radius: 10px; overflow: hidden; text-align: left; color: inherit; }
+.foto { position: relative; border: 0; padding: 0; background: var(--p-chip); cursor: pointer; border-radius: 10px; overflow: hidden; text-align: left; color: inherit; }
 .foto img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.mas { position: absolute; inset: 0 0 auto 0; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 20px; font-weight: 800; }
 .cap { display: block; padding: 6px 8px; font-size: 11px; color: var(--p-muted); }
 .cap b { display: block; color: var(--p-text); font-size: 11.5px; }
 .barras { display: flex; gap: 8px; align-items: flex-end; height: 100px; }
