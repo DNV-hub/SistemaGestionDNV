@@ -1,26 +1,25 @@
 <script setup>
-// Resumen del frente · versión 5 (PRUEBA). Misma distribución que la
-// propuesta: indicadores, reproductor por día, sketch sobre el plano,
-// cronograma Rev00 vs ejecutado, curva S con cortes semanales, metrados
-// aprobados, restricciones y Stand By por día, fotos, rendimiento y
-// conciliación con Almacén. Solo lectura.
+// Resumen del frente · lienzo 6 (aprobado 20/11/2026). Indicadores,
+// reproductor por día, sketch sobre el plano, cronograma Rev00 vs ejecutado,
+// curva S (exportable a Excel con gráfico) junto a metrados aprobados,
+// restricciones y Stand By (solo causas ajenas a DESNIVEL, exportable),
+// fotos con visor y descarga, rendimiento y conciliación con Almacén.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../../../store/auth'
 import { listarReportes } from '../../../rdc/services/rdcService'
 import { listarAlertas } from '../../../alertas/services/alertasService'
 import {
   cargarSectores, cargarCurva, cargarFotos, cargarAvanceElementos, cargarSketch, cargarCronograma,
   cargarRdcRango, minutosStandBy, semanaDe, fechaCorta, num, horasTexto,
-  curvaEjecutada, guardarAjusteCurva, anularAjusteCurva,
+  curvaEjecutada, causaStandBy,
 } from '../../services/controlObraService'
+import { exportarStandBy, descargarFotosZip } from '../../services/exportarSemana'
 import SketchAvance from '../../components/control/SketchAvance.vue'
 import CronogramaGantt from '../../components/control/CronogramaGantt.vue'
 import CurvaSSemanal from '../../components/control/CurvaSSemanal.vue'
 import ConciliacionAlmacen from '../../../procura/components/ConciliacionAlmacen.vue'
 
 const props = defineProps({ frente: { type: Object, required: true } })
-const router = useRouter()
 const auth = useAuthStore()
 
 const cargando = ref(true)
@@ -29,14 +28,16 @@ const alertas = ref([])
 const sectores = ref([])
 const sector = ref('all')
 const curva = ref({ param: null, puntos: [] })
-const crono = ref({ partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, ajustes: [] })
+const crono = ref({ partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, revs: [] })
 const sketch = ref(null)
 const elementos = ref([])
 const semana = ref('')
 const rdcSemana = ref([])
 const fotos = ref([])
 const cargandoSemana = ref(false)
-const fotoGrande = ref(null)
+const fotoIdx = ref(-1)
+const fotoGrande = computed(() => (fotoIdx.value >= 0 ? fotos.value[fotoIdx.value] ?? null : null))
+const ocupado = ref('')
 
 const seguro = (p, def) => p.catch((e) => { console.warn(e); return def })
 const iso = (d) => d.toISOString().slice(0, 10)
@@ -50,7 +51,7 @@ onMounted(async () => {
     seguro(listarAlertas({ estado: 'activa', frenteId: id }), []),
     seguro(cargarSectores(id), []),
     seguro(cargarCurva(id), { param: null, puntos: [] }),
-    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, ajustes: [] }),
+    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], bandejaPendientes: 0, revs: [] }),
     seguro(cargarSketch(id), null),
     seguro(cargarAvanceElementos(id), []),
   ])
@@ -61,16 +62,10 @@ onMounted(async () => {
 })
 
 // ---------- curva: programado Rev00 + ejecutado APROBADO (bandeja) ----------
-const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.ajustes))
+// Programado = Rev00 (ajustado solo por revisiones de línea base aprobadas);
+// HH = ratio vigente × metrado del plano / redline aprobado; adicionales fuera.
+const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.revs))
 const puntos = computed(() => curvaEj.value.puntos)
-const puedeEditar = computed(() => auth.tienePermiso('procura.crear_version'))
-async function ajustar(a) {
-  try { await guardarAjusteCurva(props.frente.id, a.fecha, a.valor, a.motivo); crono.value = await cargarCronograma(props.frente.id) } catch (e) { console.error(e); alertaMsg.value = 'No se pudo guardar el ajuste.' }
-}
-async function anular(id) {
-  try { await anularAjusteCurva(id); crono.value = await cargarCronograma(props.frente.id) } catch (e) { console.error(e) }
-}
-const alertaMsg = ref('')
 
 // ---------- reproductor por día ----------
 const fechaDato = computed(() => curvaEj.value.ultima || curva.value.param?.fecha_dato || reportes.value[0]?.fecha || hoyIso)
@@ -108,7 +103,7 @@ watch(semanaSel, async (s) => {
   cargandoSemana.value = true
   const [r, f] = await Promise.all([
     seguro(cargarRdcRango(props.frente.id, s.desde, s.hasta), []),
-    seguro(cargarFotos(props.frente.id, s.desde, s.hasta, 9), []),
+    seguro(cargarFotos(props.frente.id, s.desde, s.hasta, 60), []),
   ])
   rdcSemana.value = r; fotos.value = f
   cargandoSemana.value = false
@@ -179,25 +174,62 @@ const metrados = computed(() => {
 const enSector = (f) => sector.value === 'all' || !f.sector_codigo || f.sector_codigo.split(',').includes(sector.value)
 const totalPendAprobar = computed(() => crono.value.porAprobar.length + (crono.value.bandejaPendientes || 0))
 
-// ---------- restricciones y Stand By ----------
-const CAUSA = (c) => {
-  const t = (c || '').toUpperCase()
-  if (t.includes('CLIMA')) return { t: 'Clima adverso', k: 'am' }
-  if (t.includes('CLIENTE')) return { t: 'Causa del cliente', k: 'ro' }
-  if (t.includes('CIERRE') || t.includes('VÍA') || t.includes('VIA')) return { t: 'Cierre de vías por encapsulados', k: 'az' }
-  return { t: c || 'Otro', k: 'gr' }
-}
+// ---------- restricciones y Stand By (criterio aprobado 20/11) ----------
+// Solo causas ajenas a DESNIVEL. "Otro" se muestra como "por revisar" y no
+// suma al total hasta que Planeamiento lo imputa. Repetidos se cuentan una vez.
+const TAGK = { cl: 'am', cc: 'ro', cv: 'az', ex: 'az', ot: 'gr' }
 const diasSb = computed(() => rdcSemana.value.map((r) => {
-  const ev = (r.rdc_reporte_standby ?? []).map((s) => ({ ...CAUSA(s.causa === 'OTRO' ? s.causa_otro : s.causa), min: minutosStandBy(s), desde: s.desde?.slice(0, 5), hasta: s.hasta?.slice(0, 5), actividad: s.actividad }))
-  return { fecha: r.fecha, ev, total: ev.reduce((a, e) => a + e.min, 0), redline: r.redline ? r.redline_descripcion || 'Redline reportado' : null }
-}).filter((d) => d.ev.length || d.redline))
+  const vistos = new Set()
+  const ev = []
+  for (const s of r.rdc_reporte_standby ?? []) {
+    const c = causaStandBy(s)
+    const min = minutosStandBy(s)
+    const clave = [c.k, (s.actividad || '').trim().toLowerCase(), s.desde || '', s.hasta || '', s.desde ? '' : min].join('|')
+    if (vistos.has(clave)) continue
+    vistos.add(clave)
+    ev.push({ t: c.t, k: TAGK[c.k], rev: c.k === 'ot', min, desde: s.desde?.slice(0, 5), hasta: s.hasta?.slice(0, 5), actividad: s.actividad })
+  }
+  const rs = [r.restriccion_descripcion, r.restricciones].filter(Boolean).join(' · ')
+  return { fecha: r.fecha, ev, total: ev.filter((e) => !e.rev).reduce((a, e) => a + e.min, 0), restr: rs || null, redline: r.redline ? r.redline_descripcion || 'Redline reportado' : null }
+}).filter((d) => d.ev.length || d.redline || d.restr))
 const sbTotal = computed(() => diasSb.value.reduce((a, d) => a + d.total, 0))
 const sbCausas = computed(() => {
   const m = new Map()
-  for (const d of diasSb.value) for (const e of d.ev) m.set(e.t, (m.get(e.t) || 0) + e.min)
+  for (const d of diasSb.value) for (const e of d.ev) if (!e.rev) m.set(e.t, (m.get(e.t) || 0) + e.min)
   return [...m.entries()].map(([t, min]) => ({ t, min })).sort((a, b) => b.min - a.min)
 })
 const sinHora = computed(() => diasSb.value.reduce((a, d) => a + d.ev.filter((e) => !e.min).length, 0))
+const porRevisar = computed(() => diasSb.value.reduce((a, d) => a + d.ev.filter((e) => e.rev).length, 0))
+const INC_SB = ['Hoja Stand By (informe): N°, frente, fecha, actividad afectada, causa, horario, total hh:mm, personal afectado y HH stand-by, con total', 'Hoja Resumen por causa: eventos, horas y HH por cliente, clima y terceros', 'Hoja Por día: eventos y horas de cada día de la semana', 'Hoja Restricciones escritas: lo que el supervisor anotó en el RDC', 'Hoja Por revisar: eventos "Otro" que Planeamiento debe imputar antes del informe']
+async function expStandBy() {
+  if (!semanaSel.value) return
+  ocupado.value = 'sb'
+  try { await exportarStandBy(props.frente.id, props.frente.nombre, semanaSel.value) } catch (e) { console.error(e) } finally { ocupado.value = '' }
+}
+
+// ---------- fotos: visor y descarga ----------
+async function bajarFotos() {
+  if (!semanaSel.value || !fotos.value.length) return
+  ocupado.value = 'fo'
+  try { await descargarFotosZip(fotos.value, props.frente.nombre, semanaSel.value.clave) } catch (e) { console.error(e) } finally { ocupado.value = '' }
+}
+async function bajarUna(f) {
+  const r = await fetch(f.url)
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(await r.blob())
+  a.download = `${props.frente.nombre}_${f.fecha}_${fotoIdx.value + 1}.${(f.path?.split('.').pop() || 'jpg')}`.replace(/\s+/g, '_')
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
+const pasoFoto = (n) => { const t = fotos.value.length; if (t) fotoIdx.value = (fotoIdx.value + n + t) % t }
+function teclaVisor(e) {
+  if (fotoIdx.value < 0) return
+  if (e.key === 'Escape') fotoIdx.value = -1
+  else if (e.key === 'ArrowRight') pasoFoto(1)
+  else if (e.key === 'ArrowLeft') pasoFoto(-1)
+}
+onMounted(() => window.addEventListener('keydown', teclaVisor))
+onBeforeUnmount(() => window.removeEventListener('keydown', teclaVisor))
 
 // ---------- rendimiento ----------
 const rend = computed(() => {
@@ -291,15 +323,13 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
             v-model:semana="semana"
             :puntos="puntos" :param="curva.param" :dia="dia"
             :partidas="crono.partidas" :avance="crono.avance" :nombre-frente="frente.nombre"
-            :ajustes="crono.ajustes" :puede-editar="puedeEditar" fuente-ejecutado="aprobado en bandeja / Control diario"
-            @ajustar="ajustar" @anular="anular"
-            @ver-semanal="router.push({ name: 'ficha-frente', params: { id: frente.id, tab: 'semanal' } })"
+            :partidas-vig="curvaEj.partidasVig" :revs="crono.revs" fuente-ejecutado="aprobado en bandeja / Control diario"
           />
-          <section class="card">
+          <section class="card metc">
             <h2>Metrados de avance aprobados</h2>
             <p class="sub">Al {{ fmtDia(dia) }} · vigente plano {{ sketch?.plano?.split(' ').pop() || '—' }}</p>
             <p v-if="!metrados.length" class="mu">Sin línea base por partida.</p>
-            <div v-else class="met">
+            <div v-else class="met scr">
               <div class="th"><span>EDT</span><span>Partida</span><span class="r">Aprobado</span><span class="r">%</span></div>
               <template v-for="g in metrados" :key="g.nombre">
                 <div class="tr grp"><span>{{ g.edt }}</span><span :title="g.nombre">{{ g.nombre }}</span><span></span><span class="r">{{ g.pct.toFixed(0) }}</span></div>
@@ -316,8 +346,14 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
       <div class="g2 rf">
         <div class="col">
           <section class="card">
-            <h2>Restricciones y Stand By</h2>
-            <p class="sub">Semana {{ semana }} · tabla de Stand By del RDC · se cambia desde la curva S</p>
+            <div class="hdr">
+              <div><h2>Restricciones y Stand By</h2>
+              <p class="sub">Semana {{ semana }} · solo causas ajenas a DESNIVEL · se cambia desde la curva S</p></div>
+              <div class="acts">
+                <button type="button" class="btn" :disabled="ocupado === 'sb' || !semanaSel" @click="expStandBy">{{ ocupado === 'sb' ? 'Exportando…' : 'Exportar a Excel' }}</button>
+                <span class="pop" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INC_SB" :key="t">{{ t }}</li></ul></span></span>
+              </div>
+            </div>
             <p v-if="cargandoSemana" class="mu">Cargando…</p>
             <template v-else>
               <div class="tiles">
@@ -328,23 +364,29 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
               <div v-for="d in diasSb" :key="d.fecha" class="dsb">
                 <div class="dh"><b>{{ fechaCorta(d.fecha) }}</b><span v-if="d.total" class="amb">Stand By {{ horasTexto(d.total) }}</span></div>
                 <div v-for="(e, i) in d.ev" :key="i" class="ev">
-                  <span class="tag" :class="e.k" :title="e.actividad">{{ e.t }}</span>
+                  <span class="tag" :class="e.k">{{ e.t }}<template v-if="e.rev"> · por revisar</template></span>
+                  <span class="txt act">{{ e.actividad || '' }}</span>
                   <span class="amb">{{ e.desde && e.hasta ? `${e.desde}–${e.hasta} · ` : '' }}{{ e.min ? horasTexto(e.min) : 'sin hora' }}</span>
                 </div>
+                <div v-if="d.restr" class="ev"><span class="tag gr">Restricción</span><span class="txt">{{ d.restr }}</span></div>
                 <div v-if="d.redline" class="ev"><span class="tag rl">Redline</span><span class="txt">{{ d.redline }}</span></div>
               </div>
+              <p v-if="porRevisar" class="warn">⚠ {{ porRevisar }} evento(s) "Otro" por revisar: no suman al Stand By hasta que Planeamiento los impute.</p>
               <p v-if="sinHora" class="warn">⚠ {{ sinHora }} registro(s) sin hora: pedir al supervisor que los complete (R-09).</p>
             </template>
           </section>
         </div>
         <div class="col">
           <section class="card">
-            <h2>Fotos del frente</h2>
-            <p class="sub">Semana {{ semana }} · se cambia desde la curva S</p>
+            <div class="hdr">
+              <div><h2>Fotos del frente</h2>
+              <p class="sub">Semana {{ semana }} · {{ fotos.length }} foto(s) · clic para ver en grande</p></div>
+              <div class="acts"><button type="button" class="btn" :disabled="ocupado === 'fo' || !fotos.length" @click="bajarFotos">{{ ocupado === 'fo' ? 'Preparando…' : 'Descargar fotos de la semana' }}</button></div>
+            </div>
             <p v-if="cargandoSemana" class="mu">Cargando…</p>
             <p v-else-if="!fotos.length" class="mu">Sin fotos enviadas en la semana.</p>
             <div v-else class="fotos">
-              <button v-for="(f, i) in fotos" :key="i" type="button" class="foto" @click="fotoGrande = f">
+              <button v-for="(f, i) in fotos" :key="i" type="button" class="foto" @click="fotoIdx = i">
                 <img :src="f.url" :alt="f.etiqueta" loading="lazy" />
                 <span class="cap"><b>{{ fmtDia(f.fecha) }}</b>{{ f.etiqueta }}</span>
               </button>
@@ -374,9 +416,16 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
       <ConciliacionAlmacen v-if="verConciliacion" :frente-id="frente.id" :nombre-frente="frente.nombre" />
     </template>
 
-    <div v-if="fotoGrande" class="modal" role="dialog" aria-modal="true" @click="fotoGrande = null">
+    <div v-if="fotoGrande" class="modal" role="dialog" aria-modal="true" aria-label="Foto del frente" @click.self="fotoIdx = -1">
+      <button type="button" class="vx" aria-label="Cerrar" @click="fotoIdx = -1">✕</button>
+      <button v-if="fotos.length > 1" type="button" class="vn prev" aria-label="Anterior" @click="pasoFoto(-1)">‹</button>
       <img :src="fotoGrande.url" :alt="fotoGrande.etiqueta" />
-      <p>{{ fmtDia(fotoGrande.fecha) }} · {{ fotoGrande.etiqueta }}</p>
+      <button v-if="fotos.length > 1" type="button" class="vn next" aria-label="Siguiente" @click="pasoFoto(1)">›</button>
+      <div class="vbar">
+        <span><b>{{ fmtDia(fotoGrande.fecha) }}</b> · {{ fotoGrande.etiqueta }}</span>
+        <span class="mu">{{ fotoIdx + 1 }} de {{ fotos.length }}</span>
+        <button type="button" class="btn" @click="bajarUna(fotoGrande)">Descargar</button>
+      </div>
     </div>
   </div>
 </template>
@@ -448,9 +497,26 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 .bcol { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; font-size: 11px; }
 .bcol i { width: 100%; background: #f59e0b; border-radius: 3px 3px 0 0; display: block; }
 .bcol small { color: var(--p-muted); font-size: 10.5px; }
-.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 24px; cursor: zoom-out; }
-.modal img { max-width: 100%; max-height: 85vh; border-radius: 12px; }
-.modal p { color: #fff; margin-top: 10px; }
+.modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 24px 80px; }
+.modal img { max-width: 100%; max-height: 78vh; border-radius: 12px; }
+.vx { position: absolute; top: 18px; right: 22px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #4b5563; background: #1b1e22; color: #fff; font-size: 20px; cursor: pointer; }
+.vn { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 64px; border-radius: 10px; border: 1px solid #4b5563; background: rgba(27, 30, 34, 0.85); color: #fff; font-size: 34px; cursor: pointer; }
+.vn.prev { left: 18px; } .vn.next { right: 18px; }
+.vbar { display: flex; gap: 16px; align-items: center; margin-top: 12px; color: #fff; font-size: 13.5px; }
+.hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.acts { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.btn { min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #f5a800; background: transparent; color: #f5a800; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.act { color: var(--p-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pop { position: relative; display: inline-flex; cursor: pointer; outline: none; }
+.pop .ico { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid #6b7280; color: #9ca3af; font-size: 11px; font-weight: 800; }
+.pop .pb { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 320px; background: #1b1e22; border: 1px solid #3a3f47; border-radius: 10px; padding: 10px 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); font-size: 12px; line-height: 1.45; color: #e5e7eb; }
+.pop .pb ul { margin: 4px 0 0; padding-left: 18px; }
+.pop:hover .pb, .pop:focus .pb { display: block; }
+.metc { display: flex; flex-direction: column; min-height: 0; }
+.met.scr { flex: 1 1 0; overflow: auto; min-height: 0; }
+/* la altura la marca la curva S; los metrados hacen scroll dentro */
+@media (min-width: 1101px) { .g2.cm > .metc { contain: size; } }
 </style>
 <style scoped>
 @media (min-width: 1101px) {

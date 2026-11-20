@@ -1,16 +1,36 @@
 <script setup>
-// PRUEBA · Plan semanal del lienzo 5.1c. Semana jueves a miércoles; todo lo
-// que se ve (curva S, Stand By, metrados y fuerza laboral) es de la semana
-// elegida. Solo lectura: avance aprobado (bandeja / Control diario) y RDC
-// finalizados.
+// Plan semanal · lienzo 6 (aprobado 20/11/2026). Semana jueves a miércoles;
+// todo lo que se ve (curva S, Stand By, metrados y fuerza laboral) es de la
+// semana elegida. Avance aprobado (bandeja / Control diario) y RDC finalizados.
+// Planeamiento puede "Modificar curva" (ratios HH/und → revisión de línea base)
+// y exportar la semana, la curva S, el Stand By y la fuerza laboral.
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../../../store/auth'
 import {
   cargarCurva, cargarCronograma, curvaEjecutada, cargarSemanaRdc, causaStandBy,
   minutosStandBy, semanaDe, fechaCorta, num,
 } from '../../services/controlObraService'
-import { descargarExcel } from '../../../../utils/exportarExcel'
+import { exportarCurvaS } from '../../services/exportarCurvaS'
+import { eventosStandBy, exportarStandBy, exportarFuerzaLaboral } from '../../services/exportarSemana'
+import ModificarCurva from '../../components/control/ModificarCurva.vue'
 
 const props = defineProps({ frente: { type: Object, required: true } })
+const auth = useAuthStore()
+const hayInforme = useRouter().hasRoute('planeamiento-informe')
+const esPlaneamiento = computed(() => ['Planeamiento', 'Developer', 'Administrador'].includes(auth.nombreRol))
+const puedeGuardarCurva = computed(() => auth.tienePermiso('procura.crear_version'))
+const mcOn = ref(false)
+const ocupado = ref('')
+async function recargarCrono() { crono.value = await seguro(cargarCronograma(props.frente.id), crono.value) }
+const INC_SEM = ['Hojas de la curva S: gráfico, datos diarios, partidas con ratios y HH, cortes y ajustes', 'Metrados aprobados por partida en la semana', 'Stand By por evento (formato del informe) y por causa', 'Fuerza laboral por día', 'Una hoja Resumen con los indicadores de la semana']
+const INC_CURVA = ['Hoja Curva S: gráfico de Excel (programado, ejecutado y banda) listo para pegar en el informe', 'Hoja Datos diarios: fecha, semana, programado %, ejecutado %, desviación, banda y estado', 'Hoja Partidas: EDT, partida, unidad, metrado, ratio HH/und, HH, peso %, acumulado aprobado, % avance y HH ganadas', 'Hoja Cortes semanales: corte de cada miércoles con desviación y criterio aplicado', 'Hoja Ajustes: revisiones de la línea base con motivo, fecha y usuario']
+const INC_SB = ['Tabla en el formato del informe: N°, frente, fecha, actividad afectada, causa, horario, total hh:mm', 'Personal afectado y HH de Stand By por evento', 'Resumen por causa y por día, con total de la semana', 'Restricciones escritas en el RDC y eventos "Otro" por revisar']
+const INC_FL = ['Tabla por día con el formato del informe (Tabla 10): mano de obra directa, operadores/conductores y staff', 'Cuadrilla por frente (Tabla 11)', 'Nota de fuente y criterio de conductores']
+async function conOcupado(k, fn) { ocupado.value = k; try { await fn() } catch (e) { console.error(e) } finally { ocupado.value = '' } }
+const expCurva = () => conOcupado('cv', () => exportarCurvaS({ frente: props.frente.nombre, puntos: puntos.value, partidasVig: curvaEj.value.partidasVig, revs: crono.value.revs, param: curva.value.param, fechaDato: fechaDato.value }))
+const expSb = () => semana.value && conOcupado('sb', () => exportarStandBy(props.frente.id, props.frente.nombre, semana.value))
+const expFl = () => semana.value && conOcupado('fl', () => exportarFuerzaLaboral(props.frente.id, props.frente.nombre, semana.value))
 
 const iso = (d) => d.toISOString().slice(0, 10)
 const addD = (s, n) => { const d = new Date(`${s}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return iso(d) }
@@ -19,7 +39,7 @@ const seguro = (p, def) => p.catch((e) => { console.warn(e); return def })
 
 const cargando = ref(true)
 const curva = ref({ param: null, puntos: [] })
-const crono = ref({ partidas: [], avance: [], porAprobar: [], ajustes: [] })
+const crono = ref({ partidas: [], avance: [], porAprobar: [], revs: [] })
 const sel = ref('')
 const rdc = ref([])
 const cargandoSem = ref(false)
@@ -29,7 +49,7 @@ onMounted(async () => {
   const id = props.frente.id
   const [c, cr] = await Promise.all([
     seguro(cargarCurva(id), { param: null, puntos: [] }),
-    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], ajustes: [] }),
+    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], revs: [] }),
   ])
   curva.value = c; crono.value = cr
   const ult = semanas.value[semanas.value.length - 1]
@@ -37,7 +57,7 @@ onMounted(async () => {
   cargando.value = false
 })
 
-const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.ajustes))
+const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.revs))
 const puntos = computed(() => curvaEj.value.puntos)
 const fechaDato = computed(() => curvaEj.value.ultima || hoy)
 const inicio = computed(() => props.frente.fecha_inicio || curva.value.puntos[0]?.fecha || hoy)
@@ -94,31 +114,40 @@ const metSemana = computed(() => {
 })
 const diasConMetrado = computed(() => new Set(metSemana.value.flatMap((m) => [...m.dias])))
 
-// ---------- Stand By ----------
+// ---------- Stand By (criterio aprobado 20/11) ----------
+// Solo causas ajenas a DESNIVEL; repetidos (frente, fecha, causa, actividad y
+// horario) se cuentan una vez; "Otro" queda por revisar y no suma.
 const eventos = computed(() => {
   const out = []
   for (const r of rdc.value) {
+    const vistos = new Set()
     for (const s of [...(r.rdc_reporte_standby ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))) {
       const c = causaStandBy(s)
       let act = s.actividad, obs = null
       if (!act && s.responsable && s.responsable.length > 12) { act = s.responsable; obs = 'La actividad está escrita en el campo "responsable" del RDC' }
       if (!act) obs = 'El RDC no indica la actividad afectada'
-      out.push({ fecha: r.fecha, act, obs, nota: s.comentario, c, desde: s.desde?.slice(0, 5), hasta: s.hasta?.slice(0, 5), min: minutosStandBy(s) })
+      const min = minutosStandBy(s)
+      const clave = [c.k, (act || '').trim().toLowerCase(), s.desde || '', s.hasta || '', s.desde ? '' : min].join('|')
+      if (vistos.has(clave)) continue
+      vistos.add(clave)
+      if (c.k === 'ot') obs = 'Causa "Otro": no entra al informe hasta que Planeamiento la impute'
+      out.push({ fecha: r.fecha, act, obs, nota: s.comentario, c, rev: c.k === 'ot', desde: s.desde?.slice(0, 5), hasta: s.hasta?.slice(0, 5), min })
     }
   }
   return out
 })
-const sbTot = computed(() => eventos.value.reduce((a, e) => a + e.min, 0))
+const evInforme = computed(() => eventos.value.filter((e) => !e.rev))
+const sbTot = computed(() => evInforme.value.reduce((a, e) => a + e.min, 0))
 const CAUS = [
   { k: 'cv', c: '#60a5fa' }, { k: 'cc', c: '#f87171' }, { k: 'cl', c: '#fbbf24' }, { k: 'ex', c: '#c084fc' }, { k: 'ot', c: '#9ca3af' },
 ]
 const porCausa = computed(() => CAUS.map((x) => {
-  const ev = eventos.value.filter((e) => e.c.k === x.k)
+  const ev = evInforme.value.filter((e) => e.c.k === x.k)
   return { ...x, t: ev[0]?.c.t, r: ev[0]?.c.r, min: ev.reduce((a, e) => a + e.min, 0) }
 }).filter((x) => x.min > 0))
 const actividades = computed(() => {
   const m = new Map()
-  for (const e of eventos.value) {
+  for (const e of evInforme.value) {
     const t = (e.act || '').toLowerCase()
     const k = t.includes('erfora') ? 'Perforación e inyección' : t.includes('malla') ? 'Instalación de malla' : t.includes('cable') ? 'Tensado de cable' : t.includes('eplanteo') ? 'Replanteo de puntos' : e.act ? e.act : 'Sin actividad en el RDC'
     m.set(k, (m.get(k) || 0) + e.min)
@@ -202,8 +231,13 @@ const cs = computed(() => {
 async function exportar() {
   const s = semana.value
   if (!s) return
+  ocupado.value = 'sem'
+  try { await exportarSemanaXlsx(s) } catch (e) { console.error(e) } finally { ocupado.value = '' }
+}
+async function exportarSemanaXlsx(s) {
   const nom = props.frente.nombre
-  await descargarExcel(`Plan_semanal_${nom}_${s.clave}_${s.desde}_${s.hasta}.xlsx`.replace(/\s+/g, '_'), [
+  const sb = eventosStandBy(rdc.value, nom).informe
+  await exportarCurvaS({ frente: nom, puntos: puntos.value, partidasVig: curvaEj.value.partidasVig, revs: crono.value.revs, param: curva.value.param, fechaDato: fechaDato.value, nombreArchivo: `Plan_semanal_${nom}_${s.clave}_${s.desde}_${s.hasta}.xlsx`, extra: [
     { nombre: 'Resumen', anchos: [34, 18], filas: [
       { Concepto: 'Frente', Valor: nom },
       { Concepto: 'Semana', Valor: `${s.clave} (${fechaCorta(s.desde)} al ${fechaCorta(s.hasta)})` },
@@ -216,7 +250,7 @@ async function exportar() {
       { Concepto: 'HH de la semana', Valor: hhSemana.value },
     ] },
     { nombre: 'Metrados', anchos: [8, 46, 8, 12, 12, 12, 10], filas: metSemana.value.map((m) => ({ EDT: m.edt, Partida: m.nombre, 'U.M.': m.unidad, Semana: +m.sem.toFixed(2), Acumulado: +m.acum.toFixed(2), Vigente: +m.q.toFixed(2), 'Avance %': +m.pct.toFixed(1) })) },
-    { nombre: 'Stand By', anchos: [5, 12, 52, 30, 30, 14, 10], filas: eventos.value.map((e, i) => ({ 'N°': i + 1, Fecha: e.fecha, 'Actividad afectada': e.act || 'Sin actividad en el RDC', Causa: e.c.t, Responsable: e.c.r, Horario: e.desde ? `${e.desde}-${e.hasta}` : 'total', 'Total hh:mm': hhmm(e.min) })) },
+    { nombre: 'Stand By', anchos: [5, 12, 12, 52, 30, 18, 12, 10, 12], filas: sb.map((e, i) => ({ 'N°': i + 1, Frente: e.frente, Fecha: `${e.fecha.slice(8, 10)}/${e.fecha.slice(5, 7)}/${e.fecha.slice(0, 4)}`, 'Actividad afectada': e.act, Causa: e.causa, Horario: e.horario, 'Total hh:mm': hhmm(e.min), 'Personal afectado': e.personal, 'HH stand-by': e.hh })) },
     { nombre: 'Fuerza laboral', anchos: [32, 9, 9, 9, 9, 9, 9, 9], filas: [
       ...catsMod.value.map((c) => filaFL(PLURAL[c] || c, (d) => porDia.value.get(d)?.mod[c] ?? 0)),
       filaFL('Total mano de obra directa', tMod),
@@ -225,8 +259,7 @@ async function exportar() {
       filaFL('Supervisor de campo', tSup),
       filaFL('Total en el frente', tTot),
     ] },
-    { nombre: 'Curva S', anchos: [12, 14, 14], filas: puntos.value.map((p) => ({ Fecha: p.fecha, 'Programado %': Number(p.programado_pct), 'Ejecutado %': p.ejecutado_pct != null ? Number(p.ejecutado_pct) : '' })) },
-  ])
+  ] })
 }
 function filaFL(t, f) {
   const o = { 'Cargo / categoría': t }
@@ -245,10 +278,18 @@ function filaFL(t, f) {
             {{ s.clave }} · {{ s.desde.slice(8, 10) }}.{{ s.desde.slice(5, 7) }}–{{ s.hasta.slice(8, 10) }}.{{ s.hasta.slice(5, 7) }}
           </button>
         </div>
-        <button type="button" class="gh" :disabled="!semana || cargandoSem" @click="exportar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M9 13l6 6M15 13l-6 6" /></svg>
-          Exportar semana a Excel
-        </button>
+        <div class="acts">
+          <button type="button" class="gh" :disabled="!semana || cargandoSem || ocupado === 'sem'" @click="exportar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M9 13l6 6M15 13l-6 6" /></svg>
+            {{ ocupado === 'sem' ? 'Exportando…' : 'Exportar semana a Excel' }}
+          </button>
+          <span class="pop pr" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INC_SEM" :key="t">{{ t }}</li></ul></span></span>
+          <router-link v-if="esPlaneamiento && hayInforme" class="pri" :to="{ name: 'planeamiento-informe', query: { semana: sel } }">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
+            Exportar informe de plan semanal
+          </router-link>
+          <button v-else-if="esPlaneamiento" type="button" class="pri" disabled title="Se habilita con la página Planeamiento › Informe semanal">Exportar informe de plan semanal</button>
+        </div>
       </div>
 
       <div class="kpis">
@@ -262,8 +303,18 @@ function filaFL(t, f) {
 
       <div class="g2 a">
         <section class="card">
-          <h2>Curva S · {{ sel }}</h2>
-          <p class="sub">Avance ponderado por HH · semana {{ fechaCorta(semana?.desde) }} – {{ fechaCorta(semana?.hasta) }} resaltada</p>
+          <div class="hdr">
+            <div><h2>Curva S · {{ sel }}</h2>
+            <p class="sub">Avance ponderado por HH · semana {{ fechaCorta(semana?.desde) }} – {{ fechaCorta(semana?.hasta) }} resaltada</p></div>
+            <div class="acts">
+              <button v-if="esPlaneamiento" type="button" class="mcb" :aria-pressed="mcOn" @click="mcOn = true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+                Modificar curva
+              </button>
+              <button type="button" class="gh" :disabled="ocupado === 'cv' || !puntos.length" @click="expCurva">{{ ocupado === 'cv' ? 'Exportando…' : 'Exportar curva S' }}</button>
+              <span class="pop pr" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INC_CURVA" :key="t">{{ t }}</li></ul></span></span>
+            </div>
+          </div>
           <div class="leg">
             <span><i style="background: #cbd5e1; height: 3px"></i>Programado Rev00</span>
             <span><i style="background: #f59e0b; height: 3px"></i>Ejecutado aprobado</span>
@@ -297,10 +348,10 @@ function filaFL(t, f) {
           <h2>Stand By · {{ sel }}</h2>
           <p class="sub">Resumen por causa · RDC finalizados</p>
           <p v-if="cargandoSem" class="mu">Cargando…</p>
-          <template v-else-if="eventos.length">
+          <template v-else-if="evInforme.length">
             <div class="tiles">
               <div class="tile am"><span>Stand By total</span><b>{{ hhmm(sbTot) }} h</b></div>
-              <div class="tile"><span>Eventos · días</span><b>{{ eventos.length }} · {{ new Set(eventos.map((e) => e.fecha)).size }}</b></div>
+              <div class="tile"><span>Eventos · días</span><b>{{ evInforme.length }} · {{ new Set(evInforme.map((e) => e.fecha)).size }}</b></div>
             </div>
             <div v-for="c in porCausa" :key="c.k" class="cau">
               <div class="ch"><span><span class="tag" :class="c.k">{{ c.t }}</span> <span class="mu">{{ c.r }}</span></span><b>{{ hhmm(c.min) }} h</b></div>
@@ -313,6 +364,13 @@ function filaFL(t, f) {
           <p class="ok">Solo causas ajenas a DESNIVEL: clima, cliente y terceros.<template v-if="hayOtro"> Hay eventos "Otro": revisar que no sean imputables al contratista.</template><template v-else> Ningún evento imputable al contratista.</template></p>
         </section>
       </div>
+
+      <ModificarCurva
+        v-if="mcOn && esPlaneamiento"
+        :frente-id="frente.id" :puntos="curva.puntos" :partidas="crono.partidas" :avance="crono.avance"
+        :revs="crono.revs" :param="curva.param" :puede-guardar="puedeGuardarCurva"
+        @cerrar="mcOn = false" @guardado="recargarCrono"
+      />
 
       <section class="card">
         <h2>Metrados de la {{ sel }} por partida</h2>
@@ -333,8 +391,14 @@ function filaFL(t, f) {
       </section>
 
       <section class="card">
-        <h2>Detalle de Stand By · {{ sel }}</h2>
-        <p class="sub">Actividad afectada, causa y tiempo · hh:mm</p>
+        <div class="hdr">
+          <div><h2>Detalle de Stand By · {{ sel }}</h2>
+          <p class="sub">Actividad afectada, causa y tiempo · hh:mm · solo causas ajenas a DESNIVEL</p></div>
+          <div class="acts">
+            <button type="button" class="gh" :disabled="ocupado === 'sb' || !semana" @click="expSb">{{ ocupado === 'sb' ? 'Exportando…' : 'Exportar a Excel' }}</button>
+            <span class="pop pr" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INC_SB" :key="t">{{ t }}</li></ul></span></span>
+          </div>
+        </div>
         <table v-if="eventos.length" class="t" data-sin-filtro>
           <thead><tr><th>N°</th><th>Fecha</th><th>Actividad afectada</th><th>Causa</th><th>Horario</th><th class="r">Total hh:mm</th></tr></thead>
           <tbody>
@@ -345,19 +409,25 @@ function filaFL(t, f) {
                 <span :class="{ am: !e.act }">{{ e.act || 'Sin actividad en el RDC' }}</span>
                 <span v-if="e.obs || e.nota" class="pop" tabindex="0" :aria-label="e.obs || e.nota"><span class="ico" :class="{ warn: e.obs }">{{ e.obs ? '!' : 'i' }}</span><span class="pb">{{ e.obs || e.nota }}</span></span>
               </td>
-              <td><span class="tag" :class="e.c.k">{{ e.c.t }}</span></td>
+              <td><span class="tag" :class="e.c.k">{{ e.c.t }}<template v-if="e.rev"> · por revisar</template></span></td>
               <td class="mu nw">{{ e.desde ? `${e.desde}–${e.hasta}` : 'sin hora (total)' }}</td>
-              <td class="r am b">{{ hhmm(e.min) }}</td>
+              <td class="r b" :class="e.rev ? 'mu' : 'am'">{{ hhmm(e.min) }}</td>
             </tr>
           </tbody>
-          <tfoot><tr><td colspan="5" class="b">Total {{ sel }} · {{ eventos.length }} eventos</td><td class="r am b">{{ hhmm(sbTot) }} h</td></tr></tfoot>
+          <tfoot><tr><td colspan="5" class="b">Total {{ sel }} · {{ evInforme.length }} eventos<template v-if="eventos.length > evInforme.length"> · {{ eventos.length - evInforme.length }} por revisar (no suman)</template></td><td class="r am b">{{ hhmm(sbTot) }} h</td></tr></tfoot>
         </table>
         <p v-else class="mu">Sin eventos en la semana.</p>
       </section>
 
       <section class="card">
-        <h2>Fuerza laboral · {{ sel }}</h2>
-        <p class="sub">Mano de obra directa, operadores y supervisión según RDC · jornada de 9 h</p>
+        <div class="hdr">
+          <div><h2>Fuerza laboral · {{ sel }}</h2>
+          <p class="sub">Mano de obra directa, operadores y supervisión según RDC · jornada de 9 h</p></div>
+          <div class="acts">
+            <button type="button" class="gh" :disabled="ocupado === 'fl' || !semana" @click="expFl">{{ ocupado === 'fl' ? 'Exportando…' : 'Exportar a Excel' }}</button>
+            <span class="pop pr" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INC_FL" :key="t">{{ t }}</li></ul></span></span>
+          </div>
+        </div>
         <div class="g2 f">
           <div>
             <div class="leg">
@@ -482,4 +552,14 @@ function filaFL(t, f) {
 .ico.warn { border-color: #f59e0b; color: #fbbf24; }
 .pb { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: max-content; max-width: 340px; background: #1b1e22; border: 1px solid #3a3f47; border-radius: 10px; padding: 8px 10px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); font-size: 12px; line-height: 1.45; color: #e5e7eb; white-space: normal; }
 .pop:hover .pb, .pop:focus .pb { display: block; }
+.pop.pr { margin-left: 0; vertical-align: middle; }
+.pop.pr .ico { width: 18px; height: 18px; font-size: 11px; }
+.pop.pr .pb { left: auto; right: 0; width: 320px; }
+.pb ul { margin: 4px 0 0; padding-left: 18px; }
+.acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hdr { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.hdr .sub { margin-bottom: 8px; }
+.pri:disabled { opacity: 0.55; cursor: default; border: 0; font: inherit; }
+.pri { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 10px; background: #f5a800; color: #0d0f10; font-weight: 700; font-size: 14px; text-decoration: none; }
+.mcb { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid #f5a800; background: rgba(245, 168, 0, 0.12); color: #f5b93a; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer; }
 </style>

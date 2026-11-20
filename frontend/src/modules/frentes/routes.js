@@ -18,7 +18,7 @@ export const frentesRoutes = [
     redirect: (to) => ({ path: `/frentes/${to.params.id}/semanal`, query: to.query }),
   },
   {
-    path: '/frentes/:id/:tab(resumen|procura|control|semanal|reportes|configuracion)?',
+    path: '/frentes/:id/:tab(resumen|procura|control|redline|semanal|reportes|configuracion)?',
     name: 'ficha-frente',
     component: () => import('./views/FichaFrenteView.vue'),
     props: true,

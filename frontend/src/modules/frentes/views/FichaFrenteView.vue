@@ -7,6 +7,7 @@ import FichaResumen from './ficha/FichaResumen.vue'
 import FichaProcura from './ficha/FichaProcura.vue'
 import FichaControlSostenimiento from './ficha/FichaControlSostenimiento.vue'
 import FichaSemanal from './ficha/FichaSemanal.vue'
+import FichaRedline from './ficha/FichaRedline.vue'
 import FichaReportes from './ficha/FichaReportes.vue'
 import FichaConfiguracion from './ficha/FichaConfiguracion.vue'
 import '../../../styles/planeamiento-ui.css'
@@ -41,18 +42,29 @@ async function cargar() {
 }
 watch(() => props.id, cargar, { immediate: true })
 
+// Lienzo 6: orden y pestañas por rol. Planeamiento ve y hace todo; Gerencia
+// (Consulta) y Coordinador solo Resumen y Procura; Residencia sigue la obra;
+// Calidad ve el control de sostenimiento. Procura además exige procura.ver.
 const TODAS_LAS_PESTANAS = [
   { clave: 'resumen', etiqueta: 'Resumen' },
   { clave: 'procura', etiqueta: 'Procura', permiso: 'procura.ver' },
   { clave: 'control', etiqueta: 'Control de sostenimiento' },
-  { clave: 'semanal', etiqueta: 'Semanal', nuevo: true },
+  { clave: 'redline', etiqueta: 'Redline' },
+  { clave: 'semanal', etiqueta: 'Semanal' },
   { clave: 'reportes', etiqueta: 'Reportes' },
   { clave: 'configuracion', etiqueta: 'Configuración' },
 ]
-// Procura es la única pestaña con permiso propio distinto de frentes.ver
-// (el que ya exige la ruta completa) — quien ve la ficha pero no tiene
-// procura.ver no debería ver esta pestaña ni poder forzarla por URL.
-const PESTANAS = computed(() => TODAS_LAS_PESTANAS.filter((p) => !p.permiso || auth.tienePermiso(p.permiso)))
+const POR_ROL = {
+  Planeamiento: null, Developer: null, Administrador: null, // todas
+  Consulta: ['resumen', 'procura'],
+  Coordinador: ['resumen', 'procura'],
+  Residencia: ['resumen', 'control', 'redline', 'semanal', 'reportes'],
+  Calidad: ['resumen', 'control', 'redline'],
+}
+const PESTANAS = computed(() => {
+  const permitidas = auth.nombreRol in POR_ROL ? POR_ROL[auth.nombreRol] : ['resumen']
+  return TODAS_LAS_PESTANAS.filter((p) => (!permitidas || permitidas.includes(p.clave)) && (!p.permiso || auth.tienePermiso(p.permiso)))
+})
 const pestanaActiva = computed(() => {
   const clave = props.tab || 'resumen'
   return PESTANAS.value.some((p) => p.clave === clave) ? clave : 'resumen'
@@ -161,6 +173,7 @@ const ETIQUETA_ESTADO = {
         <FichaResumen v-if="pestanaActiva === 'resumen'" :frente="frente" />
         <FichaProcura v-else-if="pestanaActiva === 'procura'" :frente-id="frente.id" :frente="frente" />
         <FichaControlSostenimiento v-else-if="pestanaActiva === 'control'" ref="controlRef" :frente-id="frente.id" />
+        <FichaRedline v-else-if="pestanaActiva === 'redline'" :frente="frente" />
         <FichaSemanal v-else-if="pestanaActiva === 'semanal'" :frente="frente" />
         <FichaReportes v-else-if="pestanaActiva === 'reportes'" :frente="frente" />
         <FichaConfiguracion

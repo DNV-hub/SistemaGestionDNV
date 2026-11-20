@@ -544,7 +544,11 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 
 #### `ctl_avance_aprobado(p_frente_id)` (función) y `ctl_curva_ajuste`
 **Propósito**: la curva S, el Gantt y los metrados solo cuentan lo **aprobado**: carga inicial del Control diario (`ctl_avance_partida.estado='aprobado'`) + lo confirmado/corregido en la bandeja (`rdc_metrados_confirmacion` → `rdc_partidas_edt.codigo_edt`). `ctl_avance_partida.estado='por_aprobar'` = reportado en RDC, aún sin aprobar (se muestra punteado, no suma). `ctl_curva_ajuste(frente_id, fecha, ejecutado_pct, motivo, creado_por, activo)` = ajuste manual **opcional** de la curva, con registro. Migración `20261119040000_ctl_avance_aprobado_y_ajustes.sql`.
-**Notas**: `ctl_cronograma_partida` suma `grupo` (título EDT de nivel 1 del Control diario), `sector_codigo` y `met_previsto` (metrado del cronograma).
+**Notas**: `ctl_cronograma_partida` suma `grupo` (título EDT de nivel 1 del Control diario), `sector_codigo`, `met_previsto` (metrado del cronograma, solo referencia) y `en_linea_base boolean!` (default true; false = partida adicional no prevista en el cronograma: queda fuera de la curva S hasta que el cliente la apruebe y se revise la línea base). Criterio aprobado 20/11/2026: fechas del cronograma, metrados del plano constructivo o redline aprobado, HH = ratio × metrado. Migración `20261120120000_ctl_lienzo6_linea_base_y_redline.sql`.
+
+#### `ctl_linea_base_rev`
+**Propósito**: "Modificar curva" por ratios (pestaña Semanal, solo Planeamiento). Cada guardado agrega una fila por partida cambiada con la revisión (`Rev01`, `Rev02`…).
+**Columnas**: `id uuid!`, `frente_id uuid!`, `rev text!`, `edt text!`, `ratio_anterior numeric!`, `ratio_nuevo numeric!`, `motivo text!` *(mín. 10 caracteres)*, `desviacion_antes numeric`, `desviacion_despues numeric`, `creado_por uuid`, `created_at!`. El ratio vigente de cada partida es el de su última revisión; si no tiene, el del cronograma (`hh/metrado`).
 
 #### `ctl_material_sector`
 **Propósito**: a qué sector del frente pertenece cada material de Almacén (criterio de Planeamiento según plano: malla por pasivo, Ø32 al sector que indique el plano, accesorios Ø25 a los pasivos).
@@ -561,8 +565,19 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 **Propósito**: cada cambio puntual de un redline sobre un ítem del metrado (ícono RL en pantalla).
 **Columnas**: `id uuid!`, `frente_id uuid!`, `sector_codigo text!`, `item_codigo text!`, `redline text!`, `fecha date!`, `aprobado_bba boolean` *(null = por confirmar; true = entra al cálculo vigente)*, `cantidad_antes numeric`, `cantidad_despues numeric`, `elemento_codigo text` *(perno o paño puntual)*, `nota text`, `created_at!`.
 
+#### `ctl_redline`
+**Propósito**: cabecera de cada redline del frente (pestaña Redline). Solo cuando Planeamiento lo aprueba (`estado='aprobado'`) cambia el plano, el metrado vigente, la procura y la curva; la valorización sigue la firma de BBA (`firma_bba`).
+**Columnas**: `id uuid!`, `frente_id uuid!`, `codigo text!` *(RL01…)*, `titulo text!`, `fecha date!`, `origen text`, `estado text!` *(en_revision | aprobado | devuelto)*, `firma_bba boolean!`, `imagen_campo text` y `imagen_plano text` *(rutas en el bucket frentes-archivos)*, `puntos_alineacion text`, `nota_devolucion text`, `aprobado_por uuid`, `aprobado_en timestamptz`, `created_at!`. Único `(frente_id, codigo)`. `ctl_redline_cambio` suma `estado text!` *(confirmado | por_confirmar | corregido)* y `cantidad_corregida numeric`.
+
+#### `ctl_partida_item`
+**Propósito**: qué ítems del plano forman el metrado de cada partida del cronograma (solo relaciones directas). Al aprobar un redline, esas partidas toman el metrado vigente.
+**Columnas**: `id uuid!`, `frente_id uuid!`, `edt text!`, `item_codigo text!`, `factor numeric!` *(conversión de unidad, por defecto 1)*. Único `(frente_id, edt, item_codigo)`.
+
 #### Vista `ctl_metrado_vigente` (security_invoker)
-Por ítem: constructivo, último redline aprobado, último redline pendiente con su nota, y `cantidad_vigente` = redline aprobado o, si no hay, constructivo.
+Por ítem: constructivo, último redline **aprobado por Planeamiento** (`ctl_redline.estado='aprobado'`; usa `cantidad_corregida` si se corrigió), último redline en revisión con su nota, `cantidad_vigente` = redline aprobado por Planeamiento o constructivo, y `cantidad_valorizable` = redline firmado por BBA (`aprobado_bba`) o constructivo.
+
+#### Funciones `ctl_aprobar_redline(p_redline_id)` y `ctl_devolver_redline(p_redline_id, p_nota)`
+Security definer, exigen `procura.crear_version`. Aprobar falla si queda algún cambio `por_confirmar`; marca el redline aprobado (quién y cuándo) y actualiza `ctl_cronograma_partida.metrado` de las partidas vinculadas en `ctl_partida_item` (las HH no cambian). Devolver exige nota de al menos 10 caracteres.
 
 #### Vista `ctl_conciliacion_material`
 Una fila por frente × material: `salida`, `transf_entrada`, `transf_salida`, `devuelto_recibido` (devoluciones `Recibida`), `devolucion_por_recibir` (`Solicitada`), `devolucion_rechazada`, `neto_en_frente` = salida + transf. entrada − transf. salida − devuelto recibido, `declarado_facilidades` y `sin_destino_declarado` (según `vales.actividad` clasificada con `ctl_destino`), `estado_devolucion`, `devoluciones_detalle`, `sectores text[]`. Mismo filtro de seguridad que `procura_vs_consumo` (permiso de procura; supervisor solo su frente).

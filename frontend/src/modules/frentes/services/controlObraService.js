@@ -137,16 +137,15 @@ export async function cargarSketch(frenteId) {
   return { ...s.data, url, elementos: el.data ?? [] }
 }
 
-/** Línea base por partida y avance APROBADO por día (carga inicial del
- * Control diario + lo confirmado en la bandeja). También trae lo que falta
- * aprobar y los ajustes manuales de la curva (opcionales). */
+/** Línea base por partida, avance APROBADO por día, lo que falta aprobar y
+ * las revisiones de la línea base por ratios (lienzo 6: "Modificar curva"). */
 export async function cargarCronograma(frenteId) {
-  const [p, a, pend, band, aj] = await Promise.all([
+  const [p, a, pend, band, rv] = await Promise.all([
     supabase.from('ctl_cronograma_partida').select('*').eq('frente_id', frenteId).order('edt'),
     supabase.rpc('ctl_avance_aprobado', { p_frente_id: frenteId }),
     supabase.from('ctl_avance_partida').select('edt, fecha, cantidad, fuente').eq('frente_id', frenteId).eq('estado', 'por_aprobar'),
     supabase.from('rdc_metrados_confirmacion').select('id', { count: 'exact', head: true }).eq('frente_id', frenteId).eq('estado', 'por_confirmar'),
-    supabase.from('ctl_curva_ajuste').select('*').eq('frente_id', frenteId).eq('activo', true).order('fecha'),
+    supabase.from('ctl_linea_base_rev').select('*').eq('frente_id', frenteId).order('created_at'),
   ])
   if (p.error) throw p.error
   if (a.error) throw a.error
@@ -155,49 +154,68 @@ export async function cargarCronograma(frenteId) {
     avance: (a.data ?? []).map((x) => ({ ...x, cantidad: Number(x.cantidad) })),
     porAprobar: pend.data ?? [],
     bandejaPendientes: band.count ?? 0,
-    ajustes: aj.data ?? [],
+    revs: rv.data ?? [],
   }
 }
 
-export async function guardarAjusteCurva(frenteId, fecha, ejecutadoPct, motivo) {
-  const { error } = await supabase.from('ctl_curva_ajuste').insert({ frente_id: frenteId, fecha, ejecutado_pct: ejecutadoPct, motivo })
-  if (error) throw error
-}
-export async function anularAjusteCurva(id) {
-  const { error } = await supabase.from('ctl_curva_ajuste').update({ activo: false }).eq('id', id)
+/** Guarda una revisión de la línea base (Rev01, Rev02…) con los ratios cambiados. */
+export async function guardarRevisionLineaBase(frenteId, rev, cambios, motivo, desvAntes, desvDespues) {
+  const filas = cambios.map((c) => ({ frente_id: frenteId, rev, edt: c.edt, ratio_anterior: c.antes, ratio_nuevo: c.nuevo, motivo, desviacion_antes: desvAntes, desviacion_despues: desvDespues }))
+  const { error } = await supabase.from('ctl_linea_base_rev').insert(filas)
   if (error) throw error
 }
 
-/** Curva ejecutada ponderada por HH desde el avance aprobado:
- * Σ min(acum, metrado)/metrado × HH / Σ HH. Un ajuste manual activo en una
- * fecha reemplaza el valor calculado de esa fecha. */
-export function curvaEjecutada(puntos, partidas, avance, ajustes = []) {
-  const BAC = partidas.reduce((a, p) => a + Number(p.hh || 0), 0)
+/** Ratio vigente (HH/und) por partida: última revisión o el del cronograma. */
+export function ratiosVigentes(partidas, revs = []) {
+  const m = new Map(partidas.map((p) => [p.edt, Number(p.metrado) ? Number(p.hh) / Number(p.metrado) : 0]))
+  for (const r of revs) m.set(r.edt, Number(r.ratio_nuevo))
+  return m
+}
+
+const diasEntre = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 86400000)
+const fraccionLineal = (p, f) => {
+  if (!p.inicio || !p.fin) return 0
+  if (f < p.inicio) return 0
+  if (f >= p.fin) return 1
+  return (diasEntre(p.inicio, f) + 1) / (diasEntre(p.inicio, p.fin) + 1)
+}
+
+/** Curva S con el criterio aprobado el 20/11/2026 (contrato T&M):
+ *  - fechas del cronograma Rev00; metrado = plano constructivo o redline aprobado;
+ *  - HH de cada partida = ratio vigente × metrado;
+ *  - partidas adicionales (en_linea_base = false) fuera hasta que el cliente las apruebe;
+ *  - ejecutado = Σ min(acum, metrado)/metrado × HH / Σ HH (solo avance aprobado).
+ * El programado conserva la forma del Rev00 guardado y solo se corrige por la
+ * diferencia que introducen los ratios cambiados y las partidas excluidas. */
+export function curvaEjecutada(puntos, partidas, avance, revs = []) {
+  const R = ratiosVigentes(partidas, revs)
+  const base = partidas.map((p) => ({ ...p, q: Number(p.metrado) || 0, hh0: Number(p.hh) || 0 }))
+  const vig = base.filter((p) => p.en_linea_base !== false).map((p) => ({ ...p, hh: (R.get(p.edt) ?? 0) * p.q }))
+  const BAC0 = base.reduce((a, p) => a + p.hh0, 0)
+  const BAC = vig.reduce((a, p) => a + p.hh, 0)
+  const lin = (lista, campo, f, tot) => (tot ? lista.reduce((a, p) => a + p[campo] * fraccionLineal(p, f), 0) / tot * 100 : 0)
   const ultima = avance.reduce((m, a) => (a.fecha > m ? a.fecha : m), '')
-  const aj = new Map(ajustes.map((x) => [x.fecha, Number(x.ejecutado_pct)]))
-  const acum = new Map()
   const porDia = new Map()
-  for (const a of avance) {
-    if (!porDia.has(a.fecha)) porDia.set(a.fecha, [])
-    porDia.get(a.fecha).push(a)
-  }
-  const fechas = [...new Set([...puntos.map((p) => p.fecha), ...avance.map((a) => a.fecha)])].sort()
-  const P = new Map(partidas.map((p) => [p.edt, p]))
+  for (const a of avance) { if (!porDia.has(a.fecha)) porDia.set(a.fecha, []); porDia.get(a.fecha).push(a) }
+  const P = new Map(vig.map((p) => [p.edt, p]))
+  const acum = new Map()
   const calc = new Map()
+  const fechas = [...new Set([...puntos.map((p) => p.fecha), ...avance.map((a) => a.fecha)])].sort()
   for (const f of fechas) {
     for (const a of porDia.get(f) ?? []) acum.set(a.edt, (acum.get(a.edt) || 0) + a.cantidad)
     let s = 0
-    for (const [edt, q] of acum) {
-      const p = P.get(edt)
-      if (p && Number(p.metrado)) s += (Math.min(q, Number(p.metrado)) / Number(p.metrado)) * Number(p.hh)
-    }
+    for (const [edt, q] of acum) { const p = P.get(edt); if (p && p.q) s += (Math.min(q, p.q) / p.q) * p.hh }
     calc.set(f, BAC ? (s / BAC) * 100 : 0)
   }
   return {
     ultima,
-    puntos: puntos.map((p) => {
-      const v = p.fecha <= ultima ? (aj.has(p.fecha) ? aj.get(p.fecha) : Math.round((calc.get(p.fecha) ?? 0) * 100) / 100) : null
-      return { ...p, ejecutado_pct: v, ajustado: aj.has(p.fecha) }
+    BAC,
+    partidasVig: vig.map((p) => ({ ...p, ratio: R.get(p.edt) ?? 0, peso: BAC ? p.hh / BAC : 0, acum: acum.get(p.edt) || 0 })),
+    adicionales: base.filter((p) => p.en_linea_base === false),
+    puntos: puntos.map((pt) => {
+      const prog = Math.max(0, Math.min(100, Number(pt.programado_pct) + lin(vig, 'hh', pt.fecha, BAC) - lin(base, 'hh0', pt.fecha, BAC0)))
+      const v = pt.fecha <= ultima ? Math.round((calc.get(pt.fecha) ?? 0) * 100) / 100 : null
+      return { ...pt, programado_pct: Math.round(prog * 100) / 100, ejecutado_pct: v }
     }),
   }
 }
@@ -206,8 +224,9 @@ export function curvaEjecutada(puntos, partidas, avance, ajustes = []) {
 export async function cargarRdcRango(frenteId, desde, hasta) {
   const { data, error } = await supabase
     .from('rdc_reportes')
-    .select('fecha, redline, redline_descripcion, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, total_horas, total_minutos), rdc_reporte_personal(cantidad)')
+    .select('fecha, redline, redline_descripcion, restricciones, restriccion_descripcion, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, responsable, comentario, total_horas, total_minutos, orden), rdc_reporte_personal(cantidad, tipo)')
     .eq('frente_id', frenteId)
+    .eq('estado', 'Finalizado')
     .is('eliminado_at', null)
     .gte('fecha', desde)
     .lte('fecha', hasta)
@@ -231,7 +250,7 @@ export function minutosStandBy(s) {
 export async function cargarSemanaRdc(frenteId, desde, hasta) {
   const { data, error } = await supabase
     .from('rdc_reportes')
-    .select('fecha, estado, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, responsable, comentario, total_horas, total_minutos, orden), rdc_reporte_personal(categoria, tipo, cantidad), rdc_reporte_maquinaria(tipo, categoria, cantidad)')
+    .select('fecha, estado, restricciones, restriccion_descripcion, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, responsable, comentario, total_horas, total_minutos, orden), rdc_reporte_personal(categoria, tipo, cantidad), rdc_reporte_maquinaria(tipo, categoria, cantidad)')
     .eq('frente_id', frenteId)
     .eq('estado', 'Finalizado')
     .is('eliminado_at', null)

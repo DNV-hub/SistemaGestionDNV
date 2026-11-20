@@ -4,7 +4,7 @@
 // partidas con avance de la semana y proyección.
 import { computed, ref } from 'vue'
 import { semanaDe, fechaCorta, num } from '../../services/controlObraService'
-import { descargarExcel } from '../../../../utils/exportarExcel'
+import { exportarCurvaS } from '../../services/exportarCurvaS'
 
 const props = defineProps({
   puntos: { type: Array, required: true },
@@ -14,23 +14,12 @@ const props = defineProps({
   partidas: { type: Array, default: () => [] },
   avance: { type: Array, default: () => [] },
   nombreFrente: { type: String, default: '' },
-  ajustes: { type: Array, default: () => [] },
-  puedeEditar: { type: Boolean, default: false },
+  partidasVig: { type: Array, default: () => [] },
+  revs: { type: Array, default: () => [] },
   fuenteEjecutado: { type: String, default: '' },
 })
-const emit = defineEmits(['update:semana', 'ver-semanal', 'ajustar', 'anular'])
-const editando = ref(false)
-const fAj = ref({ fecha: '', valor: null, motivo: '' })
-function abrirEditor() {
-  const ult = [...props.puntos].reverse().find((p) => p.ejecutado_pct != null)
-  fAj.value = { fecha: ult?.fecha || props.puntos[0]?.fecha || '', valor: ult ? Number(ult.ejecutado_pct) : null, motivo: '' }
-  editando.value = true
-}
-function guardarAjuste() {
-  if (!fAj.value.fecha || fAj.value.valor == null || fAj.value.motivo.trim().length < 5) return
-  emit('ajustar', { ...fAj.value })
-  editando.value = false
-}
+const emit = defineEmits(['update:semana'])
+const exportando = ref(false)
 
 const W = 640, H = 330, L = 44, R = 14, T = 92, B = 44
 const tolInf = computed(() => Number(props.param?.tol_inf ?? -3))
@@ -94,10 +83,11 @@ const sel = computed(() => semanas.value.find((s) => s.clave === props.semana) ?
 const partidasSemana = computed(() => {
   const s = sel.value
   if (!s) return []
-  const P = new Map(props.partidas.map((p) => [p.edt, p]))
+  const P = new Map((props.partidasVig.length ? props.partidasVig : props.partidas).map((p) => [p.edt, p]))
   const acc = new Map()
   for (const a of props.avance) {
     if (a.fecha < s.desde || a.fecha > s.hasta) continue
+    if (!P.has(a.edt)) continue
     acc.set(a.edt, (acc.get(a.edt) || 0) + Number(a.cantidad))
   }
   return [...acc.entries()].map(([edt, q]) => {
@@ -121,13 +111,13 @@ const proyeccion = computed(() => {
   return { ritmo, diasRest, ejFin, dvFin, est: estado(dvFin), falta: s.progCorte - s.ej }
 })
 
-function exportar() {
-  descargarExcel(`curva_s_${props.nombreFrente || 'frente'}.xlsx`, [
-    { nombre: 'Curva diaria', filas: props.puntos.map((p) => ({ Fecha: p.fecha, 'Programado %': Number(p.programado_pct), 'Ejecutado %': p.ejecutado_pct == null ? '' : Number(p.ejecutado_pct), 'Desviación (pts)': p.ejecutado_pct == null ? '' : Math.round((p.ejecutado_pct - p.programado_pct) * 10) / 10 })) },
-    { nombre: 'Cortes semanales', filas: semanas.value.map((s) => ({ Semana: s.clave, Desde: s.desde, Hasta: s.hasta, 'Programado al corte %': s.progCorte, 'Fecha de dato': s.fd ?? '', 'Programado a la fecha de dato %': s.progDato ?? '', 'Ejecutado %': s.ej ?? '', 'Desviación (pts)': s.dv == null ? '' : Math.round(s.dv * 10) / 10, Evaluación: s.est?.t ?? 'Por ejecutar' })) },
-    { nombre: 'Parámetros', filas: [{ Parámetro: 'Tolerancia inferior', Valor: tolInf.value }, { Parámetro: 'Tolerancia superior', Valor: tolSup.value }, { Parámetro: 'Alerta desde', Valor: alerta.value }, { Parámetro: 'Semana', Valor: 'Jueves a miércoles' }, { Parámetro: 'Fuente', Valor: props.param?.fuente ?? '' }] },
-  ])
+async function exportar() {
+  exportando.value = true
+  try {
+    await exportarCurvaS({ frente: props.nombreFrente || 'Frente', puntos: props.puntos, partidasVig: props.partidasVig, revs: props.revs, param: props.param, fechaDato: ultimoDato.value || props.puntos[props.puntos.length - 1]?.fecha })
+  } finally { exportando.value = false }
 }
+const INCLUYE = ['Hoja Curva S: gráfico de Excel (programado, ejecutado y banda −3 / +6) listo para pegar en el informe', 'Hoja Datos diarios: fecha, semana, programado %, ejecutado %, desviación, banda y estado', 'Hoja Partidas: EDT, partida, unidad, metrado, ratio HH/und, HH, peso %, acumulado aprobado, % avance y HH ganadas', 'Hoja Cortes semanales: corte de cada miércoles con desviación y criterio aplicado', 'Hoja Ajustes: cambios de ratios o HH con motivo, fecha y usuario (si los hubo)']
 const BOXW = 150
 const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
 </script>
@@ -140,22 +130,12 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
         <p>Cortes semanales de jueves a miércoles · {{ semanas.map((s) => s.clave).join(' · ') }}</p>
       </div>
       <div class="acc">
-        <button v-if="puedeEditar" type="button" class="gh" :disabled="!puntos.length" @click="editando ? (editando = false) : abrirEditor()">{{ editando ? 'Cerrar edición' : 'Editar curva (opcional)' }}</button>
-        <button type="button" class="gh" :disabled="!puntos.length" @click="exportar">Exportar datos a Excel</button>
+        <button type="button" class="gh" :disabled="!puntos.length || exportando" @click="exportar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" /><path d="M10 12l4 5" /><path d="M14 12l-4 5" /></svg>
+          {{ exportando ? 'Preparando…' : 'Exportar curva S a Excel' }}
+        </button>
+        <span class="pop" tabindex="0" aria-label="El Excel incluye"><span class="ico">i</span><span class="pb"><b>El Excel incluye</b><ul><li v-for="t in INCLUYE" :key="t">{{ t }}</li></ul></span></span>
       </div>
-    </div>
-    <div v-if="editando" class="editor">
-      <p class="mu sm">Ajuste manual opcional: reemplaza el ejecutado calculado de una fecha. Primero se ajustan ratios y HH; los metrados solo como último recurso. Todo ajuste queda registrado con su motivo.</p>
-      <div class="frm">
-        <label>Fecha<input v-model="fAj.fecha" type="date" /></label>
-        <label>Ejecutado %<input v-model.number="fAj.valor" type="number" step="0.1" min="0" max="100" /></label>
-        <label class="mot">Motivo<input v-model="fAj.motivo" type="text" placeholder="Ej.: prorrateo de HH de cosido por redline RL01" /></label>
-        <button type="button" class="pr" :disabled="!fAj.fecha || fAj.valor == null || fAj.motivo.trim().length < 5" @click="guardarAjuste">Guardar ajuste</button>
-      </div>
-    </div>
-    <div v-if="ajustes.length" class="ajs">
-      <span class="mu sm">Ajustes activos:</span>
-      <span v-for="a in ajustes" :key="a.id" class="aj">{{ fechaCorta(a.fecha) }} → {{ Number(a.ejecutado_pct).toFixed(1) }} % · {{ a.motivo }}<button v-if="puedeEditar" type="button" title="Anular ajuste" @click="emit('anular', a.id)">×</button></span>
     </div>
     <p v-if="!puntos.length" class="vacio">Este frente todavía no tiene línea base cargada.</p>
     <template v-else>
@@ -204,7 +184,6 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
         <div class="seg" role="group" aria-label="Semana de control">
           <button v-for="s in semanas" :key="s.clave" type="button" :class="{ on: s.clave === semana }" :aria-pressed="s.clave === semana" @click="emit('update:semana', s.clave)">{{ s.clave }}</button>
         </div>
-        <button type="button" class="lnk" @click="emit('ver-semanal')">Ver detalle completo en Semanal</button>
       </div>
       <div v-if="sel" class="kk">
         <div><span>Programado a la fecha de dato</span><b>{{ sel.fd ? sel.progDato.toFixed(1) : sel.progCorte.toFixed(1) }} %</b></div>
@@ -213,11 +192,11 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
         <div><span>HH ganadas en la semana</span><b>{{ num(hhSemana, 0) }}</b></div>
       </div>
       <p v-if="sel" class="nota">
-        <template v-if="sel.fd">Fecha de dato {{ fechaCorta(sel.fd) }}<template v-if="sel.enCurso"> (semana en curso; corte {{ fechaCorta(sel.hasta) }} programado en {{ sel.progCorte.toFixed(1) }} %)</template>. {{ sel.est.t === 'En banda' ? `Dentro de la banda ${tolInf} / +${alerta}: sin ajustes.` : sel.est.t === 'Alerta' ? 'En alerta: revisar ratios y HH.' : 'Fuera de banda: ajustar con criterio (primero ratios y HH).' }}</template>
+        <template v-if="sel.fd">Fecha de dato {{ fechaCorta(sel.fd) }}<template v-if="sel.enCurso"> (semana en curso; corte {{ fechaCorta(sel.hasta) }} programado en {{ sel.progCorte.toFixed(1) }} %)</template>. {{ sel.est.t === 'En banda' ? `Dentro de la banda ${tolInf} / +${tolSup} (alerta desde +${alerta}): sin ajustes.` : sel.est.t === 'Alerta' ? 'En alerta: revisar ratios y HH.' : 'Fuera de banda: ajustar con criterio (primero ratios y HH).' }}</template>
         <template v-else>Semana programada: {{ sel.progCorte.toFixed(1) }} % al corte {{ fechaCorta(sel.hasta) }}.</template>
       </p>
       <div v-if="partidasSemana.length" class="tab">
-        <div class="th"><span>EDT</span><span>Partida con avance</span><span class="r">Semana</span><span class="r">HH</span></div>
+        <div class="th"><span>EDT</span><span>Partida con avance</span><span class="r">Semana</span><span class="r">HH ganadas</span></div>
         <div v-for="p in partidasSemana" :key="p.edt" class="tr">
           <span class="mu">{{ p.edt }}</span><span>{{ p.nombre }}</span><span class="r">{{ num(p.q) }} {{ p.unidad }}</span><span class="r">{{ num(p.hh, 1) }}</span>
         </div>
@@ -234,6 +213,13 @@ const boxX = (s) => Math.min(W - R - BOXW, Math.max(L, xd(s.corte) - BOXW / 2))
 </template>
 
 <style scoped>
+.acc { display: flex; gap: 8px; align-items: center; }
+.acc .gh { display: inline-flex; align-items: center; gap: 8px; }
+.pop { position: relative; display: inline-flex; cursor: pointer; outline: none; }
+.pop .ico { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid #6b7280; color: #9ca3af; font-size: 11px; font-weight: 800; }
+.pop .pb { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 320px; background: #1b1e22; border: 1px solid #3a3f47; border-radius: 10px; padding: 10px 12px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); font-size: 12px; line-height: 1.45; color: #e5e7eb; }
+.pop .pb ul { margin: 4px 0 0; padding-left: 18px; }
+.pop:hover .pb, .pop:focus .pb { display: block; }
 .v5-card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
 .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
 h2 { margin: 0; font-size: 17px; font-weight: 700; }
