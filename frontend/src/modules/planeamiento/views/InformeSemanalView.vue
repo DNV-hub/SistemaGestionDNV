@@ -77,7 +77,7 @@ async function subir(f, ev) {
   subiendo.value = f.id; msg.value = ''; err.value = ''
   try {
     const r = await subirPts(f.id, siguiente.value, archivo, semanaDe)
-    msg.value = `PTS de ${f.nombre} (${r.semana}) ${r.estado === 'rechazado' ? 'rechazado' : 'recibido'}${r.observaciones.length ? ': ' + r.observaciones.join(' ') : '.'}`
+    msg.value = `PTS de ${f.nombre} (${r.semana}) ${r.estado}${r.observaciones.length ? ': ' + r.observaciones.join(' ') : '.'}`
     pts.value = await cargarPts([semana.value.clave, siguiente.value.clave])
   } catch (e) { console.error(e); err.value = e?.message || 'No se pudo subir el PTS.' } finally { subiendo.value = '' }
 }
