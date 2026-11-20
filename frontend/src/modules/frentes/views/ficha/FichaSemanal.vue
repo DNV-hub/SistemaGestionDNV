@@ -317,7 +317,7 @@ function filaFL(t, f) {
       <section class="card">
         <h2>Metrados de la {{ sel }} por partida</h2>
         <p class="sub">Semana jueves a miércoles · solo partidas con avance aprobado</p>
-        <table v-if="metSemana.length" class="t">
+        <table v-if="metSemana.length" class="t" data-sin-filtro>
           <thead><tr><th>EDT</th><th>Partida</th><th>U.M.</th><th class="r">Semana</th><th class="r">Acumulado</th><th class="r">Vigente</th><th>Avance</th><th>Días con avance (jue → mié)</th></tr></thead>
           <tbody>
             <tr v-for="m in metSemana" :key="m.edt">
@@ -335,7 +335,7 @@ function filaFL(t, f) {
       <section class="card">
         <h2>Detalle de Stand By · {{ sel }}</h2>
         <p class="sub">Actividad afectada, causa y tiempo · hh:mm</p>
-        <table v-if="eventos.length" class="t">
+        <table v-if="eventos.length" class="t" data-sin-filtro>
           <thead><tr><th>N°</th><th>Fecha</th><th>Actividad afectada</th><th>Causa</th><th>Horario</th><th class="r">Total hh:mm</th></tr></thead>
           <tbody>
             <tr v-for="(e, i) in eventos" :key="i">
@@ -386,7 +386,7 @@ function filaFL(t, f) {
             </div>
           </div>
           <div>
-            <table class="t fl">
+            <table class="t fl" data-sin-filtro>
               <thead><tr><th>Cargo / categoría</th><th v-for="(d, i) in dias" :key="d" class="c">{{ DL[i] }} {{ d.slice(8, 10) }}</th></tr></thead>
               <tbody>
                 <tr><td colspan="8" class="sec" style="color: #3b82f6">Mano de obra directa</td></tr>

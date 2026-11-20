@@ -7,6 +7,8 @@ import { compararCodigoNatural } from '../../../avance/utils/ordenNatural'
 import { conTiempoLimite } from '../../../../utils/conTiempoLimite'
 import { formatearNumero } from '../../../../utils/formatearNumero'
 import { descargarExcel } from '../../../../utils/exportarExcel'
+import SketchAvance from '../../components/control/SketchAvance.vue'
+import { cargarSketch, cargarAvanceElementos, cargarSectores } from '../../services/controlObraService'
 
 // Era AvanceSostenimientoView.vue (módulo "avance", con su propio selector
 // de frente) — ahora vive como pestaña de la ficha del frente, así que el
@@ -19,6 +21,18 @@ const props = defineProps({
 })
 
 const auth = useAuthStore()
+
+// PRUEBA · lienzo 5.1: plano de avance arriba (mismo que el Resumen), al último día reportado.
+const skCtl = ref(null)
+const elCtl = ref([])
+const secCtl = ref([])
+const sectorCtl = ref('all')
+const diaCtl = computed(() => elCtl.value.reduce((m, e) => (e.ultima_fecha > m ? e.ultima_fecha : m), '') || new Date(Date.now() - 5 * 3600000).toISOString().slice(0, 10))
+watch(() => props.frenteId, async (id) => {
+  const ok = (p, d) => p.catch((e) => { console.warn(e); return d })
+  const [a, b, c] = await Promise.all([ok(cargarSketch(id), null), ok(cargarAvanceElementos(id), []), ok(cargarSectores(id), [])])
+  skCtl.value = a; elCtl.value = b; secCtl.value = c
+}, { immediate: true })
 const cargando = ref(false)
 const error = ref('')
 
@@ -420,6 +434,8 @@ defineExpose({ exportar, listoParaExportar })
           </div>
         </button>
       </div>
+
+      <SketchAvance v-if="skCtl" v-model:sector="sectorCtl" :sketch="skCtl" :avance="elCtl" :dia="diaCtl" :sectores="secCtl" />
 
       <!-- Resumen compacto por zona y por ubicación: una fila de píldoras con
            su barra de avance, en vez de tarjetas grandes. Tocar una filtra la tabla. -->
