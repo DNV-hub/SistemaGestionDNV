@@ -57,23 +57,72 @@ const pernos = computed(() =>
     }
   }),
 )
-const panos = computed(() =>
+const FPAL = ['#38bdf8', '#34d399', '#fbbf24', '#f472b6', '#a78bfa', '#fb923c', '#2dd4bf', '#f87171']
+const fmtD = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '')
+const panosBase = computed(() =>
   (props.sketch?.elementos ?? []).filter((e) => e.tipo === 'pano').map((e) => {
     const f = fechas.value.mal.get(`${(e.codigo_rdc || e.codigo).toUpperCase()}|${(e.malla_tipo || '').toLowerCase()}`)
+    return { e, f }
+  }),
+)
+// Un color por fecha de instalación (última fecha reportada del paño); estable al reproducir.
+const colorFecha = computed(() => {
+  const fs = [...new Set(panosBase.value.filter((x) => x.f).map((x) => x.f.fin))].sort()
+  return new Map(fs.map((f, i) => [f, FPAL[i % FPAL.length]]))
+})
+const panos = computed(() =>
+  panosBase.value.map(({ e, f }) => {
     const on = !!(f && f.ini <= props.dia)
     const es3 = (e.malla_tipo || '').includes('80/3')
     const vis = capas.value.mal && enSector(e.sector_codigo)
     const g = e.geo?.[0] ?? []
     const cx = g.reduce((a, p) => a + p[0], 0) / (g.length || 1)
     const cy = g.reduce((a, p) => a + p[1], 0) / (g.length || 1)
+    const fec = f ? f.fin : null
+    const fl = f ? (f.ini === f.fin ? fmtD(f.ini) : `${fmtD(f.ini)} y ${fmtD(f.fin)}`) : ''
     return {
-      ...e, on, vis, cx, cy,
-      fill: es3 ? '#a855f7' : '#06b6d4', stroke: es3 ? '#6b21a8' : '#0e7490',
+      ...e, on, vis, cx, cy, es3,
+      fill: fec ? colorFecha.value.get(fec) : '#94a3b8',
+      tipoCorto: es3 ? '80/3' : '80/4',
+      fechaTxt: fmtD(fec),
+      tip: `${e.codigo} · MINAX ${es3 ? '80/3' : '80/4'} · ${Number(e.area_m2 || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²${fl ? ' · instalada ' + fl : ''}${e.descripcion ? ' · ' + e.descripcion : ''}`,
       hoy: !!(f && (f.ini === props.dia || f.fin === props.dia)) && vis,
       polys: (e.geo ?? []).map((poly) => poly.map((p) => p.join(',')).join(' ')),
     }
   }),
 )
+const leyendaFechas = computed(() => [...colorFecha.value.entries()].map(([f, c]) => ({ f: fmtD(f), c })))
+// Rótulos de pernos sin choques: prueba posiciones alrededor del círculo y descarta las que tapan otro perno, otro rótulo o el rótulo de un paño.
+const rotulos = computed(() => {
+  const els = props.sketch?.elementos ?? []
+  const [vx, vy, vw, vh] = (props.sketch?.viewbox || '0 0 1000 400').split(' ').map(Number)
+  const obs = els.filter((e) => e.tipo === 'perno').map((e) => [+e.x, +e.y, 15])
+  const boxes = panos.value.map((p) => [p.cx - 22, p.cy - 20, p.cx + 22, p.cy + 20])
+  const hit = (b, pad) => {
+    if (b[0] < vx + 2 || b[1] < vy + 2 || b[2] > vx + vw - 2 || b[3] > vy + vh - 2) return true
+    for (const [x, y, r] of obs) {
+      const nx = Math.max(b[0] - pad, Math.min(x, b[2] + pad)), ny = Math.max(b[1] - pad, Math.min(y, b[3] + pad))
+      if ((nx - x) ** 2 + (ny - y) ** 2 < r * r) return true
+    }
+    return boxes.some((q) => !(b[2] + pad < q[0] || b[0] - pad > q[2] || b[3] + pad < q[1] || b[1] - pad > q[3]))
+  }
+  const opts = [[0, -17, 'middle'], [0, 23, 'middle'], [17, 4, 'start'], [-17, 4, 'end'], [14, -14, 'start'], [-14, -14, 'end'], [14, 21, 'start'], [-14, 21, 'end'], [0, -30, 'middle'], [0, 36, 'middle'], [28, 4, 'start'], [-28, 4, 'end'], [22, -26, 'start'], [-22, -26, 'end'], [22, 32, 'start'], [-22, 32, 'end']]
+  const out = new Map()
+  for (const e of els.filter((x) => x.tipo === 'perno')) {
+    const x = +e.x, y = +e.y, w = String(e.codigo).length * 7.4 + 4, h = 13
+    let done = null
+    for (const [dx, dy, an] of opts) {
+      const tx = x + dx, ty = y + dy
+      const x0 = an === 'middle' ? tx - w / 2 : an === 'start' ? tx : tx - w
+      const b = [x0, ty - h + 3, x0 + w, ty + 3]
+      if (!hit(b, 3)) { done = { tx, ty, an, b }; break }
+    }
+    if (!done) done = { tx: x, ty: y - 17, an: 'middle', b: [x - w / 2, y - 27, x + w / 2, y - 14] }
+    boxes.push(done.b)
+    out.set(e.id, done)
+  }
+  return out
+})
 const marcas = computed(() => (props.sketch?.elementos ?? []).filter((e) => e.tipo === 'marca'))
 const marcaReportada = (m) => {
   const c = (m.codigo_rdc || '').toUpperCase()
@@ -136,7 +185,7 @@ async function exportarPdf() {
         <span class="chip">Perforados <b style="color: #fbbf24">{{ nP }}</b> / {{ vis.length }}</span>
         <span class="chip">Inyectados <b style="color: #93c5fd">{{ nI }}</b> / {{ vis.length }}</span>
         <span class="chip">Malla <b style="color: #67e8f9">{{ m2.toLocaleString('es-PE', { maximumFractionDigits: 1 }) }}</b> m²</span>
-        <span class="chip">Pull test <b style="color: #fb7185">{{ nT }}</b> / {{ pullRequeridos }}</span>
+        <span class="chip">Pull test <b style="color: #fb7185">{{ nT }}</b> / {{ pullRequeridos }}{{ sector === 'all' ? '' : ' del frente' }}</span>
       </div>
     </div>
     <div class="bar2">
@@ -160,21 +209,25 @@ async function exportarPdf() {
     <svg v-else ref="svgRef" xmlns="http://www.w3.org/2000/svg" :viewBox="sketch.viewbox" class="plano" role="img" :aria-label="`Plano ${sketch.plano} con el avance al ${fmt(dia)}`">
       <image v-if="sketch.url" :href="sketch.url" x="20" y="25" :width="sketch.ancho" :height="sketch.alto" preserveAspectRatio="none" opacity="0.92" />
       <g v-for="p in panos" :key="p.id">
-        <polygon v-for="(pts, k) in p.polys" :key="k" :points="pts" :fill="p.fill" :fill-opacity="p.on && p.vis ? 0.55 : 0" :stroke="p.stroke" :stroke-opacity="p.on && p.vis ? 1 : 0" stroke-width="3">
-          <title>{{ p.codigo }} · {{ p.malla_tipo }} · {{ p.area_m2 }} m²</title>
+        <polygon v-for="(pts, k) in p.polys" :key="k" :points="pts" :fill="p.fill" :fill-opacity="p.on && p.vis ? 0.62 : 0" stroke="#334155" :stroke-opacity="p.on && p.vis ? 1 : 0" stroke-width="1.6" :stroke-dasharray="p.es3 ? '7 4' : null">
+          <title>{{ p.tip }}</title>
         </polygon>
-        <polygon v-for="(pts, k) in p.polys" :key="'h' + k" :points="pts" fill="none" stroke="#facc15" stroke-width="6" :stroke-opacity="p.hoy ? 1 : 0" />
-        <text :x="p.cx" :y="p.cy + 7" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a" stroke="#ffffff" stroke-width="5" paint-order="stroke" :opacity="p.on && p.vis ? 1 : 0">{{ p.codigo }}</text>
+        <polygon v-for="(pts, k) in p.polys" :key="'h' + k" :points="pts" fill="none" stroke="#facc15" stroke-width="4" :stroke-opacity="p.hoy ? 1 : 0" pointer-events="none" />
+      </g>
+      <g v-for="p in panos" :key="'t' + p.id" :opacity="p.on && p.vis ? 1 : 0" pointer-events="none" text-anchor="middle" fill="#0f172a" stroke="#ffffff" stroke-width="3" paint-order="stroke">
+        <text :x="p.cx" :y="p.cy - 8" font-size="13" font-weight="800">{{ p.codigo }}</text>
+        <text :x="p.cx" :y="p.cy + 5" font-size="10" font-weight="600">{{ p.tipoCorto }}</text>
+        <text :x="p.cx" :y="p.cy + 17" font-size="10" font-weight="600">{{ p.fechaTxt }}</text>
       </g>
       <g v-for="a in pernos" :key="a.id" :opacity="a.op">
-        <circle :cx="a.x" :cy="a.y" r="21" fill="none" stroke="#facc15" stroke-width="6" :stroke-opacity="a.hoy ? 1 : 0" />
-        <circle :cx="a.x" :cy="a.y" r="16" fill="none" stroke="#e11d48" stroke-width="5" :stroke-opacity="a.pt ? 1 : 0" />
-        <circle :cx="a.x" :cy="a.y" r="10.5" :fill="a.fill" :stroke="a.stroke" stroke-width="3"><title>{{ a.tip }}</title></circle>
-        <text v-if="capas.cod" :x="a.x" :y="a.y - 17" text-anchor="middle" font-size="15" font-weight="800" :fill="a.I ? '#1e3a8a' : a.P ? '#92400e' : '#475569'" stroke="#ffffff" stroke-width="4" paint-order="stroke">{{ a.codigo }}</text>
+        <circle :cx="a.x" :cy="a.y" r="14" fill="none" stroke="#facc15" stroke-width="4" :stroke-opacity="a.hoy ? 1 : 0" />
+        <circle :cx="a.x" :cy="a.y" r="11" fill="none" stroke="#e11d48" stroke-width="3.5" :stroke-opacity="a.pt ? 1 : 0" />
+        <circle :cx="a.x" :cy="a.y" r="7" :fill="a.fill" :stroke="a.stroke" stroke-width="2"><title>{{ a.tip }}</title></circle>
+        <text v-if="capas.cod" :x="rotulos.get(a.id)?.tx" :y="rotulos.get(a.id)?.ty" :text-anchor="rotulos.get(a.id)?.an" font-size="11" font-weight="700" :fill="a.I ? '#1e3a8a' : a.P ? '#92400e' : '#475569'" stroke="#ffffff" stroke-width="3" paint-order="stroke" pointer-events="none">{{ a.codigo }}</text>
       </g>
-      <g v-for="m in marcas" :key="m.id" :opacity="marcaReportada(m) ? 1 : 0.6">
-        <path :d="`M${m.x - 13},${m.y - 13} L${+m.x + 13},${+m.y + 13} M${+m.x + 13},${m.y - 13} L${m.x - 13},${+m.y + 13}`" stroke="#dc2626" stroke-width="6" />
-        <text :x="m.x - 24" :y="+m.y + 40" text-anchor="end" font-size="19" font-weight="700" fill="#b91c1c" stroke="#fff" stroke-width="5" paint-order="stroke">
+      <g v-for="m in marcas" :key="m.id" :opacity="enSector(m.sector_codigo) ? (marcaReportada(m) ? 1 : 0.6) : 0">
+        <path :d="`M${m.x - 9},${m.y - 9} L${+m.x + 9},${+m.y + 9} M${+m.x + 9},${m.y - 9} L${m.x - 9},${+m.y + 9}`" stroke="#dc2626" stroke-width="4" />
+        <text :x="m.x - 16" :y="+m.y + 28" text-anchor="end" font-size="12" font-weight="700" fill="#b91c1c" stroke="#fff" stroke-width="3" paint-order="stroke">
           {{ m.codigo }} {{ m.descripcion?.toLowerCase() }}{{ marcaReportada(m) ? ' · reportado ' + fmt(marcaReportada(m)) : '' }}
         </text>
       </g>
@@ -184,8 +237,8 @@ async function exportarPdf() {
       <span><i class="c" style="background: #f59e0b"></i>Perforado</span>
       <span><i class="c" style="background: #2563eb"></i>Inyectado</span>
       <span><i class="c" style="border: 3px solid #e11d48"></i>Pull test</span>
-      <span><i class="s" style="background: #06b6d4"></i>MINAX 80/4</span>
-      <span><i class="s" style="background: #a855f7"></i>MINAX 80/3</span>
+      <span v-for="l in leyendaFechas" :key="l.f"><i class="s" :style="{ background: l.c, border: '1px solid #334155' }"></i>Malla {{ l.f }}</span>
+      <span><i class="s" style="border: 1.5px dashed #334155; box-sizing: border-box"></i>Borde discontinuo = MINAX 80/3</span>
       <span><i class="c" style="border: 3px solid #facc15"></i>Ejecutado ese día</span>
     </div>
   </section>

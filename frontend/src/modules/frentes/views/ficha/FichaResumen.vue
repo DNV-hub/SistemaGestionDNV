@@ -119,6 +119,11 @@ const puntoDato = computed(() => puntos.value.find((p) => p.fecha === fechaDato.
 const kv = computed(() => (puntoDato.value?.ejecutado_pct != null ? Number(puntoDato.value.ejecutado_pct) : null))
 const kp = computed(() => (puntoDato.value ? Number(puntoDato.value.programado_pct) : null))
 const kdv = computed(() => (kv.value != null && kp.value != null ? kv.value - kp.value : null))
+const puntoDia = computed(() => [...puntos.value].reverse().find((p) => p.fecha <= dia.value && p.ejecutado_pct != null) || null)
+const pdDia = computed(() => [...puntos.value].reverse().find((p) => p.fecha <= dia.value) || null)
+const kvD = computed(() => (puntoDia.value ? Number(puntoDia.value.ejecutado_pct) : null))
+const kpD = computed(() => (pdDia.value ? Number(pdDia.value.programado_pct) : null))
+const kdvD = computed(() => (kvD.value != null && kpD.value != null ? kvD.value - kpD.value : null))
 const col = (dv) => {
   const ti = Number(curva.value.param?.tol_inf ?? -3), ts = Number(curva.value.param?.tol_sup ?? 6), al = Number(curva.value.param?.alerta_desde ?? 4)
   if (dv == null) return 'inherit'
@@ -271,13 +276,17 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
         <span class="mu">Día</span>
         <input v-model.number="idx" type="range" min="0" :max="Math.max(0, diasPlayer.length - 1)" step="1" aria-label="Día del reproductor" />
         <b class="fecha">{{ fmtDia(dia) }}</b>
-        <span class="mu sm">Plano, metrados, curva S, cronograma, restricciones y fotos avanzan juntos</span>
+        <span class="live">Curva S <b>{{ kvD != null ? kvD.toFixed(1) + '%' : '—' }}</b> prog. {{ kpD != null ? kpD.toFixed(1) + '%' : '—' }} <b :style="{ color: col(kdvD) }">{{ kdvD != null ? (kdvD > 0 ? '+' : '') + kdvD.toFixed(1) + ' %' : '' }}</b></span>
+        <span class="mu sm full">Plano, cronograma, curva S, metrados, restricciones y fotos avanzan juntos; esta barra queda fija al bajar.</span>
       </div>
 
-      <div class="cols">
-        <div class="col izq">
+      <div class="full-row">
           <SketchAvance v-model:sector="sector" :sketch="sketch" :avance="elementos" :dia="dia" :sectores="sectores" />
+      </div>
+      <div class="full-row">
           <CronogramaGantt :partidas="crono.partidas" :avance="crono.avance" :por-aprobar="crono.porAprobar" :sector="sector" :dia="dia" :nombre-frente="frente.nombre" />
+      </div>
+      <div class="g2 cm">
           <CurvaSSemanal
             v-model:semana="semana"
             :puntos="puntos" :param="curva.param" :dia="dia"
@@ -286,9 +295,6 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
             @ajustar="ajustar" @anular="anular"
             @ver-semanal="router.push({ name: 'ficha-frente', params: { id: frente.id, tab: 'semanal' } })"
           />
-        </div>
-
-        <div class="col der">
           <section class="card">
             <h2>Metrados de avance aprobados</h2>
             <p class="sub">Al {{ fmtDia(dia) }} · vigente plano {{ sketch?.plano?.split(' ').pop() || '—' }}</p>
@@ -306,7 +312,9 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
               </template>
             </div>
           </section>
-
+      </div>
+      <div class="g2 rf">
+        <div class="col">
           <section class="card">
             <h2>Restricciones y Stand By</h2>
             <p class="sub">Semana {{ semana }} · tabla de Stand By del RDC · se cambia desde la curva S</p>
@@ -328,7 +336,8 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
               <p v-if="sinHora" class="warn">⚠ {{ sinHora }} registro(s) sin hora: pedir al supervisor que los complete (R-09).</p>
             </template>
           </section>
-
+        </div>
+        <div class="col">
           <section class="card">
             <h2>Fotos del frente</h2>
             <p class="sub">Semana {{ semana }} · se cambia desde la curva S</p>
@@ -341,7 +350,6 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
               </button>
             </div>
           </section>
-
           <section class="card">
             <h2>Rendimiento de la semana</h2>
             <p class="sub">Semana {{ semana }} · HH, avance diario y Stand By</p>
@@ -387,11 +395,17 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 .fecha { font-size: 20px; color: #f5a800; }
 .mu { color: var(--p-muted); }
 .sm { font-size: 12px; }
-.cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(330px, 1fr); gap: 16px; align-items: stretch; }
-@media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.player { position: sticky; top: 8px; z-index: 30; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); }
+.live { display: inline-flex; gap: 10px; align-items: baseline; padding-left: 12px; border-left: 1px solid var(--p-line); font-size: 12.5px; color: var(--p-muted); white-space: nowrap; }
+.live b:first-child { font-size: 16px; color: var(--p-text); }
+.full { flex: 1 1 100%; }
+.g2 { display: grid; gap: 16px; align-items: stretch; }
+.g2.cm { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.g2.rf { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+@media (max-width: 1100px) { .g2.cm, .g2.rf { grid-template-columns: minmax(0, 1fr); } }
 .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.der > .card:last-child { flex: 1 1 auto; }
-.izq > :last-child { flex: 1 1 auto; }
+.col > .card:last-child { flex: 1 1 auto; }
+.fotos { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; }
 .card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
 .card h2 { margin: 0; font-size: 17px; font-weight: 700; }
 .sub { margin: 4px 0 12px; color: var(--p-muted); font-size: 12.5px; }
@@ -437,4 +451,10 @@ const fmtDia = (d) => (d ? `${fechaCorta(d)}/${d.slice(0, 4)}` : '—')
 .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 24px; cursor: zoom-out; }
 .modal img { max-width: 100%; max-height: 85vh; border-radius: 12px; }
 .modal p { color: #fff; margin-top: 10px; }
+</style>
+<style scoped>
+@media (min-width: 1101px) {
+  .g2.rf > .col:first-child { position: relative; }
+  .g2.rf > .col:first-child > .card { position: absolute; inset: 0; overflow: auto; }
+}
 </style>

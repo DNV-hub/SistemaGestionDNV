@@ -13,7 +13,8 @@ const auth = useAuthStore()
 // quien tiene el permiso de su ruta (la ruta igual lo vuelve a exigir).
 const TABS = [
   { to: '/planeamiento/frentes', etiqueta: 'Frentes', permiso: 'frentes.ver', excluidos: ['Almacen', 'Supervisor'] },
-  { to: '/planeamiento/rdc', etiqueta: 'RDC', permiso: 'rdc.ver_propios', excluidos: ['Almacen'] },
+  // Lienzo 5.1: la pestaña RDC solo la ve Planeamiento (y Developer, que prueba el sistema).
+  { to: '/planeamiento/rdc', etiqueta: 'RDC', permiso: 'rdc.ver_propios', excluidos: ['Almacen'], soloRoles: ['Planeamiento', 'Developer'] },
   { to: '/planeamiento/catalogo', etiqueta: 'Catálogo', permiso: 'catalogo.ver', excluidos: ['Almacen'] },
 ]
 // Campo (Supervisor/Residencia) entra a su Reporte diario sin la cabecera de
@@ -23,7 +24,7 @@ const esMovil = useEsMovil()
 // En celular el orden es RDC | Frentes | Catálogo (se abre en RDC); en
 // escritorio se queda Frentes | RDC | Catálogo.
 const tabs = computed(() => {
-  const visibles = TABS.filter((t) => auth.tienePermiso(t.permiso) && !t.excluidos.includes(auth.nombreRol))
+  const visibles = TABS.filter((t) => auth.tienePermiso(t.permiso) && !t.excluidos.includes(auth.nombreRol) && (!t.soloRoles || t.soloRoles.includes(auth.nombreRol)))
   if (!esMovil.value) return visibles
   const orden = ['/planeamiento/rdc', '/planeamiento/frentes', '/planeamiento/catalogo']
   return [...visibles].sort((a, b) => orden.indexOf(a.to) - orden.indexOf(b.to))

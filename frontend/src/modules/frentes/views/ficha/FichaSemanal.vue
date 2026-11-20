@@ -1,417 +1,485 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { cargarSemana, fechasLimiteReportes } from '../../services/semanalService'
+// PRUEBA · Plan semanal del lienzo 5.1c. Semana jueves a miércoles; todo lo
+// que se ve (curva S, Stand By, metrados y fuerza laboral) es de la semana
+// elegida. Solo lectura: avance aprobado (bandeja / Control diario) y RDC
+// finalizados.
+import { computed, onMounted, ref, watch } from 'vue'
 import {
-  armarDias,
-  armarPartidas,
-  hora,
-  hoyIso,
-  lunesDe,
-  numero,
-  numeroSemana,
-  rangoSemana,
-  sumarDias,
-  textoResumenSemana,
-} from '../../utils/semanal'
+  cargarCurva, cargarCronograma, curvaEjecutada, cargarSemanaRdc, causaStandBy,
+  minutosStandBy, semanaDe, fechaCorta, num,
+} from '../../services/controlObraService'
+import { descargarExcel } from '../../../../utils/exportarExcel'
 
-// Reemplaza a la matriz mensual de "Metrados": por cada semana (lunes a
-// domingo), los 7 días con el resumen de su bitácora y sus metrados, o los
-// totales por partida. Solo lectura (frente-semanal-referencia.html).
-const props = defineProps({
-  frente: { type: Object, required: true },
-})
+const props = defineProps({ frente: { type: Object, required: true } })
 
-const hoy = hoyIso()
-const lunesActual = lunesDe(hoy)
-const lunesSemana1 = ref(null)
-const lunes = ref(null)
-const vista = ref('dia')
-const abiertos = ref(new Set())
+const iso = (d) => d.toISOString().slice(0, 10)
+const addD = (s, n) => { const d = new Date(`${s}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return iso(d) }
+const hoy = iso(new Date(Date.now() - 5 * 3600000))
+const seguro = (p, def) => p.catch((e) => { console.warn(e); return def })
+
 const cargando = ref(true)
-const error = ref('')
-// Semana ya cargada → no se vuelve a pedir al ir y volver con ‹ ›.
+const curva = ref({ param: null, puntos: [] })
+const crono = ref({ partidas: [], avance: [], porAprobar: [], ajustes: [] })
+const sel = ref('')
+const rdc = ref([])
+const cargandoSem = ref(false)
 const cache = new Map()
-const datos = ref(null)
 
-async function iniciar() {
-  cargando.value = true
-  error.value = ''
-  cache.clear()
-  try {
-    const { primera, ultima } = await fechasLimiteReportes(props.frente.id, sumarDias(lunesActual, 6))
-    // Semana 1: la que contiene el inicio del frente o, si no lo tiene, su primer reporte.
-    lunesSemana1.value = lunesDe(props.frente.fecha_inicio ?? primera ?? hoy)
-    if (lunesSemana1.value > lunesActual) lunesSemana1.value = lunesActual
-    // Al entrar: la semana actual; si todavía no tiene reportes, la última que sí.
-    const conReportesHoy = ultima && ultima >= lunesActual
-    lunes.value = conReportesHoy || !ultima ? lunesActual : lunesDe(ultima)
-    if (lunes.value < lunesSemana1.value) lunesSemana1.value = lunes.value
-    await cargar()
-  } catch (e) {
-    console.error(e)
-    error.value = `No se pudo cargar la semana${e?.message ? ': ' + e.message : '.'}`
-    cargando.value = false
-  }
-}
-
-async function cargar() {
-  const clave = lunes.value
-  abiertos.value = new Set()
-  if (cache.has(clave)) {
-    datos.value = cache.get(clave)
-    cargando.value = false
-    return
-  }
-  cargando.value = true
-  error.value = ''
-  try {
-    const r = await cargarSemana(props.frente.id, clave, sumarDias(clave, 6))
-    cache.set(clave, r)
-    if (lunes.value === clave) datos.value = r
-  } catch (e) {
-    console.error(e)
-    error.value = `No se pudo cargar la semana${e?.message ? ': ' + e.message : '.'}`
-  } finally {
-    if (lunes.value === clave) cargando.value = false
-  }
-}
-watch(() => props.frente.id, iniciar, { immediate: true })
-
-const nSemana = computed(() => (lunes.value && lunesSemana1.value ? numeroSemana(lunes.value, lunesSemana1.value) : 1))
-const puedeAtras = computed(() => lunes.value > lunesSemana1.value)
-const puedeAdelante = computed(() => lunes.value < lunesActual)
-function moverSemana(delta) {
-  lunes.value = sumarDias(lunes.value, 7 * delta)
-  cargar()
-}
-
-const dias = computed(() => (datos.value && lunes.value ? armarDias(lunes.value, datos.value.reportes, datos.value.bitacora, datos.value.metrados) : []))
-const partidas = computed(() => armarPartidas(dias.value))
-const sinReportes = computed(() => !!datos.value && !datos.value.reportes.length)
-
-const kpis = computed(() => {
-  const transcurridos = dias.value.filter((d) => !d.futuro).length
-  return {
-    reportados: dias.value.filter((d) => d.conReporte).length,
-    transcurridos,
-    actividades: dias.value.reduce((s, d) => s + d.bitacora.length, 0),
-    partidas: partidas.value.length,
-    sinMetrado: dias.value.filter((d) => d.conReporte && !d.metrados.length).length,
-  }
+onMounted(async () => {
+  const id = props.frente.id
+  const [c, cr] = await Promise.all([
+    seguro(cargarCurva(id), { param: null, puntos: [] }),
+    seguro(cargarCronograma(id), { partidas: [], avance: [], porAprobar: [], ajustes: [] }),
+  ])
+  curva.value = c; crono.value = cr
+  const ult = semanas.value[semanas.value.length - 1]
+  sel.value = ult?.clave || ''
+  cargando.value = false
 })
 
-function alternar(d) {
-  if (!d.conReporte) return
-  const s = new Set(abiertos.value)
-  if (s.has(d.n)) s.delete(d.n)
-  else s.add(d.n)
-  abiertos.value = s
-}
-const rangoHoras = (l) => (l.hora_fin ? `${hora(l.hora_inicio)}–${hora(l.hora_fin)}` : hora(l.hora_inicio))
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic']
-const fechaLarga = (iso) => `${Number(iso.slice(8, 10))} de ${MESES[Number(iso.slice(5, 7)) - 1]}`
-const DIAS_LARGOS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+const curvaEj = computed(() => curvaEjecutada(curva.value.puntos, crono.value.partidas, crono.value.avance, crono.value.ajustes))
+const puntos = computed(() => curvaEj.value.puntos)
+const fechaDato = computed(() => curvaEj.value.ultima || hoy)
+const inicio = computed(() => props.frente.fecha_inicio || curva.value.puntos[0]?.fecha || hoy)
 
-// ---- Copiar resumen ----
-const aviso = ref('')
-let tAviso = null
-function avisar(t) {
-  aviso.value = t
-  clearTimeout(tAviso)
-  tAviso = setTimeout(() => (aviso.value = ''), 2400)
-}
-async function copiarResumen() {
-  try {
-    await navigator.clipboard.writeText(textoResumenSemana(props.frente.nombre, nSemana.value, lunes.value, dias.value))
-    avisar('Resumen copiado')
-  } catch {
-    avisar('No se pudo copiar el resumen')
+const semanas = computed(() => {
+  const out = []
+  let d = semanaDe(inicio.value).desde
+  while (d <= hoy && out.length < 80) { const s = semanaDe(d); out.push(s); d = addD(s.hasta, 1) }
+  return out
+})
+const semana = computed(() => semanas.value.find((s) => s.clave === sel.value) || null)
+const dias = computed(() => (semana.value ? Array.from({ length: 7 }, (_, i) => addD(semana.value.desde, i)) : []))
+const DL = ['Jue', 'Vie', 'Sáb', 'Dom', 'Lun', 'Mar', 'Mié']
+
+watch(semana, async (s) => {
+  if (!s) return
+  if (cache.has(s.clave)) { rdc.value = cache.get(s.clave); return }
+  cargandoSem.value = true
+  const r = await seguro(cargarSemanaRdc(props.frente.id, s.desde, s.hasta), [])
+  cache.set(s.clave, r)
+  if (sel.value === s.clave) rdc.value = r
+  cargandoSem.value = false
+})
+
+// ---------- indicadores ----------
+const corte = computed(() => (semana.value ? (semana.value.hasta < fechaDato.value ? semana.value.hasta : fechaDato.value) : null))
+const enCurso = computed(() => semana.value && semana.value.hasta > fechaDato.value)
+const pAt = (f, campo) => { const p = [...puntos.value].reverse().find((x) => x.fecha <= f && x[campo] != null); return p ? Number(p[campo]) : null }
+const kp = computed(() => (corte.value ? pAt(corte.value, 'programado_pct') : null))
+const kpFin = computed(() => (semana.value ? pAt(semana.value.hasta, 'programado_pct') : null))
+const kv = computed(() => (corte.value && semana.value.desde <= fechaDato.value ? pAt(corte.value, 'ejecutado_pct') : null))
+const kdv = computed(() => (kv.value != null && kp.value != null ? kv.value - kp.value : null))
+const tolI = computed(() => Number(curva.value.param?.tol_inf ?? -3))
+const tolS = computed(() => Number(curva.value.param?.tol_sup ?? 6))
+const alerta = computed(() => Number(curva.value.param?.alerta_desde ?? 4))
+const col = (d) => (d == null ? '' : d < tolI.value || d > tolS.value ? '#f87171' : d > alerta.value ? '#fbbf24' : '#4ade80')
+
+// ---------- metrados de la semana (solo aprobado) ----------
+const P = computed(() => new Map(crono.value.partidas.map((p) => [p.edt, p])))
+const metSemana = computed(() => {
+  if (!semana.value) return []
+  const m = new Map()
+  for (const a of crono.value.avance) {
+    if (!m.has(a.edt)) m.set(a.edt, { acum: 0, sem: 0, dias: new Set() })
+    const x = m.get(a.edt)
+    if (a.fecha <= semana.value.hasta) x.acum += a.cantidad
+    if (a.fecha >= semana.value.desde && a.fecha <= semana.value.hasta && a.cantidad) { x.sem += a.cantidad; x.dias.add(a.fecha) }
   }
+  return [...m.entries()].filter(([, x]) => x.sem > 1e-9).map(([edt, x]) => {
+    const p = P.value.get(edt) || {}
+    const q = Number(p.metrado || 0)
+    return { edt, nombre: p.partida || p.nombre || edt, unidad: p.unidad || '', sem: x.sem, acum: x.acum, q, pct: q ? (x.acum / q) * 100 : 0, dias: x.dias }
+  }).sort((a, b) => a.edt.localeCompare(b.edt, undefined, { numeric: true }))
+})
+const diasConMetrado = computed(() => new Set(metSemana.value.flatMap((m) => [...m.dias])))
+
+// ---------- Stand By ----------
+const eventos = computed(() => {
+  const out = []
+  for (const r of rdc.value) {
+    for (const s of [...(r.rdc_reporte_standby ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))) {
+      const c = causaStandBy(s)
+      let act = s.actividad, obs = null
+      if (!act && s.responsable && s.responsable.length > 12) { act = s.responsable; obs = 'La actividad está escrita en el campo "responsable" del RDC' }
+      if (!act) obs = 'El RDC no indica la actividad afectada'
+      out.push({ fecha: r.fecha, act, obs, nota: s.comentario, c, desde: s.desde?.slice(0, 5), hasta: s.hasta?.slice(0, 5), min: minutosStandBy(s) })
+    }
+  }
+  return out
+})
+const sbTot = computed(() => eventos.value.reduce((a, e) => a + e.min, 0))
+const CAUS = [
+  { k: 'cv', c: '#60a5fa' }, { k: 'cc', c: '#f87171' }, { k: 'cl', c: '#fbbf24' }, { k: 'ex', c: '#c084fc' }, { k: 'ot', c: '#9ca3af' },
+]
+const porCausa = computed(() => CAUS.map((x) => {
+  const ev = eventos.value.filter((e) => e.c.k === x.k)
+  return { ...x, t: ev[0]?.c.t, r: ev[0]?.c.r, min: ev.reduce((a, e) => a + e.min, 0) }
+}).filter((x) => x.min > 0))
+const actividades = computed(() => {
+  const m = new Map()
+  for (const e of eventos.value) {
+    const t = (e.act || '').toLowerCase()
+    const k = t.includes('erfora') ? 'Perforación e inyección' : t.includes('malla') ? 'Instalación de malla' : t.includes('cable') ? 'Tensado de cable' : t.includes('eplanteo') ? 'Replanteo de puntos' : e.act ? e.act : 'Sin actividad en el RDC'
+    m.set(k, (m.get(k) || 0) + e.min)
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+})
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+const hayOtro = computed(() => eventos.value.some((e) => e.c.k === 'ot'))
+
+// ---------- fuerza laboral ----------
+const PLURAL = { Capataz: 'Capataces', Operario: 'Operarios', Oficial: 'Oficiales', Peón: 'Peones', Vigía: 'Vigías' }
+const SOPORTE = ['Camioneta', 'Minibús', 'Camión grúa', 'Camión Grúa', 'Camión Baranda', 'Camión baranda', 'Cisterna', 'Volquete']
+const porDia = computed(() => {
+  const m = new Map()
+  for (const r of rdc.value) {
+    const x = m.get(r.fecha) || { mod: {}, veh: {} }
+    for (const p of r.rdc_reporte_personal ?? []) if ((p.tipo || 'directa') === 'directa') x.mod[p.categoria] = (x.mod[p.categoria] || 0) + Number(p.cantidad || 0)
+    for (const q of r.rdc_reporte_maquinaria ?? []) if (q.categoria === 'soporte' || SOPORTE.includes(q.tipo)) { const t = q.tipo.charAt(0) + q.tipo.slice(1).toLowerCase(); x.veh[t] = (x.veh[t] || 0) + Number(q.cantidad || 0) }
+    m.set(r.fecha, x)
+  }
+  return m
+})
+const catsMod = computed(() => {
+  const orden = ['Capataz', 'Operario', 'Oficial', 'Peón', 'Vigía']
+  const s = new Set(); for (const x of porDia.value.values()) Object.keys(x.mod).forEach((k) => s.add(k))
+  return [...s].sort((a, b) => (orden.indexOf(a) + 99 * (orden.indexOf(a) < 0)) - (orden.indexOf(b) + 99 * (orden.indexOf(b) < 0)))
+})
+const catsVeh = computed(() => { const s = new Set(); for (const x of porDia.value.values()) Object.keys(x.veh).forEach((k) => s.add(k)); return [...s].sort() })
+const tMod = (d) => { const x = porDia.value.get(d); return x ? Object.values(x.mod).reduce((a, b) => a + b, 0) : null }
+const tOp = (d) => { const x = porDia.value.get(d); return x ? Object.values(x.veh).reduce((a, b) => a + b, 0) : null }
+const tSup = (d) => (porDia.value.has(d) ? 1 : null)
+const tTot = (d) => (porDia.value.has(d) ? tMod(d) + tOp(d) + 1 : null)
+const diasRdc = computed(() => dias.value.filter((d) => porDia.value.has(d)))
+const promedio = computed(() => (diasRdc.value.length ? diasRdc.value.reduce((a, d) => a + tTot(d), 0) / diasRdc.value.length : 0))
+const hhSemana = computed(() => diasRdc.value.reduce((a, d) => a + tTot(d) * 9, 0))
+const FCOL = { mod: '#3b82f6', op: '#f97316', sup: '#eab308' }
+
+// ---------- gráfico de fuerza laboral ----------
+const fl = computed(() => {
+  const W = 460, H = 330, L = 30, B = 34, T = 24
+  const mx = Math.max(8, Math.ceil((Math.max(0, ...dias.value.map((d) => tTot(d) || 0)) + 2) / 4) * 4)
+  const bw = (W - L - 10) / 7
+  const Y = (v) => T + (H - T - B) * (1 - v / mx)
+  const grid = []; for (let v = 0; v <= mx; v += mx > 24 ? 8 : 4) grid.push({ v, y: Y(v) })
+  const bars = dias.value.map((d, i) => {
+    const x = L + i * bw + bw * 0.18, w = bw * 0.64
+    if (!porDia.value.has(d)) return { d, i, x, w, sin: true }
+    let y = H - B
+    const segs = [['mod', tMod(d)], ['op', tOp(d)], ['sup', 1]].map(([k, v]) => { const h = (H - T - B) * v / mx; y -= h; return { k, v, y, h } })
+    return { d, i, x, w, segs, top: y, tot: tTot(d) }
+  })
+  return { W, H, L, B, grid, bars }
+})
+
+// ---------- curva S de la semana ----------
+const cs = computed(() => {
+  const W = 760, H = 300, L = 44, R = 16, T = 26, B = 46
+  const pts = puntos.value
+  if (!pts.length || !semana.value) return null
+  const f0 = pts[0].fecha, f1 = pts[pts.length - 1].fecha
+  const n = Math.max(1, Math.round((new Date(f1) - new Date(f0)) / 86400000))
+  const X = (f) => L + (Math.round((new Date(f) - new Date(f0)) / 86400000) / n) * (W - L - R)
+  const Y = (v) => T + (H - T - B) * (1 - v / 100)
+  const prog = pts.map((p) => `${X(p.fecha).toFixed(1)},${Y(Number(p.programado_pct)).toFixed(1)}`).join(' ')
+  const up = pts.map((p) => `${X(p.fecha).toFixed(1)},${Y(Math.min(100, Number(p.programado_pct) + tolS.value)).toFixed(1)}`)
+  const lo = pts.map((p) => `${X(p.fecha).toFixed(1)},${Y(Math.max(0, Number(p.programado_pct) + tolI.value)).toFixed(1)}`).reverse()
+  const ej = pts.filter((p) => p.ejecutado_pct != null && p.fecha <= (corte.value || '')).map((p) => `${X(p.fecha).toFixed(1)},${Y(Number(p.ejecutado_pct)).toFixed(1)}`).join(' ')
+  const xw = (W - L - R) / n
+  const sem = { x: X(semana.value.desde) - xw / 2, w: 7 * xw }
+  const labs = semanas.value.filter((s) => s.desde >= f0 && s.desde <= f1).map((s) => ({ t: s.clave, x: (X(s.desde) + X(s.hasta < f1 ? s.hasta : f1)) / 2, on: s.clave === sel.value }))
+  const ticks = pts.filter((_, i) => i % 3 === 0).map((p) => ({ x: X(p.fecha), t: fechaCorta(p.fecha) }))
+  let mk = null
+  if (kv.value != null && kp.value != null) {
+    const x = X(corte.value)
+    mk = { x, yp: Y(kp.value), ye: Y(kv.value), bx: x < W - R - 170 ? x + 10 : x - 170, c: col(kdv.value) }
+  }
+  return { W, H, L, R, T, B, prog, band: `${up.join(' ')} ${lo.join(' ')}`, ej, sem, labs, ticks, mk, Y, grid: [0, 25, 50, 75, 100] }
+})
+
+// ---------- exportar ----------
+async function exportar() {
+  const s = semana.value
+  if (!s) return
+  const nom = props.frente.nombre
+  await descargarExcel(`Plan_semanal_${nom}_${s.clave}_${s.desde}_${s.hasta}.xlsx`.replace(/\s+/g, '_'), [
+    { nombre: 'Resumen', anchos: [34, 18], filas: [
+      { Concepto: 'Frente', Valor: nom },
+      { Concepto: 'Semana', Valor: `${s.clave} (${fechaCorta(s.desde)} al ${fechaCorta(s.hasta)})` },
+      { Concepto: 'Fecha de dato', Valor: corte.value },
+      { Concepto: 'Programado %', Valor: kp.value != null ? +kp.value.toFixed(2) : '' },
+      { Concepto: 'Ejecutado % (aprobado)', Valor: kv.value != null ? +kv.value.toFixed(2) : '' },
+      { Concepto: 'Desviación %', Valor: kdv.value != null ? +kdv.value.toFixed(2) : '' },
+      { Concepto: 'Stand By total (hh:mm)', Valor: hhmm(sbTot.value) },
+      { Concepto: 'Promedio diario de personas', Valor: +promedio.value.toFixed(1) },
+      { Concepto: 'HH de la semana', Valor: hhSemana.value },
+    ] },
+    { nombre: 'Metrados', anchos: [8, 46, 8, 12, 12, 12, 10], filas: metSemana.value.map((m) => ({ EDT: m.edt, Partida: m.nombre, 'U.M.': m.unidad, Semana: +m.sem.toFixed(2), Acumulado: +m.acum.toFixed(2), Vigente: +m.q.toFixed(2), 'Avance %': +m.pct.toFixed(1) })) },
+    { nombre: 'Stand By', anchos: [5, 12, 52, 30, 30, 14, 10], filas: eventos.value.map((e, i) => ({ 'N°': i + 1, Fecha: e.fecha, 'Actividad afectada': e.act || 'Sin actividad en el RDC', Causa: e.c.t, Responsable: e.c.r, Horario: e.desde ? `${e.desde}-${e.hasta}` : 'total', 'Total hh:mm': hhmm(e.min) })) },
+    { nombre: 'Fuerza laboral', anchos: [32, 9, 9, 9, 9, 9, 9, 9], filas: [
+      ...catsMod.value.map((c) => filaFL(PLURAL[c] || c, (d) => porDia.value.get(d)?.mod[c] ?? 0)),
+      filaFL('Total mano de obra directa', tMod),
+      ...catsVeh.value.map((v) => filaFL('Conductor ' + v.toLowerCase(), (d) => porDia.value.get(d)?.veh[v] ?? 0)),
+      filaFL('Total operadores / conductores', tOp),
+      filaFL('Supervisor de campo', tSup),
+      filaFL('Total en el frente', tTot),
+    ] },
+    { nombre: 'Curva S', anchos: [12, 14, 14], filas: puntos.value.map((p) => ({ Fecha: p.fecha, 'Programado %': Number(p.programado_pct), 'Ejecutado %': p.ejecutado_pct != null ? Number(p.ejecutado_pct) : '' })) },
+  ])
+}
+function filaFL(t, f) {
+  const o = { 'Cargo / categoría': t }
+  dias.value.forEach((d, i) => { o[`${DL[i]} ${d.slice(8, 10)}`] = porDia.value.has(d) ? f(d) : '' })
+  return o
 }
 </script>
 
 <template>
-  <div class="sm">
-    <div class="sm-bar">
-      <div class="sm-wk">
-        <button type="button" class="sm-nav" aria-label="Semana anterior" :disabled="!puedeAtras || !lunes" @click="moverSemana(-1)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 6l-6 6 6 6" /></svg>
-        </button>
-        <div class="sm-wkl">
-          <b>Semana {{ nSemana }}</b>
-          <span v-if="lunes">{{ rangoSemana(lunes) }}</span>
-        </div>
-        <button type="button" class="sm-nav" aria-label="Semana siguiente" :disabled="!puedeAdelante || !lunes" @click="moverSemana(1)">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
-        </button>
-      </div>
-      <div class="sm-acts">
-        <div class="sm-seg" role="group" aria-label="Agrupar">
-          <button type="button" :aria-pressed="vista === 'dia'" @click="vista = 'dia'">Por día</button>
-          <button type="button" :aria-pressed="vista === 'partida'" @click="vista = 'partida'">Por partida</button>
-        </div>
-        <button type="button" class="sm-btn" :disabled="cargando || !dias.length || sinReportes" @click="copiarResumen">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
-          Copiar resumen
-        </button>
-      </div>
-    </div>
-
-    <div v-if="error" class="sm-error">
-      <span>{{ error }}</span>
-      <button type="button" class="sm-btn" @click="lunesSemana1 ? cargar() : iniciar()">Reintentar</button>
-    </div>
-
-    <template v-else-if="cargando">
-      <div class="sm-kpis"><div v-for="i in 4" :key="i" class="sm-kpi"><div class="sk sk-l"></div><div class="sk sk-v"></div></div></div>
-      <div class="sm-days"><div v-for="i in 7" :key="i" class="sm-day sk-day"><div class="sk sk-dn"></div><div class="sk-txt"><div class="sk"></div><div class="sk corto"></div></div></div></div>
-    </template>
-
-    <template v-else-if="datos">
-      <div class="sm-kpis">
-        <div class="sm-kpi"><div class="l">Días reportados</div><div class="v">{{ kpis.reportados }}<small> / {{ kpis.transcurridos }}</small></div></div>
-        <div class="sm-kpi"><div class="l">Actividades</div><div class="v">{{ kpis.actividades }}</div></div>
-        <div class="sm-kpi"><div class="l">Partidas con avance</div><div class="v">{{ kpis.partidas }}</div></div>
-        <div class="sm-kpi"><div class="l">Días sin metrado</div><div class="v" :class="{ rojo: kpis.sinMetrado > 0 }">{{ kpis.sinMetrado }}</div></div>
-      </div>
-
-      <div v-if="sinReportes" class="pl-vacio sm-vacio">No hay reportes en esta semana</div>
-
-      <!-- Por día -->
-      <div v-else-if="vista === 'dia'" class="sm-days">
-        <div v-for="d in dias" :key="d.n" class="sm-day" :class="{ open: abiertos.has(d.n), hoy: d.hoy, vacio: !d.conReporte }">
-          <button
-            type="button"
-            class="sm-dh"
-            :disabled="!d.conReporte"
-            :aria-expanded="d.conReporte ? abiertos.has(d.n) : undefined"
-            @click="alternar(d)"
-          >
-            <div class="sm-dn"><small>Día {{ d.n }}</small><b>{{ d.dia }}</b><span>{{ d.dow }}</span></div>
-            <div class="sm-dm">
-              <div class="sm-dt">{{ d.resumen }}</div>
-              <div v-if="d.conReporte" class="sm-chips">
-                <span class="sm-pill neu">{{ d.bitacora.length }} {{ d.bitacora.length === 1 ? 'actividad' : 'actividades' }}</span>
-                <span v-if="d.metrados.length" class="sm-pill info">{{ d.metrados.length }} {{ d.metrados.length === 1 ? 'metrado' : 'metrados' }}</span>
-                <span v-else class="sm-pill warn">Sin metrado</span>
-              </div>
-            </div>
-            <div class="sm-dr">
-              <span class="sm-pill" :class="!d.conReporte ? 'neu' : d.estado === 'Enviado' ? 'ok' : 'warn'">{{ d.estado ?? 'Sin reporte' }}</span>
-              <svg v-if="d.conReporte" class="sm-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-            </div>
+  <div class="pl-col sem">
+    <p v-if="cargando" class="pl-empty">Cargando…</p>
+    <template v-else>
+      <div class="top">
+        <div class="seg" role="group" aria-label="Semana">
+          <button v-for="s in semanas" :key="s.clave" type="button" :class="{ on: sel === s.clave }" :aria-pressed="sel === s.clave" @click="sel = s.clave">
+            {{ s.clave }} · {{ s.desde.slice(8, 10) }}.{{ s.desde.slice(5, 7) }}–{{ s.hasta.slice(8, 10) }}.{{ s.hasta.slice(5, 7) }}
           </button>
-
-          <div v-if="abiertos.has(d.n)" class="sm-dd">
-            <div class="sm-colx">
-              <h4><span>Bitácora</span><span>{{ d.bitacora.length }}</span></h4>
-              <div v-for="(l, i) in d.bitacora" :key="i" class="sm-bi">
-                <time>{{ rangoHoras(l) }}</time>
-                <p>{{ l.actividad }}</p>
-              </div>
-              <p v-if="!d.bitacora.length" class="sm-mut">Sin bitácora registrada.</p>
-            </div>
-            <div class="sm-colx">
-              <h4><span>Metrados del día</span><span>{{ d.metrados.length }}</span></h4>
-              <template v-if="d.metrados.length">
-                <div v-for="(m, i) in d.metrados" :key="i" class="sm-mi">
-                  <span>{{ m.partida_nombre }}<em v-if="m.partida_codigo">{{ m.partida_codigo }}</em></span>
-                  <b>{{ numero(m.cantidad) }}<small>{{ m.unidad }}</small></b>
-                </div>
-              </template>
-              <div v-else class="sm-none">No se registraron metrados este día. Revisa el reporte.</div>
-              <router-link v-for="r in d.reportes" :key="r.id" class="sm-link" :to="{ name: 'rdc-detalle', params: { id: r.id } }">
-                Abrir reporte del {{ fechaLarga(d.fecha) }}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6" /></svg>
-              </router-link>
-            </div>
-          </div>
         </div>
+        <button type="button" class="gh" :disabled="!semana || cargandoSem" @click="exportar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M9 13l6 6M15 13l-6 6" /></svg>
+          Exportar semana a Excel
+        </button>
       </div>
 
-      <!-- Por partida -->
-      <div v-else class="sm-tbl">
-        <div class="sm-tr h">
-          <span>PARTIDA</span><span class="sm-um">U.M.</span><span class="sm-q">SEMANA</span><span class="sm-um">DÍAS CON AVANCE</span>
-        </div>
-        <div v-for="p in partidas" :key="`${p.codigo}|${p.nombre}|${p.unidad}`" class="sm-tr">
-          <div class="sm-nm">{{ p.nombre }}<em v-if="p.codigo">{{ p.codigo }}</em></div>
-          <span class="sm-um sm-mut2">{{ p.unidad }}</span>
-          <span class="sm-q">{{ numero(p.total) }}<small class="sm-um-movil"> {{ p.unidad }}</small></span>
-          <div class="sm-dots">
-            <span
-              v-for="(l, i) in ['L', 'M', 'M', 'J', 'V', 'S', 'D']"
-              :key="i"
-              class="sm-dot"
-              :class="{ on: p.dias.has(i + 1) }"
-              :title="`Día ${i + 1}`"
-              :aria-label="`${DIAS_LARGOS[i]}: ${p.dias.has(i + 1) ? 'avance' : 'sin avance'}`"
-              role="img"
-            >{{ l }}</span>
+      <div class="kpis">
+        <div class="kpi"><p class="l">Programado a la fecha de dato</p><p class="v">{{ kp != null ? kp.toFixed(1) + '%' : '—' }}</p><p class="s">{{ enCurso ? `Al ${fechaCorta(corte)} · corte ${fechaCorta(semana?.hasta)}: ${kpFin != null ? kpFin.toFixed(1) : '—'} %` : `Corte miércoles ${fechaCorta(semana?.hasta)}` }}</p></div>
+        <div class="kpi"><p class="l">Ejecutado</p><p class="v am">{{ kv != null ? kv.toFixed(1) + '%' : '—' }}</p><p class="s">{{ enCurso ? `En curso · al ${fechaCorta(corte)}` : 'Aprobado en bandeja' }}</p></div>
+        <div class="kpi"><p class="l">Desviación</p><p class="v" :style="{ color: col(kdv) }">{{ kdv != null ? (kdv > 0 ? '+' : '') + kdv.toFixed(1) + ' %' : '—' }}</p><p class="s">Tolerancia {{ tolI }} / +{{ tolS }}</p></div>
+        <div class="kpi"><p class="l">Días reportados</p><p class="v">{{ rdc.length }}</p><p class="s">RDC finalizados · {{ fechaCorta(semana?.desde) }}–{{ fechaCorta(semana?.hasta) }}</p></div>
+        <div class="kpi"><p class="l">Partidas con avance</p><p class="v">{{ metSemana.length }}</p><p class="s">con metrado aprobado</p></div>
+        <div class="kpi"><p class="l">Días sin metrado</p><p class="v">{{ Math.max(0, rdc.length - diasConMetrado.size) }}</p><p class="s">RDC sin partidas aprobadas</p></div>
+      </div>
+
+      <div class="g2 a">
+        <section class="card">
+          <h2>Curva S · {{ sel }}</h2>
+          <p class="sub">Avance ponderado por HH · semana {{ fechaCorta(semana?.desde) }} – {{ fechaCorta(semana?.hasta) }} resaltada</p>
+          <div class="leg">
+            <span><i style="background: #cbd5e1; height: 3px"></i>Programado Rev00</span>
+            <span><i style="background: #f59e0b; height: 3px"></i>Ejecutado aprobado</span>
+            <span><i style="background: rgba(34, 197, 94, 0.35)"></i>Banda {{ tolI }} % / +{{ tolS }} %</span>
+            <span><i style="background: rgba(245, 168, 0, 0.3)"></i>Semana {{ sel }}</span>
+          </div>
+          <svg v-if="cs" :viewBox="`0 0 ${cs.W} ${cs.H}`" class="svg" role="img" :aria-label="`Curva S con la semana ${sel} resaltada`">
+            <rect :x="cs.sem.x" :y="cs.T" :width="cs.sem.w" :height="cs.H - cs.T - cs.B" fill="#f5a800" fill-opacity="0.08" stroke="#f5a800" stroke-opacity="0.35" />
+            <g v-for="g in cs.grid" :key="g">
+              <line :x1="cs.L" :x2="cs.W - cs.R" :y1="cs.Y(g)" :y2="cs.Y(g)" stroke="#2d3139" />
+              <text :x="cs.L - 6" :y="cs.Y(g) + 4" text-anchor="end" font-size="10.5" fill="#9ca3af">{{ g }}%</text>
+            </g>
+            <text v-for="t in cs.ticks" :key="t.x" :x="t.x" :y="cs.H - 30" text-anchor="middle" font-size="9" fill="#6b7280">{{ t.t }}</text>
+            <text v-for="l in cs.labs" :key="l.t" :x="l.x" :y="cs.H - 14" text-anchor="middle" font-size="11" font-weight="700" :fill="l.on ? '#f5b93a' : '#9ca3af'">{{ l.t }}</text>
+            <polygon :points="cs.band" fill="#22c55e" fill-opacity="0.09" />
+            <polyline :points="cs.prog" fill="none" stroke="#cbd5e1" stroke-width="2.2" />
+            <polyline v-if="cs.ej" :points="cs.ej" fill="none" stroke="#f59e0b" stroke-width="3" stroke-linejoin="round" />
+            <g v-if="cs.mk">
+              <line :x1="cs.mk.x" :x2="cs.mk.x" :y1="cs.T" :y2="cs.H - cs.B" :stroke="cs.mk.c" stroke-dasharray="4 4" />
+              <circle :cx="cs.mk.x" :cy="cs.mk.yp" r="4.5" fill="#cbd5e1" stroke="#111315" stroke-width="1.5" />
+              <circle :cx="cs.mk.x" :cy="cs.mk.ye" r="6" :fill="cs.mk.c" stroke="#111315" stroke-width="2" />
+              <rect :x="cs.mk.bx" :y="cs.mk.ye - 44" width="160" height="40" rx="7" fill="#202327" :stroke="cs.mk.c" />
+              <text :x="cs.mk.bx + 10" :y="cs.mk.ye - 28" font-size="11" fill="#cbd5e1">Prog. {{ kp.toFixed(1) }} % · Ejec. {{ kv.toFixed(1) }} %</text>
+              <text :x="cs.mk.bx + 10" :y="cs.mk.ye - 12" font-size="12" font-weight="800" :fill="cs.mk.c">Desviación {{ kdv > 0 ? '+' : '' }}{{ kdv.toFixed(1) }} % · al {{ fechaCorta(corte) }}</text>
+            </g>
+          </svg>
+          <p v-else class="mu">Sin curva cargada para este frente.</p>
+        </section>
+
+        <section class="card col">
+          <h2>Stand By · {{ sel }}</h2>
+          <p class="sub">Resumen por causa · RDC finalizados</p>
+          <p v-if="cargandoSem" class="mu">Cargando…</p>
+          <template v-else-if="eventos.length">
+            <div class="tiles">
+              <div class="tile am"><span>Stand By total</span><b>{{ hhmm(sbTot) }} h</b></div>
+              <div class="tile"><span>Eventos · días</span><b>{{ eventos.length }} · {{ new Set(eventos.map((e) => e.fecha)).size }}</b></div>
+            </div>
+            <div v-for="c in porCausa" :key="c.k" class="cau">
+              <div class="ch"><span><span class="tag" :class="c.k">{{ c.t }}</span> <span class="mu">{{ c.r }}</span></span><b>{{ hhmm(c.min) }} h</b></div>
+              <div class="trk"><i :style="{ width: (c.min / sbTot) * 100 + '%', background: c.c }"></i></div>
+            </div>
+            <p class="cap">Actividades más afectadas</p>
+            <ul class="tops"><li v-for="[k, m] in actividades" :key="k"><span>{{ k }}</span><b>{{ hhmm(m) }} h</b></li></ul>
+          </template>
+          <p v-else class="mu">Sin Stand By registrado en los RDC finalizados de la semana.</p>
+          <p class="ok">Solo causas ajenas a DESNIVEL: clima, cliente y terceros.<template v-if="hayOtro"> Hay eventos "Otro": revisar que no sean imputables al contratista.</template><template v-else> Ningún evento imputable al contratista.</template></p>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Metrados de la {{ sel }} por partida</h2>
+        <p class="sub">Semana jueves a miércoles · solo partidas con avance aprobado</p>
+        <table v-if="metSemana.length" class="t">
+          <thead><tr><th>EDT</th><th>Partida</th><th>U.M.</th><th class="r">Semana</th><th class="r">Acumulado</th><th class="r">Vigente</th><th>Avance</th><th>Días con avance (jue → mié)</th></tr></thead>
+          <tbody>
+            <tr v-for="m in metSemana" :key="m.edt">
+              <td class="mu">{{ m.edt }}</td><td class="b">{{ m.nombre }}</td><td class="mu">{{ m.unidad }}</td>
+              <td class="r am b">{{ num(m.sem) }}</td><td class="r">{{ num(m.acum) }}</td><td class="r mu">{{ num(m.q) }}</td>
+              <td><span class="pc"><span>{{ m.pct.toFixed(0) }}%</span><span class="trk"><i :style="{ width: Math.min(100, m.pct) + '%', background: m.pct >= 99.9 ? '#22c55e' : '#f59e0b' }"></i></span></span></td>
+              <td><span class="dots"><span v-for="(d, i) in dias" :key="d" :title="fechaCorta(d)" :class="m.dias.has(d) ? 'on' : d > fechaDato ? 'fut' : ''">{{ DL[i].slice(0, 2) }}</span></span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="mu">Sin metrados aprobados en la semana.</p>
+        <p v-if="enCurso && crono.porAprobar.length" class="mu sm">Metrados aprobados hasta el {{ fechaCorta(fechaDato) }}. Hay {{ crono.porAprobar.length }} metrado(s) esperando tu aprobación en la bandeja.</p>
+      </section>
+
+      <section class="card">
+        <h2>Detalle de Stand By · {{ sel }}</h2>
+        <p class="sub">Actividad afectada, causa y tiempo · hh:mm</p>
+        <table v-if="eventos.length" class="t">
+          <thead><tr><th>N°</th><th>Fecha</th><th>Actividad afectada</th><th>Causa</th><th>Horario</th><th class="r">Total hh:mm</th></tr></thead>
+          <tbody>
+            <tr v-for="(e, i) in eventos" :key="i">
+              <td class="mu">{{ i + 1 }}</td>
+              <td class="nw">{{ e.fecha.slice(8, 10) }}/{{ e.fecha.slice(5, 7) }}/{{ e.fecha.slice(0, 4) }}</td>
+              <td>
+                <span :class="{ am: !e.act }">{{ e.act || 'Sin actividad en el RDC' }}</span>
+                <span v-if="e.obs || e.nota" class="pop" tabindex="0" :aria-label="e.obs || e.nota"><span class="ico" :class="{ warn: e.obs }">{{ e.obs ? '!' : 'i' }}</span><span class="pb">{{ e.obs || e.nota }}</span></span>
+              </td>
+              <td><span class="tag" :class="e.c.k">{{ e.c.t }}</span></td>
+              <td class="mu nw">{{ e.desde ? `${e.desde}–${e.hasta}` : 'sin hora (total)' }}</td>
+              <td class="r am b">{{ hhmm(e.min) }}</td>
+            </tr>
+          </tbody>
+          <tfoot><tr><td colspan="5" class="b">Total {{ sel }} · {{ eventos.length }} eventos</td><td class="r am b">{{ hhmm(sbTot) }} h</td></tr></tfoot>
+        </table>
+        <p v-else class="mu">Sin eventos en la semana.</p>
+      </section>
+
+      <section class="card">
+        <h2>Fuerza laboral · {{ sel }}</h2>
+        <p class="sub">Mano de obra directa, operadores y supervisión según RDC · jornada de 9 h</p>
+        <div class="g2 f">
+          <div>
+            <div class="leg">
+              <span><i :style="{ background: FCOL.mod }"></i>Mano de obra directa</span>
+              <span><i :style="{ background: FCOL.op }"></i>Operadores / conductores</span>
+              <span><i :style="{ background: FCOL.sup }"></i>Supervisión</span>
+            </div>
+            <svg :viewBox="`0 0 ${fl.W} ${fl.H}`" class="svg" role="img" :aria-label="`Fuerza laboral diaria de la semana ${sel}`">
+              <g v-for="g in fl.grid" :key="g.v"><line :x1="fl.L" :x2="fl.W - 6" :y1="g.y" :y2="g.y" stroke="#2d3139" /><text :x="fl.L - 6" :y="g.y + 4" text-anchor="end" font-size="10" fill="#9ca3af">{{ g.v }}</text></g>
+              <g v-for="b in fl.bars" :key="b.d">
+                <text :x="b.x + b.w / 2" :y="fl.H - 12" text-anchor="middle" font-size="10.5" fill="#c9ced6">{{ DL[b.i] }} {{ b.d.slice(8, 10) }}</text>
+                <template v-if="b.sin">
+                  <rect :x="b.x" :y="fl.H - fl.B - 14" :width="b.w" height="14" rx="3" fill="none" stroke="#4b5563" stroke-dasharray="3 3" />
+                  <text :x="b.x + b.w / 2" :y="fl.H - fl.B - 20" text-anchor="middle" font-size="9.5" fill="#6b7280">sin RDC</text>
+                </template>
+                <template v-else>
+                  <rect v-for="sg in b.segs" :key="sg.k" :x="b.x" :y="sg.y" :width="b.w" :height="sg.h" :fill="FCOL[sg.k]"><title>{{ DL[b.i] }} {{ fechaCorta(b.d) }} · {{ sg.k === 'mod' ? 'Mano de obra directa' : sg.k === 'op' ? 'Operadores / conductores' : 'Supervisión' }}: {{ sg.v }}</title></rect>
+                  <text :x="b.x + b.w / 2" :y="b.top - 5" text-anchor="middle" font-size="11" font-weight="700" fill="#f1f3f5">{{ b.tot }}</text>
+                </template>
+              </g>
+            </svg>
+            <div class="tiles t3">
+              <div class="tile"><span>Promedio diario</span><b>{{ promedio.toFixed(1) }} personas</b></div>
+              <div class="tile"><span>HH de la semana</span><b>{{ hhSemana.toLocaleString('es-PE') }} HH</b></div>
+              <div class="tile"><span>Días con RDC</span><b>{{ diasRdc.length }} de 7</b></div>
+            </div>
+          </div>
+          <div>
+            <table class="t fl">
+              <thead><tr><th>Cargo / categoría</th><th v-for="(d, i) in dias" :key="d" class="c">{{ DL[i] }} {{ d.slice(8, 10) }}</th></tr></thead>
+              <tbody>
+                <tr><td colspan="8" class="sec" style="color: #3b82f6">Mano de obra directa</td></tr>
+                <tr v-for="c in catsMod" :key="c"><th scope="row" class="sub2">{{ PLURAL[c] || c }}</th><td v-for="d in dias" :key="d" class="c">{{ porDia.has(d) ? porDia.get(d).mod[c] ?? 0 : '—' }}</td></tr>
+                <tr class="tot"><th scope="row">Total mano de obra directa</th><td v-for="d in dias" :key="d" class="c">{{ tMod(d) ?? '—' }}</td></tr>
+                <tr><td colspan="8" class="sec" style="color: #f97316">Operadores / conductores</td></tr>
+                <tr v-for="v in catsVeh" :key="v"><th scope="row" class="sub2">Conductor {{ v.toLowerCase() }}</th><td v-for="d in dias" :key="d" class="c">{{ porDia.has(d) ? porDia.get(d).veh[v] ?? 0 : '—' }}</td></tr>
+                <tr class="tot"><th scope="row">Total operadores / conductores</th><td v-for="d in dias" :key="d" class="c">{{ tOp(d) ?? '—' }}</td></tr>
+                <tr><td colspan="8" class="sec" style="color: #eab308">Supervisión (staff)</td></tr>
+                <tr><th scope="row" class="sub2">Supervisor de campo</th><td v-for="d in dias" :key="d" class="c">{{ tSup(d) ?? '—' }}</td></tr>
+                <tr class="tot"><th scope="row">Total en el frente</th><td v-for="d in dias" :key="d" class="c">{{ tTot(d) ?? '—' }}</td></tr>
+              </tbody>
+            </table>
+            <p class="mu sm">Conductores: uno por vehículo de soporte declarado en el RDC. Los equipos de perforación los operan los operarios de la mano de obra directa.</p>
           </div>
         </div>
-        <div v-if="!partidas.length" class="pl-vacio">No hay metrados en esta semana.</div>
-      </div>
+      </section>
     </template>
-
-    <div v-if="aviso" class="sm-toast" role="status">{{ aviso }}</div>
   </div>
 </template>
 
 <style scoped>
-.sm {
-  --sm-inv: var(--p-seg-on-bg);
-  --sm-invt: var(--p-seg-on-fg);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.sm-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
-.sm-wk { display: flex; align-items: center; gap: 6px; }
-.sm-nav {
-  width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--p-card); color: var(--p-text);
-  box-shadow: 0 0 0 1px var(--p-line-ctl); display: grid; place-items: center; padding: 0;
-}
-.sm-nav:disabled { opacity: 0.4; cursor: not-allowed; }
-.sm-wkl { min-width: 210px; text-align: center; line-height: 1.2; }
-.sm-wkl b { display: block; font-size: 16px; font-weight: 800; }
-.sm-wkl span { font-size: 12.5px; color: var(--p-muted); font-weight: 600; }
-.sm-acts { display: flex; gap: 8px; flex-wrap: wrap; }
-.sm-seg { display: inline-flex; background: var(--p-chip); border-radius: 12px; padding: 3px; gap: 2px; }
-.sm-seg button {
-  border: 0; background: transparent; padding: 8px 14px; border-radius: 10px; font-weight: 700; font-size: 13px;
-  color: var(--p-muted); min-height: 36px;
-}
-.sm-seg button[aria-pressed='true'] { background: var(--p-card); color: var(--p-text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
-.sm-btn {
-  height: 40px; padding: 0 16px; border-radius: 12px; font-weight: 800; font-size: 13.5px; display: inline-flex;
-  align-items: center; gap: 8px; background: var(--p-card); color: var(--p-text); border: 0; box-shadow: 0 0 0 1px var(--p-line-ctl);
-}
-.sm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.sm-kpis {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--p-line);
-  border-radius: 18px; overflow: hidden; box-shadow: 0 0 0 1px var(--p-line);
-}
-.sm-kpi { background: var(--p-card); padding: 14px 18px; }
-.sm-kpi .l { font-size: 12px; font-weight: 600; color: var(--p-muted); }
-.sm-kpi .v { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.sm-kpi .v small { font-size: 13px; font-weight: 700; color: var(--p-muted); letter-spacing: 0; }
-.sm-kpi .v.rojo { color: var(--p-low-fg); }
-
-.sm-days { display: flex; flex-direction: column; gap: 10px; }
-.sm-day { background: var(--p-card); border-radius: 16px; box-shadow: 0 0 0 1px var(--p-line); overflow: hidden; }
-.sm-dh {
-  width: 100%; display: flex; gap: 14px; align-items: flex-start; padding: 14px; text-align: left;
-  border: 0; background: transparent; color: inherit; font: inherit;
-}
-.sm-dh:not(:disabled):hover { background: var(--p-hover); }
-.sm-dh:disabled { cursor: default; }
-.sm-dn { flex: none; width: 62px; border-radius: 14px; background: var(--p-chip); text-align: center; padding: 7px 0; }
-.sm-dn small { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; color: var(--p-muted); text-transform: uppercase; }
-.sm-dn b { display: block; font-size: 22px; line-height: 1.1; font-weight: 800; }
-.sm-dn span { display: block; font-size: 11px; color: var(--p-muted); font-weight: 700; text-transform: uppercase; }
-.sm-day.hoy .sm-dn { background: var(--sm-inv); color: var(--sm-invt); }
-.sm-day.hoy .sm-dn small, .sm-day.hoy .sm-dn span { color: inherit; opacity: 0.8; }
-.sm-dm { flex: 1; min-width: 0; }
-.sm-dt {
-  font-weight: 700; font-size: 14px; line-height: 1.4;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.sm-day.vacio .sm-dt { color: var(--p-muted); font-weight: 600; }
-.sm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.sm-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 8px; font-size: 11.5px; font-weight: 800; white-space: nowrap; }
-.sm-pill.neu { background: var(--p-chip); color: var(--p-muted); }
-.sm-pill.info { background: var(--p-info-bg); color: var(--p-info-fg); }
-.sm-pill.ok { background: var(--p-ok-bg); color: var(--p-ok-fg); }
-.sm-pill.warn { background: var(--p-warn-bg); color: var(--p-warn-fg); }
-.sm-dr { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-.sm-chev { color: var(--p-faint); transition: transform 0.15s; }
-.sm-day.open .sm-chev { transform: rotate(180deg); }
-
-.sm-dd { display: grid; grid-template-columns: 1.35fr 1fr; border-top: 1px solid var(--p-line); }
-.sm-colx { padding: 14px; min-width: 0; }
-.sm-colx + .sm-colx { border-left: 1px solid var(--p-line); }
-.sm-colx h4 {
-  margin: 0 0 8px; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--p-muted);
-  font-weight: 800; display: flex; justify-content: space-between;
-}
-.sm-bi { display: grid; grid-template-columns: 96px 1fr; gap: 10px; padding: 8px 0; border-top: 1px solid var(--p-line); }
-.sm-bi:first-of-type { border-top: 0; }
-.sm-bi time { font-size: 12px; font-weight: 800; color: var(--p-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sm-bi p { margin: 0; font-size: 13.5px; }
-.sm-mi {
-  display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0;
-  border-top: 1px solid var(--p-line); min-height: 44px;
-}
-.sm-mi:first-of-type { border-top: 0; }
-.sm-mi span { font-size: 13.5px; font-weight: 600; min-width: 0; }
-.sm-mi em, .sm-nm em { display: block; font-style: normal; font-size: 11.5px; color: var(--p-faint); font-weight: 700; }
-.sm-mi b { flex: none; font-weight: 800; font-size: 14.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sm-mi b small { font-size: 11px; color: var(--p-faint); margin-left: 3px; }
-.sm-none { padding: 12px; border-radius: 12px; background: var(--p-warn-bg); color: var(--p-warn-fg); font-size: 13px; font-weight: 700; }
-.sm-link {
-  margin-top: 10px; font-weight: 700; font-size: 13px; color: var(--p-info-fg); display: flex; gap: 6px;
-  align-items: center; min-height: 36px; text-decoration: none; width: fit-content;
-}
-.sm-mut { margin: 0; font-size: 13px; color: var(--p-muted); }
-
-.sm-tbl { background: var(--p-card); border-radius: 18px; box-shadow: 0 0 0 1px var(--p-line); overflow: hidden; }
-.sm-tr {
-  display: grid; grid-template-columns: minmax(0, 1fr) 64px 92px 210px; gap: 12px; align-items: center;
-  padding: 10px 16px; border-top: 1px solid var(--p-line); min-height: 54px;
-}
-.sm-tr.h {
-  border-top: 0; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--p-faint);
-  min-height: 40px; background: var(--p-chip);
-}
-.sm-nm { font-weight: 700; font-size: 14px; min-width: 0; }
-.sm-q { font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sm-mut2 { color: var(--p-muted); font-weight: 700; }
-.sm-um-movil { display: none; }
-.sm-dots { display: flex; gap: 6px; }
-.sm-dot {
-  width: 26px; height: 26px; border-radius: 8px; background: var(--p-chip); display: grid; place-items: center;
-  font-size: 11px; font-weight: 800; color: var(--p-faint);
-}
-.sm-dot.on { background: #f6a800; color: #111; }
-
-.sm-vacio { background: var(--p-card); border-radius: 16px; box-shadow: 0 0 0 1px var(--p-line); }
-.sm-error {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 16px;
-  border-radius: 16px; background: var(--p-low-bg); color: var(--p-low-fg); font-weight: 700; font-size: 14px;
-}
-.sm-toast {
-  position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 60; padding: 10px 18px;
-  border-radius: 12px; background: var(--sm-inv); color: var(--sm-invt); font-weight: 800; font-size: 13.5px;
-  box-shadow: var(--p-shadow-pop);
-}
-
-/* Esqueleto de carga */
-.sk { height: 14px; border-radius: 8px; background: var(--p-chip); animation: sk 1.2s ease-in-out infinite alternate; }
-.sk-l { width: 60%; height: 12px; }
-.sk-v { width: 40%; height: 26px; margin-top: 6px; }
-.sk-day { display: flex; gap: 14px; padding: 14px; }
-.sk-dn { width: 62px; height: 66px; border-radius: 14px; flex: none; }
-.sk-txt { flex: 1; display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
-.sk.corto { width: 45%; }
-@keyframes sk { from { opacity: 0.5; } to { opacity: 1; } }
-
-@media (max-width: 760px) {
-  .sm-wk { flex: 1 1 100%; }
-  .sm-wkl { min-width: 0; flex: 1; }
-  .sm-acts { flex: 1 1 100%; }
-  .sm-acts .sm-btn { flex: 1; justify-content: center; }
-  .sm-kpis { grid-template-columns: repeat(2, 1fr); border-radius: 16px; }
-  .sm-kpi { padding: 10px 14px; }
-  .sm-kpi .v { font-size: 21px; }
-  .sm-dt { display: block; overflow: visible; }
-  .sm-dd { display: block; }
-  .sm-colx + .sm-colx { border-left: 0; border-top: 1px solid var(--p-line); }
-  .sm-bi { grid-template-columns: 78px 1fr; }
-  .sm-tr { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .sm-um { display: none; }
-  .sm-um-movil { display: inline; margin-left: 3px; font-size: 11px; color: var(--p-faint); }
-  .sm-dots { grid-column: 1 / -1; }
-}
+.sem { gap: 16px; }
+.top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 10px; background: var(--p-card); border: 1px solid var(--p-line); }
+.seg button { min-height: 36px; padding: 0 14px; border-radius: 8px; border: 0; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; background: transparent; color: var(--p-muted); }
+.seg button.on { background: #f5a800; color: #0d0f10; }
+.gh { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 10px; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer; background: transparent; color: var(--p-text); border: 1px solid var(--p-line); }
+.gh:disabled { opacity: 0.5; cursor: default; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }
+.kpi { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.kpi .l { margin: 0; color: var(--p-muted); font-size: 12.5px; }
+.kpi .v { margin: 6px 0 3px; font-size: 25px; font-weight: 700; }
+.kpi .s { margin: 0; color: var(--p-muted); font-size: 12px; }
+.g2 { display: grid; gap: 16px; align-items: stretch; }
+.g2.a { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+.g2.f { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.35fr); gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .g2.a, .g2.f { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--p-card); border: 1px solid var(--p-line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card.col { display: flex; flex-direction: column; }
+.card h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.sub { margin: 4px 0 12px; color: var(--p-muted); font-size: 12.5px; }
+.leg { display: flex; flex-wrap: wrap; gap: 14px; margin: 2px 0 6px; font-size: 12px; color: #c9ced6; }
+.leg span { display: inline-flex; align-items: center; gap: 6px; }
+.leg i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.svg { display: block; width: 100%; height: auto; }
+.tiles { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
+.tile { flex: 1 1 120px; padding: 10px 12px; border-radius: 10px; background: var(--p-chip); display: flex; flex-direction: column; gap: 2px; }
+.tile span { font-size: 11.5px; color: var(--p-muted); }
+.tile b { font-size: 22px; font-weight: 800; }
+.tile.am { background: rgba(245, 168, 0, 0.12); }
+.tile.am span, .tile.am b { color: #f5b93a; }
+.t3 { margin-top: 8px; }
+.t3 .tile b { font-size: 17px; }
+.cau { margin-top: 10px; }
+.ch { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.trk { display: block; height: 7px; margin-top: 5px; border-radius: 99px; background: var(--p-line); overflow: hidden; flex: 1 1 auto; }
+.trk i { display: block; height: 100%; }
+.cap { margin: 14px 0 4px; color: var(--p-muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+.tops { list-style: none; margin: 0; padding: 0; }
+.tops li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--p-line); font-size: 12.5px; }
+.tops b { color: #f5b93a; white-space: nowrap; }
+.ok { margin: auto 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(34, 197, 94, 0.1); color: #86efac; font-size: 12px; }
+.card.col .ok { margin-top: 12px; }
+.tag { display: inline-flex; font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+.tag.cv { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
+.tag.cl { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+.tag.cc { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+.tag.ex { background: rgba(192, 132, 252, 0.18); color: #d8b4fe; }
+.tag.ot { background: var(--p-chip); color: var(--p-muted); }
+.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+.t th { text-align: left; padding: 10px; color: var(--p-muted); font-size: 11.5px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; border-bottom: 1px solid var(--p-line); white-space: nowrap; }
+.t td, .t tbody th { padding: 9px 10px; border-bottom: 1px solid var(--p-line); text-align: left; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--p-text); }
+.t tfoot td { font-weight: 700; }
+.t .r { text-align: right; }
+.t .c { text-align: center; }
+.t.fl .sec { padding: 9px 10px 5px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
+.t.fl .sub2 { padding-left: 22px; }
+.t.fl .tot th, .t.fl .tot td { font-weight: 700; }
+.b { font-weight: 700; }
+.am { color: #f5b93a; }
+.mu { color: var(--p-muted); }
+.sm { font-size: 11.5px; margin: 8px 0 0; }
+.nw { white-space: nowrap; }
+.pc { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.pc > span:first-child { min-width: 40px; text-align: right; }
+.dots { display: inline-flex; gap: 4px; }
+.dots span { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; font-size: 10.5px; font-weight: 700; background: var(--p-chip); color: #6b7280; }
+.dots .on { background: #f5a800; color: #0d0f10; }
+.dots .fut { background: transparent; color: #4b5563; border: 1px dashed #374151; }
+.pop { position: relative; display: inline-flex; vertical-align: -2px; margin-left: 6px; cursor: pointer; outline: none; }
+.ico { display: inline-flex; width: 15px; height: 15px; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid #6b7280; color: #9ca3af; font-size: 10px; font-weight: 800; }
+.ico.warn { border-color: #f59e0b; color: #fbbf24; }
+.pb { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; width: max-content; max-width: 340px; background: #1b1e22; border: 1px solid #3a3f47; border-radius: 10px; padding: 8px 10px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5); font-size: 12px; line-height: 1.45; color: #e5e7eb; white-space: normal; }
+.pop:hover .pb, .pop:focus .pb { display: block; }
 </style>

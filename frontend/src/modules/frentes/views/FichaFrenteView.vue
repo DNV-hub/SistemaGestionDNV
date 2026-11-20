@@ -174,6 +174,8 @@ const ETIQUETA_ESTADO = {
 </template>
 
 <style scoped>
+/* Densidad del lienzo 5.1: a 100 % se ve como al 80 % (laptop). */
+@media (min-width: 1100px) { .pl { zoom: 0.8; } }
 .volver-rdc {
   position: sticky;
   top: 0;

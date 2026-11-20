@@ -225,3 +225,30 @@ export function minutosStandBy(s) {
   }
   return min
 }
+
+/** Plan semanal: RDC finalizados de la semana con Stand By, mano de obra
+ * directa y vehículos de soporte (1 conductor por vehículo). */
+export async function cargarSemanaRdc(frenteId, desde, hasta) {
+  const { data, error } = await supabase
+    .from('rdc_reportes')
+    .select('fecha, estado, rdc_reporte_standby(actividad, desde, hasta, causa, causa_otro, responsable, comentario, total_horas, total_minutos, orden), rdc_reporte_personal(categoria, tipo, cantidad), rdc_reporte_maquinaria(tipo, categoria, cantidad)')
+    .eq('frente_id', frenteId)
+    .eq('estado', 'Finalizado')
+    .is('eliminado_at', null)
+    .gte('fecha', desde)
+    .lte('fecha', hasta)
+    .order('fecha')
+  if (error) throw error
+  return data ?? []
+}
+
+/** Causa del Stand By en lenguaje del informe. Todas son ajenas a DESNIVEL;
+ * "Otro" se marca para revisar que no sea imputable al contratista. */
+export function causaStandBy(s) {
+  const c = (s.causa || '').toUpperCase()
+  if (c.includes('ENCAPSULADO')) return { k: 'cv', t: 'Pase de encapsulados ENAEX', r: 'Cliente / tercero (cierre de vía)' }
+  if (c.includes('CLIMA')) return { k: 'cl', t: 'Clima adverso', r: 'Clima (alerta por tormenta)' }
+  if (c.includes('CLIENTE')) return { k: 'cc', t: 'Causa del cliente', r: 'Cliente AAQ' }
+  if (c.includes('EXTERNO') || c.includes('COMUNIDAD')) return { k: 'ex', t: 'Problemas externos', r: 'Terceros (comunidades)' }
+  return { k: 'ot', t: s.causa_otro ? `Otro: ${s.causa_otro}` : 'Otro', r: 'Revisar imputación' }
+}
