@@ -9,12 +9,14 @@ import '../../../styles/planeamiento-ui.css'
 const route = useRoute()
 const auth = useAuthStore()
 
-// Orden exacto: Frentes | RDC | Catálogo. Cada pestaña solo aparece para
-// quien tiene el permiso de su ruta (la ruta igual lo vuelve a exigir).
+// Lienzo 6 · orden exacto: Frentes | RDC | Informe semanal | Bandeja del agente | Catálogo.
+// RDC e Informe semanal: Planeamiento; Bandeja del agente: Developer (y
+// Developer ve todo para probar). Cada ruta vuelve a exigir su permiso.
 const TABS = [
   { to: '/planeamiento/frentes', etiqueta: 'Frentes', permiso: 'frentes.ver', excluidos: ['Almacen', 'Supervisor'] },
-  // Lienzo 5.1: la pestaña RDC solo la ve Planeamiento (y Developer, que prueba el sistema).
   { to: '/planeamiento/rdc', etiqueta: 'RDC', permiso: 'rdc.ver_propios', excluidos: ['Almacen'], soloRoles: ['Planeamiento', 'Developer'] },
+  { to: '/planeamiento/informe', etiqueta: 'Informe semanal', permiso: 'procura.crear_version', excluidos: ['Almacen'], soloRoles: ['Planeamiento', 'Developer'] },
+  { to: '/planeamiento/bandeja-agente', etiqueta: 'Bandeja del agente', permiso: 'procura.crear_version', excluidos: ['Almacen'], soloRoles: ['Developer'] },
   { to: '/planeamiento/catalogo', etiqueta: 'Catálogo', permiso: 'catalogo.ver', excluidos: ['Almacen'] },
 ]
 // Campo (Supervisor/Residencia) entra a su Reporte diario sin la cabecera de
@@ -26,7 +28,7 @@ const esMovil = useEsMovil()
 const tabs = computed(() => {
   const visibles = TABS.filter((t) => auth.tienePermiso(t.permiso) && !t.excluidos.includes(auth.nombreRol) && (!t.soloRoles || t.soloRoles.includes(auth.nombreRol)))
   if (!esMovil.value) return visibles
-  const orden = ['/planeamiento/rdc', '/planeamiento/frentes', '/planeamiento/catalogo']
+  const orden = ['/planeamiento/rdc', '/planeamiento/frentes', '/planeamiento/informe', '/planeamiento/bandeja-agente', '/planeamiento/catalogo']
   return [...visibles].sort((a, b) => orden.indexOf(a.to) - orden.indexOf(b.to))
 })
 

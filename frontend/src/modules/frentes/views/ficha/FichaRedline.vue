@@ -34,7 +34,7 @@ const cantRl = (c) => Number(c.cantidad_corregida ?? c.cantidad_despues)
 const nConf = computed(() => cambios.value.filter((c) => c.estado !== 'por_confirmar').length)
 const nPend = computed(() => cambios.value.length - nConf.value)
 const esUnd = (u) => ['und', 'UND', 'u'].includes(u)
-const q = (x, u) => (esUnd(u) ? num(x, 0) : num(x, 2))
+const q = (x, u) => (esUnd(u) ? num(x, 0) : Number(x).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const delta = (c) => cantRl(c) - Number(c.constructivo)
 const estadoTxt = { en_revision: 'En revisión', aprobado: 'Aprobado', devuelto: 'Devuelto' }
 

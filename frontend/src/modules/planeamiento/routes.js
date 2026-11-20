@@ -27,6 +27,18 @@ export const planeamientoRoutes = [
         meta: { permiso: 'rdc.ver_propios', rolesExcluidos: ['Almacen'] },
       },
       {
+        path: 'informe',
+        name: 'planeamiento-informe',
+        component: () => import('./views/InformeSemanalView.vue'),
+        meta: { permiso: 'procura.crear_version', rolesExcluidos: ['Almacen', 'Supervisor'] },
+      },
+      {
+        path: 'bandeja-agente',
+        name: 'planeamiento-bandeja-agente',
+        component: () => import('./views/BandejaAgenteView.vue'),
+        meta: { permiso: 'procura.crear_version', rolesExcluidos: ['Almacen', 'Supervisor'] },
+      },
+      {
         path: 'catalogo/:seccion?',
         name: 'planeamiento-catalogo',
         component: () => import('../catalogo/views/CatalogoPlaneamientoView.vue'),

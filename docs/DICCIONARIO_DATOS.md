@@ -576,6 +576,15 @@ Objetos nuevos con prefijo `ctl_` para el enlace de prueba. No cambian ninguna t
 #### Vista `ctl_metrado_vigente` (security_invoker)
 Por ítem: constructivo, último redline **aprobado por Planeamiento** (`ctl_redline.estado='aprobado'`; usa `cantidad_corregida` si se corrigió), último redline en revisión con su nota, `cantidad_vigente` = redline aprobado por Planeamiento o constructivo, y `cantidad_valorizable` = redline firmado por BBA (`aprobado_bba`) o constructivo.
 
+#### `ctl_pts`
+**Propósito**: plan de trabajo semanal (Excel PLAN DE TRABAJO) de cada frente, subido martes o miércoles. Se lee al subirlo.
+**Columnas**: `id uuid!`, `frente_id uuid!`, `semana text!` *(S47)*, `desde date!` *(jueves)*, `hasta date!` *(miércoles)*, `archivo text!` *(ruta en frentes-archivos)*, `nombre_archivo text`, `actividades jsonb!` *([{item, actividad, dias:[índices 0=jue…6=mié]}])*, `restricciones jsonb!` *([{actividad, restriccion, responsable, anulada}]; las imputables a DESNIVEL quedan `anulada=true`)*, `fuerza_laboral jsonb`, `observaciones text[]!`, `estado text!` *(recibido | observado | rechazado; rechazado si las fechas no son de la semana jueves–miércoles)*, `subido_por uuid`, `created_at!`. Único `(frente_id, semana)`.
+
+#### `ctl_agente_corrida` y `ctl_agente_hallazgo`
+**Propósito**: cada revisión de la bandeja de entrada que hace el agente de planeamiento y lo que encontró (pestaña Bandeja del agente; las de categoría `informe` también salen en Informe semanal). Solo los ve y resuelve quien tiene `procura.crear_version`.
+**Columnas corrida**: `id`, `ejecutado_en`, `carpetas`, `archivos_nuevos`, `archivos_nuevos_detalle`, `planos_revisados`, `planos_detalle`, `cronogramas_leidos`, `cronogramas_detalle`.
+**Columnas hallazgo**: `id`, `corrida_id`, `categoria` *(decision | plano | cronograma | evidencia | filtro | informe)*, `orden`, `frente`, `sector`, `titulo!`, `subtitulo`, `dato1`, `dato2`, `destino`, `nivel` *(ALTA | MEDIA | BAJA | OK)*, `detalle`, `accion`, `estado` *(abierto | resuelto)*, `resuelto_por`, `resuelto_en`, `created_at`.
+
 #### Funciones `ctl_aprobar_redline(p_redline_id)` y `ctl_devolver_redline(p_redline_id, p_nota)`
 Security definer, exigen `procura.crear_version`. Aprobar falla si queda algún cambio `por_confirmar`; marca el redline aprobado (quién y cuándo) y actualiza `ctl_cronograma_partida.metrado` de las partidas vinculadas en `ctl_partida_item` (las HH no cambian). Devolver exige nota de al menos 10 caracteres.
 
