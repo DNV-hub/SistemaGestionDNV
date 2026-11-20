@@ -390,7 +390,8 @@ defineExpose({ exportar, listoParaExportar })
     <p v-if="cargando" class="pl-empty">Cargando…</p>
 
     <template v-else>
-      <div class="pl-kpis">
+      <!-- PRUEBA: con plano cargado, los contadores salen del plano (RDC por código); los antiguos dependen de "control de pernos". -->
+      <div v-if="!skCtl" class="pl-kpis">
         <button type="button" class="pl-kpi" @click="irA('pernos')">
           <div class="l">Perforados</div>
           <div class="v">
